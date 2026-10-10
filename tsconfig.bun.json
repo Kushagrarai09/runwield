@@ -17,6 +17,8 @@
         "src/constants-portable.test.ts",
         "src/shared/session/file-session-storage.ts",
         "src/shared/session/session-directory-name.ts",
-        "src/shared/session/file-session-storage.test.ts"
+        "src/shared/session/file-session-storage.test.ts",
+        "src/shared/linux-process-group.ts",
+        "src/shared/remote/process-group.test.ts"
     ]
 }

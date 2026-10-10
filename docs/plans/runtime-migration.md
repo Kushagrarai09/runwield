@@ -260,3 +260,21 @@ All six migrated Bun test files also passed using the cached Bun 1.4.3 Linux ARM
 container. Source and dependencies were mounted read-only; runner sandboxes and reports were isolated writable paths.
 The report is `.ci-cache/linux-bun-runner/bun-report-9S56K5/run.json`. Final twelve-case compiled logs are
 `.ci-cache/portable-storage-darwin.log` and `.ci-cache/portable-storage-linux.log`.
+
+## Linux-owned process-group cleanup
+
+`terminateOwnedLinuxGroup` now lives in a portable module, re-exported from `foreground-process.ts` for existing
+callers. It uses Node-compatible `/proc` reads and process signals while retaining the real detached leader's
+PID/completion contract. It checks group membership, ignores zombies, refuses to prove cleanup through permission-denied
+`/proc`, and only sends forced group signals while the original leader is still alive. Foreground spawn APIs are
+unchanged.
+
+The existing real child/grandchild tests now use portable process creation and execute under Bun on Linux. They verify
+graceful cleanup leaves an unrelated child running, and a SIGTERM-resistant group is killed only after its grace period.
+The explicit Bun registry and type scope include this module and its tests. macOS skips these Linux-only cases.
+
+Linux verification passed all seven registered Bun files (29 tests), including an additional real exited-leader case
+that returns uncertainty and leaves its surviving descendant unsignaled. The forced-cleanup test observes both
+SIGTERM-resistant processes alive during the grace window before confirming their eventual exit. Report:
+`.ci-cache/linux-bun-runner/bun-report-AxPtbP/run.json`. Deno targeted type/lint and zero-seam checks passed; all three
+review axes approved after strengthening the grace-period observation.
