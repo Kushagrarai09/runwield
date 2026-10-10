@@ -1,5 +1,5 @@
 /** Literal process execution for development and packaging commands. */
-import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { Buffer } from "node:buffer";
 import process from "node:process";
 import { constants } from "node:os";
@@ -75,28 +75,6 @@ export function captureScriptProcess(
         });
     });
 }
-export type ScriptProcessSyncOptions = Omit<ScriptProcessOptions, "signal">;
-export function captureScriptProcessSync(command: string, options: ScriptProcessSyncOptions = {}): ScriptProcessOutput {
-    const result = spawnSync(command, options.args ?? [], {
-        cwd: options.cwd,
-        env: environment(options),
-        stdio: [
-            options.input !== undefined ? "pipe" : stdio(options.stdin ?? "null"),
-            stdio(options.stdout ?? "piped"),
-            stdio(options.stderr ?? "piped"),
-        ],
-        maxBuffer: Infinity,
-        input: options.input,
-    });
-    if (result.error) throw result.error;
-    return {
-        code: exitCode(result.status, result.signal),
-        success: result.status === 0,
-        stdout: result.stdout ?? new Uint8Array(),
-        stderr: result.stderr ?? new Uint8Array(),
-    };
-}
-
 interface ScriptExit {
     code: number;
     success: boolean;
