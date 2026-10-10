@@ -41,7 +41,9 @@ test("authenticated bridge records admitted results and known-tool rejections in
             );
             assertEquals((await client.callTool({ name: "read_fixture", arguments: {} })).isError, true);
             await recorder.settleExecution();
-            const records = await readMetrics();
+            // Recorder sequence, rather than asynchronous disk append order, defines execution order.
+            const records = (await readMetrics()).filter((row) => row.recorderId === recorder.recorderId)
+                .sort((a, b) => Number(a.seq) - Number(b.seq));
             assertEquals(records.filter((row) => row.event === "tool_call_started").length, 2);
             assertEquals(records.filter((row) => row.event === "tool_call_finished").map((row) => row.outcome), [
                 "success",
