@@ -16,6 +16,103 @@
  * This is RunWield-owned process machinery, not a dependency-injection seam.
  */
 
+import { spawn } from "node:child_process";
+import { env as inheritedEnv, kill, platform, versions } from "node:process";
+
+interface NativeProcessStatus {
+    code: number;
+}
+interface NativeProcess {
+    pid: number;
+    stdout: ReadableStream<Uint8Array>;
+    stderr: ReadableStream<Uint8Array>;
+    stdin: WritableStream<Uint8Array>;
+    status: Promise<NativeProcessStatus>;
+    kill(signal?: "SIGKILL"): void;
+}
+interface NativeSpawnOptions {
+    args: string[];
+    cwd: string;
+    env?: Record<string, string>;
+    stdin: "null" | "piped";
+    stdout: "piped";
+    stderr: "piped";
+    detached?: boolean;
+}
+interface DenoProcessRuntime {
+    Command: new (command: string, options: NativeSpawnOptions) => { spawn(): NativeProcess };
+}
+interface BunInputSink {
+    write(chunk: Uint8Array): number;
+    flush(wait: true): Promise<number>;
+    end(): number | Promise<number>;
+}
+interface BunProcess {
+    pid: number;
+    stdout: ReadableStream<Uint8Array>;
+    stderr: ReadableStream<Uint8Array>;
+    stdin: BunInputSink;
+    exited: Promise<number>;
+    kill(signal?: "SIGKILL"): void;
+}
+interface BunSpawnOptions {
+    cmd: string[];
+    cwd: string;
+    env: NodeJS.ProcessEnv;
+    stdin: "ignore" | "pipe";
+    stdout: "pipe";
+    stderr: "pipe";
+    detached: boolean;
+}
+interface BunProcessRuntime {
+    spawn(options: BunSpawnOptions): BunProcess;
+}
+
+function spawnNativeProcess(command: string, options: NativeSpawnOptions): NativeProcess {
+    if (versions.deno) {
+        const deno: DenoProcessRuntime = Reflect.get(globalThis, "Deno");
+        return new deno.Command(command, options).spawn();
+    }
+    if (!versions.bun) throw new Error("Foreground processes require Bun or Deno");
+    const bun = Reflect.get(globalThis, "Bun") as BunProcessRuntime;
+    const child = bun.spawn({
+        cmd: [command, ...options.args],
+        cwd: options.cwd,
+        env: { ...inheritedEnv, ...options.env },
+        stdin: options.stdin === "piped" ? "pipe" : "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        detached: options.detached === true,
+    });
+    // FileSink owns buffering; waiting for flush preserves web-stream
+    // backpressure for interactive protocol writers and large stdin payloads.
+    const stdin = new WritableStream<Uint8Array>({
+        async write(chunk) {
+            child.stdin.write(chunk);
+            await child.stdin.flush(true);
+        },
+        async close() {
+            await child.stdin.end();
+        },
+        async abort() {
+            await child.stdin.end();
+        },
+    });
+    return {
+        pid: child.pid,
+        stdout: child.stdout,
+        stderr: child.stderr,
+        stdin,
+        status: child.exited.then((code) => ({ code })),
+        kill: (signal) => child.kill(signal),
+    };
+}
+
+/** Both runtimes report a missing executable synchronously during spawn. */
+export function isMissingExecutableError(error: Error): boolean {
+    return error.name === "NotFound" || ("code" in error && error.code === "ENOENT");
+}
+
 /** Inputs for one foreground direct command. */
 export interface SpawnForegroundProcessOptions {
     /** Executable path or PATH-resolved command name. */
@@ -98,41 +195,26 @@ function emptyClosedStream(): ReadableStream<Uint8Array> {
  * RunWield's own. On Windows `taskkill /T` is the tree guarantee, so the
  * direct-child kill waits until taskkill has had a chance to find descendants.
  */
-function terminateProcessTree(child: Deno.ChildProcess): void {
-    if (Deno.build.os === "windows") {
-        try {
-            const killer = new Deno.Command("taskkill", {
-                args: ["/F", "/T", "/PID", String(child.pid)],
-                stdout: "null",
-                stderr: "null",
-            }).spawn();
-            killer.status.then(
-                () => {
-                    try {
-                        child.kill();
-                    } catch {
-                        // The process may have exited between termination and the kill.
-                    }
-                },
-                () => {
-                    try {
-                        child.kill();
-                    } catch {
-                        // The process may have exited between termination and the kill.
-                    }
-                },
-            );
-        } catch {
+function terminateProcessTree(child: NativeProcess): void {
+    if (platform === "win32") {
+        const finish = () => {
             try {
                 child.kill();
             } catch {
-                // The process may have exited between termination and the kill.
+                // The process may have exited while taskkill was running.
             }
+        };
+        try {
+            const killer = spawn("taskkill", ["/F", "/T", "/PID", String(child.pid)], { stdio: "ignore" });
+            killer.once("error", () => {});
+            killer.once("close", finish);
+        } catch {
+            finish();
         }
         return;
     }
     try {
-        Deno.kill(-child.pid, "SIGKILL");
+        kill(-child.pid, "SIGKILL");
     } catch {
         try {
             child.kill("SIGKILL");
@@ -156,7 +238,7 @@ function spawnOwnedProcess(options: SpawnForegroundProcessOptions): ForegroundPr
         };
     }
 
-    let child: Deno.ChildProcess | null = null;
+    let child: NativeProcess | null = null;
     let terminatedBy: ForegroundTermination | null = null;
     let killSent = false;
     const terminate = (reason: ForegroundTermination): void => {
@@ -169,9 +251,9 @@ function spawnOwnedProcess(options: SpawnForegroundProcessOptions): ForegroundPr
     signal?.addEventListener("abort", onAbort, { once: true });
     const timeoutId = timeoutMs === undefined ? undefined : setTimeout(() => terminate("timeout"), timeoutMs);
 
-    let spawned: Deno.ChildProcess;
+    let spawned: NativeProcess;
     try {
-        spawned = new Deno.Command(command, {
+        spawned = spawnNativeProcess(command, {
             args,
             cwd,
             env,
@@ -180,8 +262,8 @@ function spawnOwnedProcess(options: SpawnForegroundProcessOptions): ForegroundPr
             stderr: "piped",
             // Group leadership is what makes the whole tree terminable on
             // Unix-like systems; Windows uses taskkill /T instead.
-            ...(Deno.build.os === "windows" ? {} : { detached: true }),
-        }).spawn();
+            ...(platform === "win32" ? {} : { detached: true }),
+        });
     } catch (error) {
         signal?.removeEventListener("abort", onAbort);
         if (timeoutId !== undefined) clearTimeout(timeoutId);
@@ -242,7 +324,7 @@ export function spawnForegroundProcess(options: SpawnForegroundProcessOptions): 
  */
 export function spawnForegroundShell(options: SpawnForegroundShellOptions): ForegroundShell {
     const { command, cwd, env, signal, timeoutMs } = options;
-    const isWindows = Deno.build.os === "windows";
+    const isWindows = platform === "win32";
     return spawnOwnedProcess({
         command: isWindows ? "cmd" : "sh",
         args: [isWindows ? "/c" : "-c", command],

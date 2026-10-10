@@ -7,6 +7,7 @@
 import { requireLocalSessionWriter } from "../remote/personal-resources.ts";
 import { resolve } from "@std/path";
 import { createHash } from "node:crypto";
+import { openNativeFileLock } from "../native-file-lock.ts";
 import { createFileSessionControl } from "./file-session-control.ts";
 import {
     getRunWieldSessionsBaseDir,
@@ -70,12 +71,7 @@ export function openFileSessionStore(options: OpenFileSessionStoreOptions = {}):
             sessionDir,
             sessionPath: locator.transcriptPath,
         });
-        const catalogLock = Deno.openSync(catalogLockPath(sessionDir, safe.sessionPath), {
-            create: true,
-            read: true,
-            write: true,
-            mode: 0o600,
-        });
+        const catalogLock = openNativeFileLock(catalogLockPath(sessionDir, safe.sessionPath));
         if (!catalogLock.tryLockSync(true)) {
             catalogLock.close();
             throw new Error("Session migration is already running in another RunWield surface");
@@ -438,12 +434,7 @@ export function openFileSessionStore(options: OpenFileSessionStoreOptions = {}):
                 projectId: found.manifest.projectId,
             });
             const sessionDir = sessionDirForManifestPath(found.path);
-            const file = Deno.openSync(lockPath(sessionDir, found.manifest.runwieldSessionId), {
-                create: true,
-                read: true,
-                write: true,
-                mode: 0o600,
-            });
+            const file = openNativeFileLock(lockPath(sessionDir, found.manifest.runwieldSessionId));
             if (!file.tryLockSync(true)) {
                 file.close();
                 throw new Error("Session is open in another RunWield surface");
@@ -488,12 +479,7 @@ export function openFileSessionStore(options: OpenFileSessionStoreOptions = {}):
             const found = manifests.resolve(sealOptions.runwieldSessionId);
             if (!found) throw new Error("Session identity is unavailable");
             const sessionDir = sessionDirForManifestPath(found.path);
-            const file = Deno.openSync(lockPath(sessionDir, found.manifest.runwieldSessionId), {
-                create: true,
-                read: true,
-                write: true,
-                mode: 0o600,
-            });
+            const file = openNativeFileLock(lockPath(sessionDir, found.manifest.runwieldSessionId));
             if (!file.tryLockSync(true)) {
                 file.close();
                 throw new Error("Session is open in another RunWield surface");

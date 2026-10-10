@@ -19,6 +19,10 @@
         "src/shared/session/session-directory-name.ts",
         "src/shared/session/file-session-storage.test.ts",
         "src/shared/linux-process-group.ts",
-        "src/shared/remote/process-group.test.ts"
+        "src/shared/remote/process-group.test.ts",
+        "src/shared/native-file-lock.ts",
+        "src/shared/native-file-lock.test.ts",
+        "src/shared/foreground-process.ts",
+        "src/shared/foreground-process.test.ts"
     ]
 }

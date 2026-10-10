@@ -301,3 +301,32 @@ Linux ARM64 container cannot qualify Windows native locks or Windows/x64 runtime
 on unported entrypoint usage. No further target preference is needed from Carlos, but those acceptance gates must pass
 before production runtime/installer changes. Original main and the POC checkout remain preserved; all commits stay in
 the isolated migration clone and no push, PR publication, merge, release, credential change or study cohort occurred.
+
+## Native writer locks and foreground processes (2026-10-10)
+
+The Session catalog and operation writer acquisition sites now use `openNativeFileLock`. Deno keeps its native file
+locks. Bun on macOS/Linux uses libc `flock` through its built-in FFI, reads errno immediately, retries EINTR, and
+separates contention from other failures. Existing private files are never truncated. Closed handles cannot operate on
+reused descriptors. Unsupported Bun platforms fail before opening the lock; Windows qualification remains pending.
+
+Six real lock tests pass under Bun on macOS and Linux and through the Deno runner. Existing Session store and owner
+files also pass. A production-adapter interoperability probe confirms both Deno-owner/Bun-contender and
+Bun-owner/Deno-contender exclusion, then Deno crash release to Bun (`.ci-cache/native-lock-interop.log`). The original
+POC remains untouched.
+
+Foreground processes keep their synchronous API and missing-executable classification. Bun native spawn supplies web
+output streams and a backpressure-aware stdin wrapper; Deno retains native spawn. Both use the existing owned process
+group cancellation contract, including explicit cleanup of descendants after a natural leader exit. Agy/Claude startup
+failure classification accepts either runtime's missing-executable error.
+
+The complete migrated Bun suite now contains nine files, passing on both macOS ARM64 and Linux ARM64. Reports:
+`.ci-cache/bun-report-7rUzdH/run.json` and `.ci-cache/linux-bun-runner/bun-report-eCp3GC/run.json`. Foreground tests
+cover literal arguments, separate streams/status, interactive response before stdin closes, large input through pipe
+backpressure, cwd/env, immediate abort, timeout, and late descendant cleanup. Windows-only cases remain skipped. The
+seven existing foreground/Agy/Claude Deno files passed; two local-listener fixtures required an approved sandbox
+escalation and then passed. The strengthened foreground file passed again. Full Deno type checking and Bun selected type
+checking passed. Standards, Spec and Tests axes independently approved after fixes T7/T8 strengthened live stdin and
+immediate startup-abort assertions.
+
+This is another implementation checkpoint. Application startup and packaging migration continue; these checks do not
+claim the whole Bun CLI or Workspace is ready.

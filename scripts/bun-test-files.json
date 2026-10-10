@@ -5,5 +5,7 @@
     "src/testing/process-global-lock.test.ts",
     "src/constants-portable.test.ts",
     "src/shared/session/file-session-storage.test.ts",
-    "src/shared/remote/process-group.test.ts"
+    "src/shared/remote/process-group.test.ts",
+    "src/shared/native-file-lock.test.ts",
+    "src/shared/foreground-process.test.ts"
 ]

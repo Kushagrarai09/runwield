@@ -4,6 +4,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { openNativeFileLock } from "../native-file-lock.ts";
 import { requestWorkspaceSearchRefresh } from "../workspace-search-refresh.ts";
 import {
     activationView,
@@ -80,12 +81,7 @@ export function createFileSessionControl(options: FileSessionControlOptions): Fi
         if (!found || (projectId && found.manifest.projectId !== projectId)) {
             throw new Error("Session identity is unavailable");
         }
-        const file = Deno.openSync(lockPath(sessionDirForManifestPath(found.path), runwieldSessionId), {
-            create: true,
-            read: true,
-            write: true,
-            mode: 0o600,
-        });
+        const file = openNativeFileLock(lockPath(sessionDirForManifestPath(found.path), runwieldSessionId));
         try {
             if (!file.tryLockSync(true)) throw new Error("Session is open in another RunWield surface");
             try {
@@ -131,12 +127,7 @@ export function createFileSessionControl(options: FileSessionControlOptions): Fi
             let manifest = found.manifest;
             if (manifest.activation.state === "active") {
                 const sessionDir = sessionDirForManifestPath(found.path);
-                const file = Deno.openSync(lockPath(sessionDir, manifest.runwieldSessionId), {
-                    create: true,
-                    read: true,
-                    write: true,
-                    mode: 0o600,
-                });
+                const file = openNativeFileLock(lockPath(sessionDir, manifest.runwieldSessionId));
                 try {
                     if (file.tryLockSync(true)) {
                         try {
@@ -159,12 +150,7 @@ export function createFileSessionControl(options: FileSessionControlOptions): Fi
             if (!found) throw new Error("Session identity is unavailable");
             const sessionDir = sessionDirForManifestPath(found.path);
             ensurePrivateDir(bundleDir(sessionDir, found.manifest.runwieldSessionId));
-            const file = Deno.openSync(lockPath(sessionDir, found.manifest.runwieldSessionId), {
-                create: true,
-                read: true,
-                write: true,
-                mode: 0o600,
-            });
+            const file = openNativeFileLock(lockPath(sessionDir, found.manifest.runwieldSessionId));
             if (!file.tryLockSync(true)) {
                 file.close();
                 throw new Error("Session is open in another RunWield surface");
@@ -374,12 +360,7 @@ export function createFileSessionControl(options: FileSessionControlOptions): Fi
             const found = manifests.resolve(recoveryOptions.runwieldSessionId, recoveryOptions.projectId);
             if (!found) throw new Error("Session identity is unavailable");
             const sessionDir = sessionDirForManifestPath(found.path);
-            const file = Deno.openSync(lockPath(sessionDir, found.manifest.runwieldSessionId), {
-                create: true,
-                read: true,
-                write: true,
-                mode: 0o600,
-            });
+            const file = openNativeFileLock(lockPath(sessionDir, found.manifest.runwieldSessionId));
             if (!file.tryLockSync(true)) {
                 file.close();
                 throw new Error("Session is still open in another RunWield surface");
@@ -462,12 +443,7 @@ export function createFileSessionControl(options: FileSessionControlOptions): Fi
             const found = manifests.resolve(session.runwieldSessionId, session.projectId);
             if (!found) throw new Error("Session identity is unavailable");
             const sessionDir = sessionDirForManifestPath(found.path);
-            const file = Deno.openSync(lockPath(sessionDir, found.manifest.runwieldSessionId), {
-                create: true,
-                read: true,
-                write: true,
-                mode: 0o600,
-            });
+            const file = openNativeFileLock(lockPath(sessionDir, found.manifest.runwieldSessionId));
             if (!file.tryLockSync(true)) {
                 file.close();
                 throw new Error("Session is open in another RunWield surface");
