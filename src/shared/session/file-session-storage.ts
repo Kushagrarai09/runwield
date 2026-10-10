@@ -5,6 +5,8 @@
 
 import { basename, dirname, isAbsolute, join, resolve } from "@std/path";
 import { createHash } from "node:crypto";
+import { ensurePrivateDir, writeJsonAtomically } from "../private-json-file.ts";
+export { ensurePrivateDir, writeJsonAtomically } from "../private-json-file.ts";
 import { encodeCwdForSessionDir } from "./root-session.js";
 import type { FileSessionManifest, FileSessionProject } from "./file-session-store-types.ts";
 
@@ -19,49 +21,6 @@ export function isoNow(now?: () => string): string {
 function deterministicProjectId(root: string): string {
     const digest = createHash("sha256").update(root).digest("hex");
     return `local-${digest.slice(0, 32)}`;
-}
-
-export function ensurePrivateDir(path: string): void {
-    Deno.mkdirSync(path, { recursive: true, mode: 0o700 });
-    try {
-        Deno.chmodSync(path, 0o700);
-    } catch {
-        // Creation mode remains the best available protection on this filesystem.
-    }
-}
-
-function syncParent(path: string): void {
-    try {
-        const directory = Deno.openSync(dirname(path), { read: true });
-        try {
-            directory.syncSync();
-        } finally {
-            directory.close();
-        }
-    } catch {
-        // Some platforms do not permit directory fsync. The atomic rename still
-        // prevents readers from observing a partially written JSON document.
-    }
-}
-
-function writeTextAtomically(path: string, text: string): void {
-    ensurePrivateDir(dirname(path));
-    const temporaryPath = `${path}.tmp-${crypto.randomUUID()}`;
-    const file = Deno.openSync(temporaryPath, { createNew: true, write: true, mode: 0o600 });
-    try {
-        const bytes = new TextEncoder().encode(text);
-        let written = 0;
-        while (written < bytes.byteLength) written += file.writeSync(bytes.subarray(written));
-        file.syncSync();
-    } finally {
-        file.close();
-    }
-    Deno.renameSync(temporaryPath, path);
-    syncParent(path);
-}
-
-export function writeJsonAtomically<Value>(path: string, value: Value): void {
-    writeTextAtomically(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 export function readJson<Value>(path: string): Value {
