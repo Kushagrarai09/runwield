@@ -42,6 +42,7 @@
         "src/shared/primary-checkout.test.ts",
         "src/shared/git-evidence-cache.ts",
         "src/shared/git-evidence-cache.test.ts",
-        "src/shared/git-test-fixture.ts"
+        "src/shared/git-test-fixture.ts",
+        "scripts/check-bun-provider.ts"
     ]
 }

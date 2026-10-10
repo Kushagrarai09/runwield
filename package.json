@@ -15,7 +15,8 @@
         "workspace:build:bun": "node scripts/check-bun-runtime.ts && node node_modules/astro/bin/astro.mjs build --config src/ui/workspace/astro.config.mjs",
         "ci:bun": "bun run workspace:build:bun && bun run check:bun && bun run test:bun",
         "compile:bun": "bun run workspace:build:bun && bun run scripts/compile-bun.ts",
-        "check:package:bun": "bun run scripts/check-bun-package.ts"
+        "check:package:bun": "bun run scripts/check-bun-package.ts",
+        "check:provider:bun": "bun run scripts/check-bun-provider.ts"
     },
     "dependencies": {
         "@agentclientprotocol/sdk": "1.4.0",

@@ -471,3 +471,42 @@ output. Those warnings are assigned to the next Agent-tool/extension slice; this
 complete interactive coverage. The probe is `.ci-cache/probe-compiled-provider.py`, with output in
 `.ci-cache/compiled-provider-probe.log`. Remote/SFTP/supervisor paths, remaining workflow APIs, full Bun type coverage
 and Windows/x64 qualification remain.
+
+## Bun Agent tools, extensions and real compiled provider turns (2026-10-10)
+
+Read, grep, multi-file edits, Plan-safe file writes, Plan/artifact notification tools, image attachments and image reads
+now use portable filesystem APIs. Delegation's Git capture uses the owned native subprocess adapter. Existing Plan
+locks/revisions, artifact containment and edit rollback remain intact. This does not yet port every delegated Session or
+execution-workflow dependency.
+
+The actual compiled CLI provider probe exposed three startup warnings from helper-extension `Deno.cwd()` calls. Cymbal,
+Mnemoteca and Ketch now resolve cwd lazily through `getCwd()`; re-anchor uses a portable synchronous Plan read. Existing
+extension/tool tests run under Bun. A managed provider test confirms memory/code-search declarations and a real
+read-tool result containing random fixture bytes. Plan-tool tests exercise nested creation, overwrite refusal, exact
+edit and stale-text rejection. Review T16 strengthened successful edit assertions to exact complete-document bytes. All
+three review axes approved.
+
+All 44 Bun files pass: macOS ARM64 256 tests with five platform skips, Linux ARM64 259 tests with two skips
+(`.ci-cache/tools-ci-bun.log`, `.ci-cache/linux-tools-suite.log`). Linux's first attempt lacked ripgrep in the cached
+test image; mounting the official ripgrep 15.1.0 ARM64 binary read-only fixed the test prerequisite. The archive SHA-256
+is `2b661c6ef508e902f388e9098d9c4c5aca72c87b55922d94abdba830b4dc885e`. No user tool installation occurred. The complete
+Deno regression passed all 639 files in 616.9 seconds (`.ci-cache/tools-full-ci.log`).
+
+`bun run check:provider:bun <executable>` now qualifies a relocated compiled CLI against a local HTTP provider using
+synthetic credentials and strict helper fixtures in disposable HOME/cwd. It checks the prompt, streamed answer, helper
+declarations, absence of extension warnings, actual `/quit` submission while the CLI is still alive, and terminal
+restoration. Review T17 prevents premature successful exit from passing as `/quit`. This qualifier passed on macOS with
+checkout reads denied and minimal Linux with no checkout/dependency tree mounted
+(`.ci-cache/provider-qualifier-macos.log`, `.ci-cache/provider-qualifier-linux.log`). The original package qualifier
+also passes on both platforms. The provider qualifier, command registration and type-scope addition were added after the
+full gate started; full source types, Bun types, lint and the zero-seam gate were rerun successfully for that final
+addition.
+
+Implementation remaining: delegated/named invocations and background task persistence; execution Plan/worktree/recovery
+and Work Record paths; remote SFTP/supervisor and external CLI/MCP bridges; remaining command-specific runtime APIs.
+Start the next local workflow slice at `subagent-definitions.ts`, `named-invocation.ts`, `background-tasks.ts`,
+`execution-plan-file.js` and `worktree-project-context.ts`. Verification remaining: the rest of the suite under Bun,
+full Bun type coverage, and Windows/x64 qualification. A lexical inventory, excluding test/fixture files but including
+comments and compatibility code, still finds 132 runtime source files with 731 Deno references
+(`.ci-cache/remaining-deno-inventory.json`); this is not a completion percentage. Deno remains the release/default lane.
+No new architectural decision needs the owner's input, and no merge, publication, release or study cohort occurred.

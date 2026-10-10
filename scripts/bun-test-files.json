@@ -28,5 +28,19 @@
     "src/shared/remote/personal-resources.test.ts",
     "src/cmd/quit/index.test.ts",
     "src/shared/session/runtime-portable-turn.test.ts",
-    "src/cli-onboarding.test.ts"
+    "src/cli-onboarding.test.ts",
+    "src/extensions/cymbal/index.test.js",
+    "src/extensions/cymbal/tools.test.ts",
+    "src/extensions/ketch/tools.test.ts",
+    "src/extensions/mnemoteca/index.test.js",
+    "src/extensions/mnemoteca/tools.test.ts",
+    "src/extensions/re-anchor/index.test.ts",
+    "src/shared/session/runtime-portable-tools.test.ts",
+    "src/tools/__tests__/grep.test.js",
+    "src/tools/__tests__/multi-file-edit.test.js",
+    "src/tools/__tests__/read.test.js",
+    "src/tools/artifact-written.test.ts",
+    "src/tools/plan-safe-file-tools-portable.test.ts",
+    "src/tools/plan-safe-file-tools.test.js",
+    "src/tools/see-image.test.js"
 ]
