@@ -1,3 +1,18 @@
+import type { Stats } from "node:fs";
+import { open, rename } from "node:fs/promises";
+import process from "node:process";
+import { delimiter } from "node:path";
+import { openNativeFileLock } from "../../../native-file-lock.ts";
+import { isStandaloneExecutable } from "../../../runtime-identity.ts";
+import { readStreamInto } from "../../../socket-listener.ts";
+import {
+    lstat as fsLstat,
+    mkdir as fsMkdir,
+    readFile as fsReadFile,
+    realpath as fsRealpath,
+    rm as fsRm,
+    writeFile as fsWriteFile,
+} from "node:fs/promises";
 import { basename, dirname, join, resolve } from "@std/path";
 import { CLI_BIN, getHomeDir } from "../../../../constants.js";
 import type { HostedSession } from "../../hosted-session.js";
@@ -56,11 +71,11 @@ function setupPaths(): SetupPaths {
     };
 }
 
-async function lstatOrNull(path: string): Promise<Deno.FileInfo | null> {
+async function lstatOrNull(path: string): Promise<Stats | null> {
     try {
-        return await Deno.lstat(path);
+        return await fsLstat(path);
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) return null;
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
         throw error;
     }
 }
@@ -78,9 +93,9 @@ function parseJsonMap(text: string, path: string): JsonMap {
 async function readJsonMapOrEmpty(path: string): Promise<JsonMap> {
     const info = await lstatOrNull(path);
     if (!info) return {};
-    if (info.isSymlink) throw new Error(`${path} must not be a symbolic link.`);
-    if (!info.isFile) throw new Error(`${path} must be a regular file.`);
-    const text = await Deno.readTextFile(path);
+    if (info.isSymbolicLink()) throw new Error(`${path} must not be a symbolic link.`);
+    if (!info.isFile()) throw new Error(`${path} must be a regular file.`);
+    const text = await fsReadFile(path, "utf8");
     // Agy creates empty configuration files on first launch, before sign-in.
     if (!text.trim()) return {};
     return parseJsonMap(text, path);
@@ -153,8 +168,8 @@ function settingsHavePermission(settings: JsonMap): boolean {
 
 async function pathIsExecutableFile(path: string): Promise<boolean> {
     const info = await lstatOrNull(path);
-    if (!info?.isFile || info.isSymlink) return false;
-    if (Deno.build.os === "windows") return true;
+    if (!info?.isFile() || info.isSymbolicLink()) return false;
+    if (process.platform === "win32") return true;
     return typeof info.mode === "number" && (info.mode & 0o111) !== 0;
 }
 
@@ -171,29 +186,29 @@ function hasStandaloneExecutableHeader(header: Uint8Array, byteCount: number): b
 
 async function pathIsStandaloneExecutableFile(path: string): Promise<boolean> {
     if (!await pathIsExecutableFile(path)) return false;
-    const file = await Deno.open(path, { read: true });
+    const file = await open(path, "r");
     try {
         const header = new Uint8Array(4);
-        const byteCount = await file.read(header);
+        const { bytesRead: byteCount } = await file.read(header);
         return hasStandaloneExecutableHeader(header, byteCount || 0);
     } finally {
-        file.close();
+        await file.close();
     }
 }
 
 async function findPathExecutable(name: string): Promise<string | null> {
-    const pathText = Deno.env.get("PATH") || "";
-    for (const directory of pathText.split(":")) {
+    const pathText = process.env.PATH || "";
+    for (const directory of pathText.split(delimiter)) {
         if (!directory) continue;
         const candidate = resolve(directory, name);
-        if (await pathIsStandaloneExecutableFile(candidate)) return await Deno.realPath(candidate);
+        if (await pathIsStandaloneExecutableFile(candidate)) return await fsRealpath(candidate);
     }
     return null;
 }
 
 export async function resolveInstalledWldExecutable(): Promise<string> {
-    if (Deno.build.standalone) {
-        const execPath = await Deno.realPath(Deno.execPath());
+    if (isStandaloneExecutable()) {
+        const execPath = await fsRealpath(process.execPath);
         if (basename(execPath) === CLI_BIN && await pathIsStandaloneExecutableFile(execPath)) return execPath;
     }
     const pathExecutable = await findPathExecutable(CLI_BIN);
@@ -263,11 +278,11 @@ export async function inspectAgyCliMcpSetup(): Promise<SetupStatus> {
 
 async function syncParent(path: string): Promise<void> {
     try {
-        const directory = await Deno.open(dirname(path), { read: true });
+        const directory = await open(dirname(path), "r");
         try {
             await directory.sync();
         } finally {
-            directory.close();
+            await directory.close();
         }
     } catch {
         // Some platforms do not permit directory fsync.
@@ -275,28 +290,27 @@ async function syncParent(path: string): Promise<void> {
 }
 
 async function writeJsonAtomically(path: string, value: JsonMap): Promise<string> {
-    await Deno.mkdir(dirname(path), { recursive: true, mode: 0o700 });
+    await fsMkdir(dirname(path), { recursive: true, mode: 0o700 });
     const text = `${JSON.stringify(value, null, 2)}\n`;
     const temporary = `${path}.${crypto.randomUUID()}.tmp`;
-    const file = await Deno.open(temporary, { createNew: true, write: true, mode: 0o600 });
+    const file = await open(temporary, "wx", 0o600);
     try {
         const bytes = new TextEncoder().encode(text);
-        let offset = 0;
-        while (offset < bytes.length) offset += await file.write(bytes.subarray(offset));
+        await file.writeFile(bytes);
         await file.sync();
     } finally {
-        file.close();
+        await file.close();
     }
-    await Deno.rename(temporary, path);
+    await rename(temporary, path);
     await syncParent(path);
     return text;
 }
 
 async function restoreIfOwnBytes(path: string, beforeText: string | null, writtenText: string): Promise<void> {
-    const current = await Deno.readTextFile(path).catch(() => "");
+    const current = await fsReadFile(path, "utf8").catch(() => "");
     if (current !== writtenText) return;
-    if (beforeText === null) await Deno.remove(path).catch(() => undefined);
-    else await Deno.writeTextFile(path, beforeText, { mode: 0o600 });
+    if (beforeText === null) await fsRm(path).catch(() => undefined);
+    else await fsWriteFile(path, beforeText, { mode: 0o600 });
 }
 
 function installConfig(config: JsonMap, command: string): JsonMap {
@@ -319,17 +333,17 @@ function installSettings(settings: JsonMap): JsonMap {
 
 async function readTextOrNull(path: string): Promise<string | null> {
     try {
-        return await Deno.readTextFile(path);
+        return await fsReadFile(path, "utf8");
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) return null;
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
         throw error;
     }
 }
 
 export async function installAgyCliMcpSetup(): Promise<void> {
     const paths = setupPaths();
-    await Deno.mkdir(dirname(paths.lockPath), { recursive: true, mode: 0o700 });
-    const lock = await Deno.open(paths.lockPath, { create: true, read: true, write: true, mode: 0o600 });
+    await fsMkdir(dirname(paths.lockPath), { recursive: true, mode: 0o700 });
+    const lock = openNativeFileLock(paths.lockPath);
     let writtenConfig: string | null = null;
     let beforeConfig: string | null = null;
     try {
@@ -403,7 +417,7 @@ async function readApprovalLine(): Promise<string> {
     const decoder = new TextDecoder();
     let text = "";
     while (true) {
-        const count = await Deno.stdin.read(buffer);
+        const count = await readStreamInto(process.stdin, buffer);
         if (count === null) break;
         text += decoder.decode(buffer.subarray(0, count), { stream: true });
         const newline = text.search(/\r?\n/);

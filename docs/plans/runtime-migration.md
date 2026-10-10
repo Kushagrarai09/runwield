@@ -539,3 +539,27 @@ An exploratory expansion of Bun type coverage exposed 653 diagnostic output line
 upstream declarations (`.ci-cache/worktree-bun-types.log`). The qualified type gate remains scoped to the already
 portable foundation while those files are migrated; this exploratory failure is not a passing full Bun type check.
 Remaining source migration includes remote transports, external CLI/MCP bridges and command-specific dependencies.
+
+## Remote transport and external CLI adapters (implemented, 2026-10-10)
+
+This slice replaces Deno-only remote socket/process/filesystem use with paused Node sockets, bounded reads and the owned
+native process adapter. Private headers must not consume pipelined SFTP or terminal bytes; existing authentication,
+remote identity/checksum validation, mount ownership and Linux process-group cleanup remain authoritative. Bun Linux
+artifact metadata maps to the existing architecture-specific remote cache protocol only after architecture validation.
+The release/default lane remains Deno. Real SSHFS/FUSE supervision still requires an eligible Linux host.
+
+Claude and Antigravity helpers now use portable private files, native locks and the existing HTTP adapter. MCP stdio
+runs under the active runtime. Helper cancellation stops its owned process and keeps the established missing-command
+result. Tests use real loopback transports and subprocess fixtures with isolated HOME. No real personal setup or
+credentials are changed. New socket tests exercise one-byte input, bounded headers, remaining pipelined bytes and
+listener closure; the SFTP authentication test now pipelines the first protocol packet with its credential.
+
+The first Bun subset passed 12 of 13 files; the remote cache fixture needed its copied metadata helper linked back to
+its real dependency resolution root. Full source type checking and all Deno CI pre-test gates pass. The complete Deno suite passed 639 of 641 files in
+678.9 seconds (`.ci-cache/remote-full-ci.log`); two copied-source fixtures lacked newly imported dependencies. Both pass
+with their dependency lists repaired (`.ci-cache/remote-fixtures-deno.log`, 5.2 seconds). The final macOS workspace
+build, scoped Bun type gate and all 103 registered test files pass (`.ci-cache/remote-ci-bun-final.log`). Linux also
+passes all 103 registered files (`.ci-cache/linux-remote-suite.log`); the subsequent fixture dependency-list additions
+were checked under Deno and macOS Bun. All three independent axes approve, including those fixture corrections.
+Tests review T20 strengthened helper cancellation to prove the child was alive before cancellation and absent afterward,
+with a deadline well before its natural exit. This is not a completed cutover claim.

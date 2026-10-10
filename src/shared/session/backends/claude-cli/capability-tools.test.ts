@@ -1,3 +1,8 @@
+import { getCwd } from "../../../../constants.js";
+import process from "node:process";
+import { chmod as fsChmod, mkdtemp as fsMkdtemp, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
+import { test } from "node:test";
+import { tmpdir } from "node:os";
 import { assertArrayIncludes, assertEquals, assertMatch } from "@std/assert";
 import { join } from "@std/path";
 import { CLAUDE_CLI_CAPABILITY_TOOL_NAMES, createClaudeCliCapabilityTools } from "./capability-tools.ts";
@@ -5,8 +10,8 @@ import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { withProcessGlobalTestLock } from "../../../../testing/process-global-lock.ts";
 
 async function writeExecutable(path: string, content: string): Promise<void> {
-    await Deno.writeTextFile(path, content, { mode: 0o755 });
-    await Deno.chmod(path, 0o755);
+    await fsWriteFile(path, content, { mode: 0o755 });
+    await fsChmod(path, 0o755);
 }
 
 function getTool(tools: ReturnType<typeof createClaudeCliCapabilityTools>, name: string) {
@@ -24,16 +29,16 @@ async function executeText(tool: ReturnType<typeof getTool>, params: Record<stri
     return result.content[0]?.type === "text" ? result.content[0].text : "";
 }
 
-Deno.test("Claude CLI capability factory returns the canonical capability tool names", () => {
-    const tools = createClaudeCliCapabilityTools({ cwd: Deno.cwd() });
+test("Claude CLI capability factory returns the canonical capability tool names", () => {
+    const tools = createClaudeCliCapabilityTools({ cwd: getCwd() });
 
     assertEquals(tools.map((tool) => tool.name), [...CLAUDE_CLI_CAPABILITY_TOOL_NAMES]);
 });
 
-Deno.test("Claude CLI capability tools execute PATH helper binaries", () =>
+test("Claude CLI capability tools execute PATH helper binaries", () =>
     withProcessGlobalTestLock(async () => {
-        const tempDir = await Deno.makeTempDir();
-        const oldPath = Deno.env.get("PATH") || "";
+        const tempDir = await fsMkdtemp(join(tmpdir(), "portable-fixture-"));
+        const oldPath = process.env["PATH"] || "";
         try {
             await writeExecutable(join(tempDir, "git"), "#!/bin/sh\necho /repo/runwield/.git\n");
             await writeExecutable(
@@ -45,7 +50,7 @@ Deno.test("Claude CLI capability tools execute PATH helper binaries", () =>
                 join(tempDir, "ketch"),
                 '#!/bin/sh\necho \'[{"title":"Web","url":"https://example.test"}]\'\n',
             );
-            Deno.env.set("PATH", `${tempDir}:${oldPath}`);
+            process.env["PATH"] = `${tempDir}:${oldPath}`;
             const tools = createClaudeCliCapabilityTools({ cwd: tempDir });
 
             const memoryText = await executeText(getTool(tools, "memory"), { action: "recall", query: "test" });
@@ -59,31 +64,31 @@ Deno.test("Claude CLI capability tools execute PATH helper binaries", () =>
             assertEquals(codeText, "cymbal:--no-federate search Thing");
             assertEquals(webText, "Web - https://example.test");
         } finally {
-            Deno.env.set("PATH", oldPath);
-            await Deno.remove(tempDir, { recursive: true });
+            process.env["PATH"] = oldPath;
+            await fsRm(tempDir, { recursive: true });
         }
     }));
 
-Deno.test("Claude CLI memory capability reports missing mnemoteca binary", () =>
+test("Claude CLI memory capability reports missing mnemoteca binary", () =>
     withProcessGlobalTestLock(async () => {
-        const tempDir = await Deno.makeTempDir();
-        const oldPath = Deno.env.get("PATH") || "";
+        const tempDir = await fsMkdtemp(join(tmpdir(), "portable-fixture-"));
+        const oldPath = process.env["PATH"] || "";
         try {
             await writeExecutable(join(tempDir, "git"), "#!/bin/sh\nexit 1\n");
             await writeExecutable(join(tempDir, "cymbal"), "#!/bin/sh\necho ok\n");
-            Deno.env.set("PATH", tempDir);
+            process.env["PATH"] = tempDir;
             const tools = createClaudeCliCapabilityTools({ cwd: tempDir });
 
             const text = await executeText(getTool(tools, "memory"), { action: "recall", query: "test" });
 
             assertMatch(text, /mnemoteca binary not found/i);
         } finally {
-            Deno.env.set("PATH", oldPath);
-            await Deno.remove(tempDir, { recursive: true });
+            process.env["PATH"] = oldPath;
+            await fsRm(tempDir, { recursive: true });
         }
     }));
 
-Deno.test("Claude CLI capability list includes memory, code, and web families", () => {
+test("Claude CLI capability list includes memory, code, and web families", () => {
     assertArrayIncludes([...CLAUDE_CLI_CAPABILITY_TOOL_NAMES], [
         "memory",
         "code_investigate",

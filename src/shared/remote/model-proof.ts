@@ -1,3 +1,4 @@
+import { readFile as fsReadFile, realpath as fsRealpath, stat as fsStat } from "node:fs/promises";
 /* Explicit, one-turn LIVE proof. This is not an interactive remote Session. */
 import { isAbsolute, join, relative } from "@std/path";
 import type { RemoteModelConnection } from "./model-bridge.ts";
@@ -22,8 +23,8 @@ export async function runRemoteModelProof(options: {
     signal?.throwIfAborted();
     // Validate again at the receiving end. Never trust an untyped private header.
     const proof = parseRemoteModelProof(JSON.stringify(options.proof));
-    const project = await Deno.realPath(options.cwd);
-    const path = await Deno.realPath(join(project, proof.sentinelFile));
+    const project = await fsRealpath(options.cwd);
+    const path = await fsRealpath(join(project, proof.sentinelFile));
     const mountedRoots = [
         options.mount.globalRoot,
         options.mount.agentsRoot,
@@ -36,9 +37,9 @@ export async function runRemoteModelProof(options: {
     ) {
         throw new Error("Remote model proof sentinel must be inside the remote project");
     }
-    const info = await Deno.stat(path);
-    if (!info.isFile || info.size > 4096) throw new Error("Invalid remote model proof sentinel");
-    const sentinel = (await Deno.readTextFile(path)).trim();
+    const info = await fsStat(path);
+    if (!info.isFile() || info.size > 4096) throw new Error("Invalid remote model proof sentinel");
+    const sentinel = (await fsReadFile(path, "utf8")).trim();
     if (!sentinel || sentinel.length > 512 || /[\r\n]/.test(sentinel)) {
         throw new Error("Invalid remote model proof sentinel");
     }
@@ -57,13 +58,13 @@ export async function runRemoteModelProof(options: {
             parameters: { type: "object", properties: {}, additionalProperties: false },
             execute: async () => {
                 // Recheck before each read so a changed symlink cannot redirect the tool to laptop files.
-                const current = await Deno.realPath(join(project, proof.sentinelFile));
+                const current = await fsRealpath(join(project, proof.sentinelFile));
                 if (
                     current !== path || !inside(project, current) || mountedRoots.some((root) => inside(root, current))
                 ) {
                     throw new Error("Remote model proof sentinel changed");
                 }
-                const value = (await Deno.readTextFile(current)).trim();
+                const value = (await fsReadFile(current, "utf8")).trim();
                 if (value !== sentinel) throw new Error("Remote model proof sentinel changed");
                 toolResult = value;
                 return { content: [{ type: "text" as const, text: value }], details: null };

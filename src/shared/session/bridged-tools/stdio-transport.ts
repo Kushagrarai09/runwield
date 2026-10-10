@@ -1,3 +1,4 @@
+import process from "node:process";
 import { Client } from "@modelcontextprotocol/sdk/client";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp";
 import { Server } from "@modelcontextprotocol/sdk/server";
@@ -14,8 +15,8 @@ interface BridgeEnv {
 }
 
 function readBridgeEnv(): BridgeEnv {
-    const urlText = Deno.env.get(RUNWIELD_MCP_BRIDGE_URL_ENV) || "";
-    const token = Deno.env.get(RUNWIELD_MCP_BRIDGE_TOKEN_ENV) || "";
+    const urlText = process.env[RUNWIELD_MCP_BRIDGE_URL_ENV] || "";
+    const token = process.env[RUNWIELD_MCP_BRIDGE_TOKEN_ENV] || "";
     if (!urlText || !token) {
         throw new Error("RunWield MCP bridge is not available for this process.");
     }

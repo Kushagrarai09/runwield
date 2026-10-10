@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assertEquals, assertNotEquals } from "@std/assert";
 import { type RemoteControlService, startRemoteControlService } from "./control.ts";
 
@@ -11,7 +12,7 @@ function request(service: RemoteControlService, action: string, credential = ser
     });
 }
 
-Deno.test("remote control admits only a matching handshake before readiness", async () => {
+test("remote control admits only a matching handshake before readiness", async () => {
     const service = startRemoteControlService(identity);
     try {
         assertEquals((await request(service, "readiness")).status, 403);
@@ -38,7 +39,7 @@ Deno.test("remote control admits only a matching handshake before readiness", as
     }
 });
 
-Deno.test("wrong and prior credentials cannot stop a valid connection", async () => {
+test("wrong and prior credentials cannot stop a valid connection", async () => {
     const prior = startRemoteControlService(identity);
     const oldCredential = prior.credential;
     await prior.close();
@@ -57,7 +58,7 @@ Deno.test("wrong and prior credentials cannot stop a valid connection", async ()
     }
 });
 
-Deno.test("three missed remote health checks revoke readiness", async () => {
+test("three missed remote health checks revoke readiness", async () => {
     const service = startRemoteControlService(identity);
     try {
         await request(service, "handshake", service.credential, JSON.stringify(identity));
@@ -73,7 +74,7 @@ Deno.test("three missed remote health checks revoke readiness", async () => {
     }
 });
 
-Deno.test("local shutdown revokes readiness and closing revokes admission", async () => {
+test("local shutdown revokes readiness and closing revokes admission", async () => {
     const service = startRemoteControlService(identity);
     await request(service, "handshake", service.credential, JSON.stringify(identity));
     await request(service, "readiness");

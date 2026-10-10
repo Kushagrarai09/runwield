@@ -21,23 +21,25 @@ import { env as inheritedEnv, kill, platform, versions } from "node:process";
 
 interface NativeProcessStatus {
     code: number;
+    success: boolean;
 }
-interface NativeProcess {
+export interface NativeProcess {
     pid: number;
     stdout: ReadableStream<Uint8Array>;
     stderr: ReadableStream<Uint8Array>;
     stdin: WritableStream<Uint8Array>;
     status: Promise<NativeProcessStatus>;
-    kill(signal?: "SIGKILL"): void;
+    kill(signal?: "SIGKILL" | "SIGTERM"): void;
 }
 interface NativeSpawnOptions {
     args: string[];
     cwd: string;
     env?: Record<string, string>;
-    stdin: "null" | "piped";
-    stdout: "piped";
-    stderr: "piped";
+    stdin: "null" | "piped" | "inherit";
+    stdout: "piped" | "null" | "inherit";
+    stderr: "piped" | "null" | "inherit";
     detached?: boolean;
+    signal?: AbortSignal;
 }
 interface DenoProcessRuntime {
     Command: new (command: string, options: NativeSpawnOptions) => { spawn(): NativeProcess };
@@ -53,37 +55,48 @@ interface BunProcess {
     stderr: ReadableStream<Uint8Array>;
     stdin: BunInputSink;
     exited: Promise<number>;
-    kill(signal?: "SIGKILL"): void;
+    kill(signal?: "SIGKILL" | "SIGTERM"): void;
 }
 interface BunSpawnOptions {
     cmd: string[];
     cwd: string;
     env: NodeJS.ProcessEnv;
-    stdin: "ignore" | "pipe";
-    stdout: "pipe";
-    stderr: "pipe";
+    stdin: "ignore" | "pipe" | "inherit";
+    stdout: "ignore" | "pipe" | "inherit";
+    stderr: "ignore" | "pipe" | "inherit";
     detached: boolean;
 }
 interface BunProcessRuntime {
     spawn(options: BunSpawnOptions): BunProcess;
 }
 
-function spawnNativeProcess(command: string, options: NativeSpawnOptions): NativeProcess {
+export function spawnNativeProcess(command: string, options: NativeSpawnOptions): NativeProcess {
     if (versions.deno) {
         const deno: DenoProcessRuntime = Reflect.get(globalThis, "Deno");
         return new deno.Command(command, options).spawn();
     }
     if (!versions.bun) throw new Error("Foreground processes require Bun or Deno");
+    options.signal?.throwIfAborted();
     const bun = Reflect.get(globalThis, "Bun") as BunProcessRuntime;
     const child = bun.spawn({
         cmd: [command, ...options.args],
         cwd: options.cwd,
         env: { ...inheritedEnv, ...options.env },
-        stdin: options.stdin === "piped" ? "pipe" : "ignore",
-        stdout: "pipe",
-        stderr: "pipe",
+        stdin: options.stdin === "piped" ? "pipe" : options.stdin === "inherit" ? "inherit" : "ignore",
+        stdout: options.stdout === "piped" ? "pipe" : options.stdout === "inherit" ? "inherit" : "ignore",
+        stderr: options.stderr === "piped" ? "pipe" : options.stderr === "inherit" ? "inherit" : "ignore",
         detached: options.detached === true,
     });
+    const abort = () => {
+        try {
+            child.kill("SIGTERM");
+        } catch { /* Exit raced with cancellation. */ }
+    };
+    options.signal?.addEventListener("abort", abort, { once: true });
+    if (options.signal?.aborted) abort();
+    const status = child.exited.then((code) => ({ code, success: code === 0 })).finally(() =>
+        options.signal?.removeEventListener("abort", abort)
+    );
     // FileSink owns buffering; waiting for flush preserves web-stream
     // backpressure for interactive protocol writers and large stdin payloads.
     const stdin = new WritableStream<Uint8Array>({
@@ -103,7 +116,7 @@ function spawnNativeProcess(command: string, options: NativeSpawnOptions): Nativ
         stdout: child.stdout,
         stderr: child.stderr,
         stdin,
-        status: child.exited.then((code) => ({ code })),
+        status,
         kill: (signal) => child.kill(signal),
     };
 }
