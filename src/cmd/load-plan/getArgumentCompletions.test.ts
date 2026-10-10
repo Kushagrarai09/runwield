@@ -1,3 +1,6 @@
+import process from "node:process";
+import { rm as fsRm } from "node:fs/promises";
+import { test } from "node:test";
 import { assertEquals } from "@std/assert";
 import { getCwd } from "../../constants.js";
 import { savePlan } from "../../plan-store.js";
@@ -7,7 +10,7 @@ import { getLoadPlanCompletions } from "./getArgumentCompletions.ts";
 
 const repository = defineCommittedGitFixture();
 
-Deno.test("Plan completion suggests partial names and leaves an exact name ready to submit", async () => {
+test("Plan completion suggests partial names and leaves an exact name ready to submit", async () => {
     await withProcessGlobalTestLock(async () => {
         const root = await repository.checkout();
         const previousCwd = getCwd();
@@ -18,14 +21,14 @@ Deno.test("Plan completion suggests partial names and leaves an exact name ready
                     status: "draft",
                 });
             }
-            Deno.chdir(root);
+            process.chdir(root);
             assertEquals((await getLoadPlanCompletions("shi")).map((item) => item.value).sort(), ["ship", "ship-next"]);
             assertEquals(await getLoadPlanCompletions("ship"), []);
             assertEquals(await getLoadPlanCompletions("ship-next"), []);
             assertEquals(await getLoadPlanCompletions("missing"), []);
         } finally {
-            Deno.chdir(previousCwd);
-            await Deno.remove(root, { recursive: true });
+            process.chdir(previousCwd);
+            await fsRm(root, { recursive: true });
         }
     });
 });

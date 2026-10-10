@@ -1,3 +1,6 @@
+import process from "node:process";
+import { readFile as fsReadFile, rm as fsRm, stat as fsStat, writeFile as fsWriteFile } from "node:fs/promises";
+import { test } from "node:test";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
@@ -20,16 +23,16 @@ import { resolveWorkflowPlanLocation } from "./plan-location.ts";
 const repo = defineCommittedGitFixture();
 
 for (const autoMerge of [false, true]) {
-    Deno.test(`standalone delivery (${autoMerge ? "on" : "off"}) uses the default branch and survives a setting toggle`, async () => {
+    test(`standalone delivery (${autoMerge ? "on" : "off"}) uses the default branch and survives a setting toggle`, async () => {
         await withRuntimeCommandFixture("plan-delivery-", async ({ setModelMessages }) => {
             const root = await repo.checkout();
-            Deno.chdir(root);
+            process.chdir(root);
             const hostedSession = new HostedSession({ id: crypto.randomUUID(), cwd: root });
             const sessionManager = SessionManager.inMemory(root);
             hostedSession.setRootSessionManager(sessionManager);
             try {
                 // Main is the default, but execution is requested from an unrelated checkout.
-                await Deno.writeTextFile(`${root}/unrelated.txt`, "original\n");
+                await fsWriteFile(`${root}/unrelated.txt`, "original\n");
                 await git(root, ["add", "unrelated.txt"]);
                 await git(root, ["commit", "-m", "Unrelated source file"]);
                 const mainBefore = await git(root, ["rev-parse", "main"]);
@@ -66,7 +69,7 @@ for (const autoMerge of [false, true]) {
                 assertEquals(plan.attrs.targetBranch, "main");
                 assertEquals(plan.attrs.deliveryBranch, landing);
                 assertStringIncludes(
-                    await Deno.readTextFile(`${root}/docs/plans/Full Delivery Name.md`),
+                    await fsReadFile(`${root}/docs/plans/Full Delivery Name.md`, "utf8"),
                     `deliveryBranch: "${landing}"`,
                 );
                 if (autoMerge) {
@@ -75,9 +78,9 @@ for (const autoMerge of [false, true]) {
                 // The original primary Plan is untracked, and primary user work is dirty.
                 // Edit the primary body after execution starts. Publication must not replace it.
                 const primaryPath = `${root}/docs/plans/Full Delivery Name.md`;
-                await Deno.writeTextFile(primaryPath, (await Deno.readTextFile(primaryPath)) + "\nNewer user notes.\n");
-                const primaryPlan = await Deno.readTextFile(primaryPath);
-                await Deno.writeTextFile(`${root}/unrelated.txt`, "user changes must survive\n");
+                await fsWriteFile(primaryPath, (await fsReadFile(primaryPath, "utf8")) + "\nNewer user notes.\n");
+                const primaryPlan = await fsReadFile(primaryPath, "utf8");
+                await fsWriteFile(`${root}/unrelated.txt`, "user changes must survive\n");
                 await setCustomSetting("plans", { autoMergeIntoTargetBranch: !autoMerge }, "project", root);
                 // A target edit cannot redirect a recorded delivery attempt.
                 await updatePlanFrontMatter(cwd, "Full Delivery Name", { targetBranch: "scratch" }, plan.attrs, {
@@ -135,11 +138,11 @@ for (const autoMerge of [false, true]) {
                 });
                 assertEquals(validation.kind, "verified", JSON.stringify(validation));
                 assertEquals(await git(root, ["rev-parse", "HEAD"]), primaryHead);
-                assertEquals(await Deno.readTextFile(`${root}/unrelated.txt`), "user changes must survive\n");
-                assertEquals(await Deno.readTextFile(`${root}/docs/plans/Full Delivery Name.md`), primaryPlan);
+                assertEquals(await fsReadFile(`${root}/unrelated.txt`, "utf8"), "user changes must survive\n");
+                assertEquals(await fsReadFile(`${root}/docs/plans/Full Delivery Name.md`, "utf8"), primaryPlan);
                 assertEquals(await git(root, ["show", `${landing}:implemented.txt`]), "delivered");
                 if (!autoMerge) assertEquals(await git(root, ["rev-parse", "main"]), mainBefore);
-                assertEquals(await Deno.stat(cwd).then(() => true).catch(() => false), false);
+                assertEquals(await fsStat(cwd).then(() => true).catch(() => false), false);
                 assertEquals(await listEntries(root), []);
                 const delivered = await loadPublishedWorkRecordSource(root, "Full Delivery Name");
                 assert(delivered);
@@ -187,10 +190,10 @@ for (const autoMerge of [false, true]) {
                 assertStringIncludes(reloaded.plan?.body || "", "Newer user notes.");
                 const archived = await archivePlan(root, "Full Delivery Name");
                 assertEquals(archived.attrs.status, "user_verified");
-                assertStringIncludes(await Deno.readTextFile(archived.toPath), "Newer user notes.");
+                assertStringIncludes(await fsReadFile(archived.toPath, "utf8"), "Newer user notes.");
             } finally {
                 hostedSession.dispose();
-                await Deno.remove(root, { recursive: true });
+                await fsRm(root, { recursive: true });
             }
         });
     });

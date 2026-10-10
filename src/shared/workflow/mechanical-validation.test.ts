@@ -1,3 +1,5 @@
+import process from "node:process";
+import { test } from "node:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
@@ -70,7 +72,7 @@ function taskCompletedMessage(summary: string) {
     return fauxAssistantMessage(fauxToolCall("task_completed", { message: summary }));
 }
 
-Deno.test("runLocalCI emits one semantic validation tool lifecycle", async () => {
+test("runLocalCI emits one semantic validation tool lifecycle", async () => {
     await withRuntimeCommandFixture("validation-local-ci-", async ({ projectRoot }) => {
         const ui = makeUi() as ValidationUi;
         const hostedSession = attachRecorder(
@@ -94,7 +96,7 @@ Deno.test("runLocalCI emits one semantic validation tool lifecycle", async () =>
     });
 });
 
-Deno.test("runLocalCI streams large validation output without failing the process buffer", async () => {
+test("runLocalCI streams large validation output without failing the process buffer", async () => {
     await withRuntimeCommandFixture("validation-large-output-", async ({ projectRoot }) => {
         const ui = makeUi() as ValidationUi;
         const hostedSession = attachRecorder(
@@ -102,7 +104,11 @@ Deno.test("runLocalCI streams large validation output without failing the proces
             ui,
         );
         ui.promptText = () =>
-            Promise.resolve(`${Deno.execPath()} eval "console.log('x'.repeat(1200000)); console.error('tail-marker')"`);
+            Promise.resolve(
+                `${JSON.stringify(process.execPath)} ${
+                    process.versions.deno ? "eval" : "-e"
+                } "console.log('x'.repeat(1200000)); console.error('tail-marker')"`,
+            );
 
         const result = await runLocalCI({ hostedSession, cwd: projectRoot });
 
@@ -116,7 +122,7 @@ Deno.test("runLocalCI streams large validation output without failing the proces
     });
 });
 
-Deno.test("Mechanical Validation runs real checklist and session machinery after CI passes", async () => {
+test("Mechanical Validation runs real checklist and session machinery after CI passes", async () => {
     await withRuntimeCommandFixture("mechanical-pass-", async ({ projectRoot, setModelMessages }) => {
         setModelMessages([fauxAssistantMessage(fauxToolCall("manual_qa_completed", {
             checklistMarkdown: "Manual verification steps for small-fix\n- [ ] Save settings and reload.",
@@ -149,7 +155,7 @@ Deno.test("Mechanical Validation runs real checklist and session machinery after
     });
 });
 
-Deno.test("Mechanical Validation repairs through the real Engineer turn and then passes", async () => {
+test("Mechanical Validation repairs through the real Engineer turn and then passes", async () => {
     await withRuntimeCommandFixture("mechanical-repair-", async ({ projectRoot, setModelMessages }) => {
         setModelMessages([
             taskCompletedMessage("- Repaired the fixture failure."),
@@ -176,7 +182,7 @@ Deno.test("Mechanical Validation repairs through the real Engineer turn and then
     });
 });
 
-Deno.test("Mechanical Validation ignores task completion from an earlier Engineer turn", async () => {
+test("Mechanical Validation ignores task completion from an earlier Engineer turn", async () => {
     await withRuntimeCommandFixture("mechanical-stale-completion-", async ({ projectRoot, setModelResponse }) => {
         setModelResponse("I stopped before completing the repair.");
         const fixture = await activateMechanicalFixture(projectRoot);
@@ -206,7 +212,7 @@ Deno.test("Mechanical Validation ignores task completion from an earlier Enginee
     });
 });
 
-Deno.test("Mechanical Validation stops after three real Engineer repair completions", async () => {
+test("Mechanical Validation stops after three real Engineer repair completions", async () => {
     await withRuntimeCommandFixture("mechanical-exhausted-", async ({ projectRoot, setModelMessages }) => {
         setModelMessages([
             taskCompletedMessage("- First repair attempt."),
@@ -243,7 +249,7 @@ Deno.test("Mechanical Validation stops after three real Engineer repair completi
     });
 });
 
-Deno.test("Mechanical Validation preserves the Engineer session when local CI is canceled", async () => {
+test("Mechanical Validation preserves the Engineer session when local CI is canceled", async () => {
     await withRuntimeCommandFixture("mechanical-canceled-", async ({ projectRoot }) => {
         const fixture = await activateMechanicalFixture(projectRoot);
         const ci = defineLocalCIFixture([{

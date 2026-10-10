@@ -1,10 +1,12 @@
 // @ts-nocheck: Deno test imports are checked by scripts/run-tests.js, not Astro check.
+import { readFile as fsReadFile } from "node:fs/promises";
+import { test } from "node:test";
 import { assertStringIncludes } from "@std/assert";
 
-Deno.test("local and owner Plan Board routes share one page composition", async () => {
-    const local = await Deno.readTextFile(new URL("./pages/index.astro", import.meta.url));
-    const owner = await Deno.readTextFile(new URL("./components/ProjectPlanBoardPage.astro", import.meta.url));
-    const shared = await Deno.readTextFile(new URL("./components/PlanBoardPage.astro", import.meta.url));
+test("local and owner Plan Board routes share one page composition", async () => {
+    const local = await fsReadFile(new URL("./pages/index.astro", import.meta.url), "utf8");
+    const owner = await fsReadFile(new URL("./components/ProjectPlanBoardPage.astro", import.meta.url), "utf8");
+    const shared = await fsReadFile(new URL("./components/PlanBoardPage.astro", import.meta.url), "utf8");
 
     assertStringIncludes(local, "PlanBoardPage");
     assertStringIncludes(local, 'context="local"');
@@ -15,8 +17,8 @@ Deno.test("local and owner Plan Board routes share one page composition", async 
     assertStringIncludes(shared, 'shell={context === "workspace" ? "workspace" : "local"}');
 });
 
-Deno.test("dev Surface Lab exposes both presentations of every shared surface", async () => {
-    const catalog = await Deno.readTextFile(new URL("./pages/dev/index.astro", import.meta.url));
+test("dev Surface Lab exposes both presentations of every shared surface", async () => {
+    const catalog = await fsReadFile(new URL("./pages/dev/index.astro", import.meta.url), "utf8");
 
     for (
         const path of [
@@ -29,9 +31,9 @@ Deno.test("dev Surface Lab exposes both presentations of every shared surface", 
     ) assertStringIncludes(catalog, path);
 });
 
-Deno.test("Workspace development has one Surface Lab entry task", async () => {
+test("Workspace development has one Surface Lab entry task", async () => {
     const denoConfig = JSON.parse(
-        await Deno.readTextFile(new URL("../../../deno.json", import.meta.url)),
+        await fsReadFile(new URL("../../../deno.json", import.meta.url), "utf8"),
     );
     const taskNames = Object.keys(denoConfig.tasks);
 

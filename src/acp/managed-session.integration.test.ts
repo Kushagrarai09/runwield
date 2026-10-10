@@ -1,3 +1,5 @@
+import { writeFile as fsWriteFile } from "node:fs/promises";
+import { test } from "node:test";
 import { assert, assertEquals } from "@std/assert";
 import { join } from "@std/path";
 import { withRuntimeCommandFixture } from "../cmd/testing/runtime-command-fixture.ts";
@@ -62,11 +64,11 @@ async function writeAcpSuccessorTranscript(
     const timestamp = "2026-01-01T00:03:00.000Z";
     const path = join(sessionDir, `${timestamp.replace(/[:.]/g, "-")}_${piSessionId}.jsonl`);
     const header = { type: "session", id: piSessionId, timestamp, cwd: projectRoot, name: "ACP successor" };
-    await Deno.writeTextFile(path, `${JSON.stringify(header)}\n`);
+    await fsWriteFile(path, `${JSON.stringify(header)}\n`);
     return path;
 }
 
-Deno.test("ACP load queues a prompt while Workspace owns activation and sends it after release", async () => {
+test("ACP load queues a prompt while Workspace owns activation and sends it after release", async () => {
     await withRuntimeCommandFixture(
         "acp-managed-session-",
         async ({ homeDir, projectRoot, setModelResponseFactories }) => {

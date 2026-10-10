@@ -1,3 +1,5 @@
+import { readFile as fsReadFile, stat as fsStat, utimes as fsUtimes, writeFile as fsWriteFile } from "node:fs/promises";
+import { test } from "node:test";
 import { assertEquals, assertExists, assertStringIncludes } from "@std/assert";
 import { executeWorkflowTestTools } from "../../testing/workflow-agent-tools.ts";
 import { join } from "@std/path";
@@ -130,7 +132,7 @@ async function saveRunningMechanicalCheckpoint(projectRoot: string, attrs: Recor
     }, { expectedRevision: plan.revision });
 }
 
-Deno.test("human-review change repair resumes through CI and returns to Code Review", async () => {
+test("human-review change repair resumes through CI and returns to Code Review", async () => {
     const projectRoot = await makeImplementedPlan({
         humanReviewMode: "always",
         humanReviewDecision: "changes_requested",
@@ -183,7 +185,7 @@ Deno.test("human-review change repair resumes through CI and returns to Code Rev
     );
 });
 
-Deno.test("mechanical failure state is durable before CI repair dispatch", async () => {
+test("mechanical failure state is durable before CI repair dispatch", async () => {
     const projectRoot = await makeImplementedPlan();
     const hostedSession = new HostedSession({ id: crypto.randomUUID(), cwd: projectRoot });
     attachWorkflow(hostedSession, projectRoot);
@@ -208,14 +210,14 @@ Deno.test("mechanical failure state is durable before CI repair dispatch", async
     assertEquals(plan.attrs.validationCheckpoint?.nextPhase, "mechanical");
 });
 
-Deno.test("CI repair completion reloads the execution-tree settings command before validation advances", async () => {
+test("CI repair completion reloads the execution-tree settings command before validation advances", async () => {
     const projectRoot = await makeImplementedPlan();
     const settingsPath = join(projectRoot, ".wld", "settings.json");
     setExactProjectCustomSetting("verification_command", "printf first; exit 1", projectRoot);
     const ui = makeUi();
     const hostedSession = attachRecorder(new HostedSession({ id: crypto.randomUUID(), cwd: projectRoot }), ui);
     attachWorkflow(hostedSession, projectRoot);
-    const beforeRepairStat = await Deno.stat(settingsPath);
+    const beforeRepairStat = await fsStat(settingsPath);
     const repairCounter = { runs: 0 };
 
     const result = await runValidation({
@@ -228,7 +230,7 @@ Deno.test("CI repair completion reloads the execution-tree settings command befo
             completed: true,
             onRun: async () => {
                 setExactProjectCustomSetting("verification_command", "printf fixed; exit 0", projectRoot);
-                await Deno.utime(
+                await fsUtimes(
                     settingsPath,
                     beforeRepairStat.atime ?? new Date(0),
                     beforeRepairStat.mtime ?? new Date(0),
@@ -247,7 +249,7 @@ Deno.test("CI repair completion reloads the execution-tree settings command befo
     assertEquals(plan.attrs.status, "verified");
 });
 
-Deno.test("process loss before CI repair dispatch reclaims the checkpoint and reruns Mechanical Validation", async () => {
+test("process loss before CI repair dispatch reclaims the checkpoint and reruns Mechanical Validation", async () => {
     const projectRoot = await makeImplementedPlan();
     await saveRunningMechanicalCheckpoint(projectRoot);
     const hostedSession = new HostedSession({ id: crypto.randomUUID(), cwd: projectRoot });
@@ -272,7 +274,7 @@ Deno.test("process loss before CI repair dispatch reclaims the checkpoint and re
     assertEquals(repairCounter.runs, 1, "recovery may dispatch a new bounded repair only after fresh CI fails");
 });
 
-Deno.test("process loss during CI repair reruns checks and may dispatch a new repair without replaying the old turn", async () => {
+test("process loss during CI repair reruns checks and may dispatch a new repair without replaying the old turn", async () => {
     const projectRoot = await makeImplementedPlan({ validationCiAttempts: 1, failureReason: "old failure" });
     await saveRunningMechanicalCheckpoint(projectRoot, { validationCiAttempts: 1, failureReason: "old failure" });
     const hostedSession = new HostedSession({ id: crypto.randomUUID(), cwd: projectRoot });
@@ -298,10 +300,10 @@ Deno.test("process loss during CI repair reruns checks and may dispatch a new re
     assertEquals(repairCounter.runs, 1);
 });
 
-Deno.test("process loss after repair changes the worktree reruns checks and does not replay the repair turn", async () => {
+test("process loss after repair changes the worktree reruns checks and does not replay the repair turn", async () => {
     const projectRoot = await makeImplementedPlan({ humanReviewMode: "always" });
     const marker = `${projectRoot}/repair-marker.txt`;
-    await Deno.writeTextFile(marker, "fixed\n");
+    await fsWriteFile(marker, "fixed\n");
     await saveRunningMechanicalCheckpoint(projectRoot, { validationCiAttempts: 1, failureReason: "old failure" });
     const hostedSession = attachRecorder(new HostedSession({ id: crypto.randomUUID(), cwd: projectRoot }), makeUi());
     attachWorkflow(hostedSession, projectRoot, { validationCiAttempts: 1, humanReviewMode: "always" });
@@ -315,7 +317,7 @@ Deno.test("process loss after repair changes the worktree reruns checks and does
         localCI: {
             run: async () => {
                 ciRuns += 1;
-                const fixed = await Deno.readTextFile(marker).then(() => true).catch(() => false);
+                const fixed = await fsReadFile(marker, "utf8").then(() => true).catch(() => false);
                 return fixed
                     ? { kind: "completed", exitCode: 0, output: "ok" }
                     : { kind: "completed", exitCode: 1, output: "still failing" };
@@ -332,7 +334,7 @@ Deno.test("process loss after repair changes the worktree reruns checks and does
     assertEquals(plan.attrs.status, "reviewed");
 });
 
-Deno.test("repair turn without task_completed settles paused and retry starts from Mechanical Validation", async () => {
+test("repair turn without task_completed settles paused and retry starts from Mechanical Validation", async () => {
     const projectRoot = await makeImplementedPlan();
     const hostedSession = new HostedSession({ id: crypto.randomUUID(), cwd: projectRoot });
     attachWorkflow(hostedSession, projectRoot);

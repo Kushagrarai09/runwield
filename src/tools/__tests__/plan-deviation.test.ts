@@ -1,3 +1,7 @@
+import { mkdtemp as fsMkdtemp, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
+import { test } from "node:test";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { HostedSession } from "../../shared/session/hosted-session.js";
 import type {
@@ -79,15 +83,15 @@ async function executeDeviation(tool: PlanDeviationTool, callId: string) {
 }
 
 async function withTempProject(fn: (projectRoot: string) => Promise<void>) {
-    const projectRoot = await Deno.makeTempDir({ prefix: "runwield-plan-deviation-" });
+    const projectRoot = await fsMkdtemp(join(tmpdir(), "runwield-plan-deviation-"));
     try {
         await fn(projectRoot);
     } finally {
-        await Deno.remove(projectRoot, { recursive: true });
+        await fsRm(projectRoot, { recursive: true });
     }
 }
 
-Deno.test("record_plan_deviation confirms and appends one Plan-owned entry", async () => {
+test("record_plan_deviation confirms and appends one Plan-owned entry", async () => {
     await withTempProject(async (projectRoot) => {
         const before = await makePlan(projectRoot);
         const fixture = makeSession(projectRoot, [{ outcome: "accepted", value: true }]);
@@ -108,7 +112,7 @@ Deno.test("record_plan_deviation confirms and appends one Plan-owned entry", asy
     });
 });
 
-Deno.test("record_plan_deviation is durable and idempotent after reload", async () => {
+test("record_plan_deviation is durable and idempotent after reload", async () => {
     await withTempProject(async (projectRoot) => {
         await makePlan(projectRoot);
         const first = makeSession(projectRoot, [{ outcome: "accepted", value: true }]);
@@ -131,7 +135,7 @@ Deno.test("record_plan_deviation is durable and idempotent after reload", async 
     });
 });
 
-Deno.test("record_plan_deviation cancellation and unsupported capability do not write", async () => {
+test("record_plan_deviation cancellation and unsupported capability do not write", async () => {
     await withTempProject(async (projectRoot) => {
         await makePlan(projectRoot);
         const canceled = makeSession(projectRoot, [{ outcome: "canceled" }]);
@@ -157,7 +161,7 @@ Deno.test("record_plan_deviation cancellation and unsupported capability do not 
     });
 });
 
-Deno.test("record_plan_deviation writes nothing when Pair execution stops after confirmation", async () => {
+test("record_plan_deviation writes nothing when Pair execution stops after confirmation", async () => {
     await withTempProject(async (projectRoot) => {
         await makePlan(projectRoot);
         const fixture = makeSession(projectRoot, [{ outcome: "accepted", value: true }]);
@@ -180,7 +184,7 @@ Deno.test("record_plan_deviation writes nothing when Pair execution stops after 
     });
 });
 
-Deno.test("record_plan_deviation stale revision writes nothing", async () => {
+test("record_plan_deviation stale revision writes nothing", async () => {
     await withTempProject(async (projectRoot) => {
         await makePlan(projectRoot);
         const fixture = makeSession(projectRoot, [{ outcome: "accepted", value: true }]);
@@ -190,7 +194,7 @@ Deno.test("record_plan_deviation stale revision writes nothing", async () => {
                 fixture.requests.push(request);
                 const current = await loadPlan(projectRoot, "demo-plan");
                 if (!current) throw new Error("Plan disappeared.");
-                await Deno.writeTextFile(current.path, `${current.markdown}\n<!-- concurrent edit -->\n`);
+                await fsWriteFile(current.path, `${current.markdown}\n<!-- concurrent edit -->\n`);
                 return { outcome: "accepted", value: true };
             },
         });
@@ -208,7 +212,7 @@ Deno.test("record_plan_deviation stale revision writes nothing", async () => {
     });
 });
 
-Deno.test("record_plan_deviation confirms autonomous execution and survives reload", async () => {
+test("record_plan_deviation confirms autonomous execution and survives reload", async () => {
     await withTempProject(async (projectRoot) => {
         await makePlan(projectRoot);
         const fixture = makeSession(projectRoot, [{ outcome: "accepted", value: true }]);
@@ -221,7 +225,7 @@ Deno.test("record_plan_deviation confirms autonomous execution and survives relo
     });
 });
 
-Deno.test("record_plan_deviation rejects missing active Plan context", async () => {
+test("record_plan_deviation rejects missing active Plan context", async () => {
     await withTempProject(async (projectRoot) => {
         await makePlan(projectRoot);
         const fixture = makeSession(projectRoot, []);
@@ -235,7 +239,7 @@ Deno.test("record_plan_deviation rejects missing active Plan context", async () 
     });
 });
 
-Deno.test("record_plan_deviation rejects a changed autonomous execution identity", async () => {
+test("record_plan_deviation rejects a changed autonomous execution identity", async () => {
     await withTempProject(async (projectRoot) => {
         await makePlan(projectRoot);
         const fixture = makeSession(projectRoot, []);
@@ -260,7 +264,7 @@ Deno.test("record_plan_deviation rejects a changed autonomous execution identity
 });
 
 for (const supportsConfirmation of [false, true]) {
-    Deno.test(`record_plan_deviation unsupported autonomous confirmation does not create Pair state (${supportsConfirmation})`, async () => {
+    test(`record_plan_deviation unsupported autonomous confirmation does not create Pair state (${supportsConfirmation})`, async () => {
         await withTempProject(async (projectRoot) => {
             await makePlan(projectRoot);
             const fixture = makeSession(projectRoot, [{ outcome: "unsupported" }], supportsConfirmation);
@@ -279,7 +283,7 @@ for (const supportsConfirmation of [false, true]) {
     });
 }
 
-Deno.test("record_plan_deviation rejects a Session without active execution", async () => {
+test("record_plan_deviation rejects a Session without active execution", async () => {
     await withTempProject(async (projectRoot) => {
         await makePlan(projectRoot);
         const session = new HostedSession({ id: crypto.randomUUID(), cwd: projectRoot });

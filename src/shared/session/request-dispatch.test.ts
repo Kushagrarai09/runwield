@@ -1,3 +1,5 @@
+import { getCwd } from "../../constants.js";
+import { test } from "node:test";
 import { assertEquals, assertNotEquals } from "@std/assert";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import {
@@ -27,8 +29,8 @@ function transcriptText(manager: SessionManager): string {
         .join("\n");
 }
 
-Deno.test("Plan backend retry keeps one Plan body and uses a stable request ID", () => {
-    const manager = SessionManager.inMemory(Deno.cwd());
+test("Plan backend retry keeps one Plan body and uses a stable request ID", () => {
+    const manager = SessionManager.inMemory(getCwd());
     const planBody = "# Plan body\n\nImplement the approved change.";
     const first = prepareRequestDispatch(manager, {
         userRequest: planBody,
@@ -57,8 +59,8 @@ Deno.test("Plan backend retry keeps one Plan body and uses a stable request ID",
     assertEquals(attempts[2].backend, "pi");
 });
 
-Deno.test("backend retry continuation does not name a specific active agent", () => {
-    const manager = SessionManager.inMemory(Deno.cwd());
+test("backend retry continuation does not name a specific active agent", () => {
+    const manager = SessionManager.inMemory(getCwd());
     const userRequest = "Design the implementation boundary.";
     const first = prepareRequestDispatch(manager, {
         userRequest,
@@ -79,8 +81,8 @@ Deno.test("backend retry continuation does not name a specific active agent", ()
     assertEquals(retry.userRequest.includes("Architect"), false);
 });
 
-Deno.test("validation repair retry keeps one original repair packet", () => {
-    const manager = SessionManager.inMemory(Deno.cwd());
+test("validation repair retry keeps one original repair packet", () => {
+    const manager = SessionManager.inMemory(getCwd());
     const repairPacket = "Validation repair packet\nFailure: expected 1, got 2";
     const first = prepareRequestDispatch(manager, {
         userRequest: repairPacket,
@@ -103,8 +105,8 @@ Deno.test("validation repair retry keeps one original repair packet", () => {
     assertEquals(retry.promptMode, "continuation");
 });
 
-Deno.test("failure before transcript recording safely resends the original request", () => {
-    const manager = SessionManager.inMemory(Deno.cwd());
+test("failure before transcript recording safely resends the original request", () => {
+    const manager = SessionManager.inMemory(getCwd());
     const first = prepareRequestDispatch(manager, {
         userRequest: "original",
         dispatchKind: "quick_fix",

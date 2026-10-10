@@ -1,3 +1,14 @@
+import {
+    mkdir as fsMkdir,
+    mkdtemp as fsMkdtemp,
+    realpath as fsRealpath,
+    rm as fsRm,
+    stat as fsStat,
+    writeFile as fsWriteFile,
+} from "node:fs/promises";
+import { test } from "node:test";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { DatabaseSync } from "node:sqlite";
 import { getRunWieldSessionDir } from "../session/root-session.js";
@@ -42,7 +53,7 @@ function idFactory(prefix = "id") {
  */
 async function writeTranscript(cwd, piSessionId, options = {}) {
     const sessionDir = getRunWieldSessionDir(cwd);
-    await Deno.mkdir(sessionDir, { recursive: true });
+    await fsMkdir(sessionDir, { recursive: true });
     const timestamp = options.timestamp || "2026-01-01T00:00:00.000Z";
     const sessionPath = `${sessionDir}/${timestamp.replace(/[:.]/g, "-")}_${
         options.filenamePiSessionId || piSessionId
@@ -54,7 +65,7 @@ async function writeTranscript(cwd, piSessionId, options = {}) {
         timestamp,
         cwd: options.headerCwd || cwd,
     };
-    await Deno.writeTextFile(sessionPath, `${JSON.stringify(header)}\n${options.body || ""}`);
+    await fsWriteFile(sessionPath, `${JSON.stringify(header)}\n${options.body || ""}`);
     return sessionPath;
 }
 
@@ -75,16 +86,16 @@ function createVersion5Database(dbPath) {
     }
 }
 
-Deno.test("version-five locator rows migrate to ordinal-zero transcript segments without touching transcript files", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-segment-migration-" });
+test("version-five locator rows migrate to ordinal-zero transcript segments without touching transcript files", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-segment-migration-"));
     try {
         const dbPath = `${dir}/owner.sqlite3`;
         createVersion5Database(dbPath);
         const legacy = new DatabaseSync(dbPath);
         const root = `${dir}/repo`;
-        await Deno.mkdir(root);
+        await fsMkdir(root);
         const transcriptPath = await writeTranscript(root, "pi-legacy", { body: "legacy body\n" });
-        const before = await Deno.stat(transcriptPath);
+        const before = await fsStat(transcriptPath);
         try {
             legacy.exec("PRAGMA foreign_keys = ON");
             legacy.prepare(
@@ -92,7 +103,7 @@ Deno.test("version-five locator rows migrate to ordinal-zero transcript segments
             ).run(root, root);
             legacy.prepare(
                 "INSERT INTO project_roots(id, project_id, entered_root, canonical_root, root_state, created_at) VALUES ('root-1', 'project-1', ?, ?, 'current', 't0')",
-            ).run(root, await Deno.realPath(root));
+            ).run(root, await fsRealpath(root));
             legacy.prepare(
                 "INSERT INTO runwield_sessions(id, project_id, source, created_at, updated_at) VALUES ('session-1', 'project-1', 'catalog', 't0', 't0')",
             ).run();
@@ -105,7 +116,7 @@ Deno.test("version-five locator rows migrate to ordinal-zero transcript segments
 
         const database = openOwnerCoordinationDatabase({ dbPath });
         try {
-            const after = await Deno.stat(transcriptPath);
+            const after = await fsStat(transcriptPath);
             const segments = listSessionTranscriptSegments(database, "session-1");
             assertEquals(segments.length, 1);
             assertEquals(segments[0].ordinal, 0);
@@ -118,17 +129,17 @@ Deno.test("version-five locator rows migrate to ordinal-zero transcript segments
             database.close();
         }
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("segments append after sealing and preserve ordering while allowing duplicate Pi ids", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-segment-append-" });
+test("segments append after sealing and preserve ordering while allowing duplicate Pi ids", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-segment-append-"));
     try {
         const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
         try {
             const root = `${dir}/repo`;
-            await Deno.mkdir(root);
+            await fsMkdir(root);
             const project = registerProject(database, { root, idFactory: idFactory(), now: () => "t0" });
             const firstPath = await writeTranscript(root, "pi-same");
             const session = await ensureSessionCatalogRecord(database, {
@@ -170,19 +181,19 @@ Deno.test("segments append after sealing and preserve ordering while allowing du
             database.close();
         }
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("append rejects transcript paths outside the Project root and missing files", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-segment-guard-" });
+test("append rejects transcript paths outside the Project root and missing files", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-segment-guard-"));
     try {
         const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
         try {
             const root = `${dir}/repo`;
             const outside = `${dir}/outside`;
-            await Deno.mkdir(root);
-            await Deno.mkdir(outside);
+            await fsMkdir(root);
+            await fsMkdir(outside);
             const project = registerProject(database, { root, idFactory: idFactory(), now: () => "t0" });
             const firstPath = await writeTranscript(root, "pi-1");
             const session = await ensureSessionCatalogRecord(database, {
@@ -229,12 +240,12 @@ Deno.test("append rejects transcript paths outside the Project root and missing 
             database.close();
         }
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("sealed segments are immutable at the database boundary", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-segment-immutable-" });
+test("sealed segments are immutable at the database boundary", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-segment-immutable-"));
     try {
         const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
         try {
@@ -266,17 +277,17 @@ Deno.test("sealed segments are immutable at the database boundary", async () => 
             database.close();
         }
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("catalog reconstruction regroups valid lineage-bearing transcript segments", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-segment-reconstruct-" });
+test("catalog reconstruction regroups valid lineage-bearing transcript segments", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-segment-reconstruct-"));
     try {
         const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
         try {
             const root = `${dir}/repo`;
-            await Deno.mkdir(root);
+            await fsMkdir(root);
             const project = registerProject(database, { root, idFactory: idFactory(), now: () => "t0" });
             const firstPath = await writeTranscript(root, "pi-a", {
                 timestamp: "2026-01-01T00:00:00.000Z",
@@ -320,17 +331,17 @@ Deno.test("catalog reconstruction regroups valid lineage-bearing transcript segm
             database.close();
         }
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("catalog reconstruction marks ambiguous lineage-bearing transcript segments for recovery", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-segment-recovery-" });
+test("catalog reconstruction marks ambiguous lineage-bearing transcript segments for recovery", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-segment-recovery-"));
     try {
         const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
         try {
             const root = `${dir}/repo`;
-            await Deno.mkdir(root);
+            await fsMkdir(root);
             const project = registerProject(database, { root, idFactory: idFactory(), now: () => "t0" });
             await writeTranscript(root, "pi-a", {
                 timestamp: "2026-01-01T00:00:00.000Z",
@@ -381,12 +392,12 @@ Deno.test("catalog reconstruction marks ambiguous lineage-bearing transcript seg
             database.close();
         }
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("lineage diagnostics distinguish missing ambiguous cyclic and orphaned reconstruction states", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-segment-lineage-" });
+test("lineage diagnostics distinguish missing ambiguous cyclic and orphaned reconstruction states", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-segment-lineage-"));
     try {
         const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
         try {
@@ -424,6 +435,6 @@ Deno.test("lineage diagnostics distinguish missing ambiguous cyclic and orphaned
             database.close();
         }
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });

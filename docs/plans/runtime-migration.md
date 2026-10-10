@@ -598,3 +598,33 @@ the same default Node filesystem boundary patched by the fixtures. Both pass aft
 recorded above. All three reviewers approved the filesystem correction. Final source types, lint and the zero-seam gate
 pass. Linux's final 257-file run and rebuilt standalone qualification are pending. No cutover or all-platform
 qualification is claimed.
+
+## Application package checkpoint and test expansion (2026-10-10)
+
+Application commit `4131b046a` passes all 257 registered Bun files on macOS and Linux ARM64
+(`.ci-cache/application-ci-bun-final.log`, `.ci-cache/linux-application-final-suite.log`). Its rebuilt development
+executables both pass relocated package and local-provider qualification with isolated HOME, checkout/dependency reads
+unavailable, embedded image worker/WASM, Workspace asset/auth checks, onboarding/cancel, provider streaming and normal
+`/quit` terminal restoration (`.ci-cache/application-{macos,linux}-{package,provider}-check.log`). Both artifacts have
+build identity `b35b1099e469794d44581b989e6e2defa4d7b5a28792c47f327ae0ed8a634f6f`. The macOS SHA-256 is
+`874a1997b4c5387ac5e4d8483474c0d5d62578e416259c6c8c85b51e46a1b9fb`; Linux is
+`338f402a5867c5d277cacc0657c00eb66d428130a48f6d21fd211060fb43ced9`. No package was published.
+
+The next test-only slice migrates 174 filesystem/environment-based regression files and their MCP fixture, taking the
+Bun registry to 431 files. The first selected run passes 170/174; corrected runtime eval/run arguments, the active
+Workspace build directory, portable MCP fixture APIs and Node-compatible fake timers make all four failures pass on
+retry (`.ci-cache/next-fs-two-fixes.log`, `.ci-cache/next-fs-mcp-clock-fixes.log`). Fake timers still advance both Date
+and timeout callbacks past the removed five-minute expiry; they retain Node timer handles needed by real HTTP sockets.
+All three independent review axes approve. S10/T21 corrected artifact-route coverage to require HTTP 200 when the active
+runtime's Workspace build exists. The shared MCP fixture now records one shutdown event on EOF or SIGINT/SIGTERM under
+both runtimes, independently verified by Spec review. The complete Deno CI gate passes in 990.8 seconds
+(`.ci-cache/next-fs-full-ci-second.log`), including all pre-test checks and the full regression suite. Final integrated
+Bun runs are pending. Remaining cutover gates include the rest of the tests/golden TUI runners, equivalent Bun-only
+tooling coverage, full-app/install benchmarks, Windows native-lock and packaging implementation, Windows/x64 execution
+and real SSHFS/FUSE qualification. The Bun lock adapter currently supports only macOS/Linux; Deno's existing Windows
+backend is preserved. Deno remains the default release runtime.
+
+Preliminary macOS CLI-only timing for the qualified application binary: seven warm runs have median `--version` 291.6 ms
+/ 72.0 MiB peak RSS and `--help` 385.8 ms / 105.9 MiB peak RSS; executable size is 147.4 MiB
+(`.ci-cache/application-bun-startup-benchmark.json`). These samples were collected while CI was active, with no OS cache
+flush or Deno comparison. They do not satisfy the full application or cold/warm worktree-install benchmark gate.

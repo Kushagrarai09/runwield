@@ -1,3 +1,12 @@
+import {
+    mkdir as fsMkdir,
+    mkdtemp as fsMkdtemp,
+    readFile as fsReadFile,
+    rm as fsRm,
+    writeFile as fsWriteFile,
+} from "node:fs/promises";
+import { test } from "node:test";
+import { tmpdir } from "node:os";
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { join } from "@std/path";
 import { createTestWorktreeAttempt, git, makeRepo } from "./worktree-test-helpers.ts";
@@ -21,13 +30,13 @@ for (const tracked of [false, true]) {
             "staged",
         ] as const
     ) {
-        Deno.test(`validation-time command repair publishes only owned settings: tracked=${tracked}, edit=${userEdit}`, async () => {
+        test(`validation-time command repair publishes only owned settings: tracked=${tracked}, edit=${userEdit}`, async () => {
             const root = await makeRepo();
-            const worktreeRoot = await Deno.makeTempDir();
+            const worktreeRoot = await fsMkdtemp(join(tmpdir(), "portable-fixture-"));
             let executionRoot = "";
             let session: HostedSession | undefined;
             try {
-                await Deno.writeTextFile(join(root, ".gitignore"), ".wld/\nnode_modules/\n");
+                await fsWriteFile(join(root, ".gitignore"), ".wld/\nnode_modules/\n");
                 await git(root, ["add", ".gitignore"]);
                 if (tracked) {
                     setExactProjectCustomSetting("codereview", "none", root);
@@ -68,7 +77,7 @@ for (const tracked of [false, true]) {
                 assertEquals(first.kind, "completed");
                 if (first.kind !== "completed") throw new Error("First command should execute");
                 assertEquals(first.exitCode, 1);
-                if (sameCommand) await Deno.writeTextFile(join(executionRoot, "ci-fixed.txt"), "repaired\n");
+                if (sameCommand) await fsWriteFile(join(executionRoot, "ci-fixed.txt"), "repaired\n");
                 else setExactProjectCustomSetting("verification_command", repairedCommand, executionRoot);
                 const second = await runLocalCI({
                     hostedSession: session,
@@ -81,16 +90,16 @@ for (const tracked of [false, true]) {
                 if (!sameCommand) assertStringIncludes(second.output, "repaired");
                 assertEquals(prompts, 1);
                 if (userEdit === "after" || userEdit === "staged") {
-                    const productSettings = await Deno.readTextFile(join(root, ".wld/settings.json"));
+                    const productSettings = await fsReadFile(join(root, ".wld/settings.json"), "utf8");
                     setExactProjectCustomSetting("theme", "user-after", root);
                     if (userEdit === "staged") {
                         await git(root, ["add", "-f", ".wld/settings.json"]);
-                        await Deno.writeTextFile(join(root, ".wld/settings.json"), productSettings);
+                        await fsWriteFile(join(root, ".wld/settings.json"), productSettings);
                     }
                 }
-                await Deno.writeTextFile(join(root, "personal-note.txt"), "Preserve unrelated work\n");
-                await Deno.writeTextFile(join(executionRoot, ".wld/unrelated-private.txt"), "Must stay ignored\n");
-                await Deno.writeTextFile(join(executionRoot, "implementation.txt"), "Validated change\n");
+                await fsWriteFile(join(root, "personal-note.txt"), "Preserve unrelated work\n");
+                await fsWriteFile(join(executionRoot, ".wld/unrelated-private.txt"), "Must stay ignored\n");
+                await fsWriteFile(join(executionRoot, "implementation.txt"), "Validated change\n");
                 const checkpoint = await checkpointExecutionWorktree({
                     worktreePath: executionRoot,
                     branch: entry.branch,
@@ -100,7 +109,7 @@ for (const tracked of [false, true]) {
                 const trackedFiles = await git(executionRoot, ["ls-files"]);
                 assertEquals(trackedFiles.includes(".wld/unrelated-private.txt"), false);
                 assertEquals(trackedFiles.includes(".wld/internal/"), false);
-                const beforeSettings = await Deno.readTextFile(join(root, ".wld/settings.json"));
+                const beforeSettings = await fsReadFile(join(root, ".wld/settings.json"), "utf8");
                 const beforeHead = await git(root, ["rev-parse", "HEAD"]);
                 const beforeIndex = await git(root, ["write-tree"]);
                 const publication = () =>
@@ -115,37 +124,37 @@ for (const tracked of [false, true]) {
                     });
                 if (userEdit === "none") {
                     await publication();
-                    assertStringIncludes(await Deno.readTextFile(join(root, ".wld/settings.json")), "printf repaired");
+                    assertStringIncludes(await fsReadFile(join(root, ".wld/settings.json"), "utf8"), "printf repaired");
                     assertStringIncludes(await git(root, ["show", "HEAD:.wld/settings.json"]), "printf repaired");
                 } else {
                     await assertRejects(publication);
-                    assertEquals(await Deno.readTextFile(join(root, ".wld/settings.json")), beforeSettings);
+                    assertEquals(await fsReadFile(join(root, ".wld/settings.json"), "utf8"), beforeSettings);
                     assertEquals(await git(root, ["rev-parse", "HEAD"]), beforeHead);
                     assertEquals(await git(root, ["write-tree"]), beforeIndex);
                 }
-                assertStringIncludes(await Deno.readTextFile(join(root, ".gitignore")), ".wld/\nnode_modules/\n");
-                assertEquals(await Deno.readTextFile(join(root, "personal-note.txt")), "Preserve unrelated work\n");
+                assertStringIncludes(await fsReadFile(join(root, ".gitignore"), "utf8"), ".wld/\nnode_modules/\n");
+                assertEquals(await fsReadFile(join(root, "personal-note.txt"), "utf8"), "Preserve unrelated work\n");
             } finally {
                 session?.dispose();
                 if (executionRoot) {
                     await removeWorktreeGitArtifacts({ projectRoot: root, path: executionRoot, force: true });
                 }
-                await Deno.remove(root, { recursive: true });
-                await Deno.remove(worktreeRoot, { recursive: true });
+                await fsRm(root, { recursive: true });
+                await fsRm(worktreeRoot, { recursive: true });
             }
         });
     }
 }
 
 for (const inherit of [false, true]) {
-    Deno.test(`JSONC settings support validation command entry, inheritance and repair: inherit=${inherit}`, async () => {
+    test(`JSONC settings support validation command entry, inheritance and repair: inherit=${inherit}`, async () => {
         const root = await makeRepo();
-        const worktreeRoot = await Deno.makeTempDir();
+        const worktreeRoot = await fsMkdtemp(join(tmpdir(), "portable-fixture-"));
         let executionRoot = "";
         let session: HostedSession | undefined;
         try {
-            await Deno.mkdir(join(root, ".wld"), { recursive: true });
-            await Deno.writeTextFile(join(root, ".gitignore"), ".wld/\n");
+            await fsMkdir(join(root, ".wld"), { recursive: true });
+            await fsWriteFile(join(root, ".gitignore"), ".wld/\n");
             const command = "printf initial; exit 1";
             const jsonc = '{ // Project preferences\n "codereview": "none",\n' +
                 (inherit ? ` "verification_command": "${command}",\n` : "") + "}\n";
@@ -154,7 +163,7 @@ for (const inherit of [false, true]) {
                 ? await createTestWorktreeAttempt({ projectRoot: root, planName: "jsonc", worktreeRoot })
                 : null;
             if (entry) executionRoot = entry.path;
-            await Deno.writeTextFile(join(root, ".wld/settings.json"), jsonc);
+            await fsWriteFile(join(root, ".wld/settings.json"), jsonc);
             await git(root, ["add", "-f", ".gitignore", ".wld/settings.json"]);
             await git(root, ["commit", "-m", "Supported JSONC settings"]);
             const execution = entry ??
@@ -191,9 +200,9 @@ for (const inherit of [false, true]) {
             // Bring the target's already-committed JSONC file into the older worktree's history,
             // preserving the validated settings content rather than manufacturing a merge conflict.
             if (inherit) {
-                const repaired = await Deno.readTextFile(join(executionRoot, ".wld/settings.json"));
+                const repaired = await fsReadFile(join(executionRoot, ".wld/settings.json"), "utf8");
                 await git(executionRoot, ["reset", "--hard", "main"]);
-                await Deno.writeTextFile(join(executionRoot, ".wld/settings.json"), repaired);
+                await fsWriteFile(join(executionRoot, ".wld/settings.json"), repaired);
                 await ensureRunWieldOwnedGitignoreBlock(executionRoot);
             }
             const checkpoint = await checkpointExecutionWorktree({
@@ -216,8 +225,8 @@ for (const inherit of [false, true]) {
             if (executionRoot) {
                 await removeWorktreeGitArtifacts({ projectRoot: root, path: executionRoot, force: true });
             }
-            await Deno.remove(root, { recursive: true });
-            await Deno.remove(worktreeRoot, { recursive: true });
+            await fsRm(root, { recursive: true });
+            await fsRm(worktreeRoot, { recursive: true });
         }
     });
 }

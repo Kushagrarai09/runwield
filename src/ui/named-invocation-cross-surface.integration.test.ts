@@ -1,4 +1,6 @@
 // @ts-nocheck: cross-surface protocol payloads are checked by runtime assertions.
+import { mkdir as fsMkdir, readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promises";
+import { test } from "node:test";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { join } from "@std/path";
 import { fauxAssistantMessage, fauxText } from "@earendil-works/pi-ai";
@@ -102,8 +104,8 @@ const expectedAssistantText = "cross-surface done";
 
 async function writeCrossSurfacePrompt(projectRoot: string): Promise<void> {
     const promptDir = join(projectRoot, ".wld", "prompts");
-    await Deno.mkdir(promptDir, { recursive: true });
-    await Deno.writeTextFile(
+    await fsMkdir(promptDir, { recursive: true });
+    await fsWriteFile(
         join(promptDir, "cross-surface.md"),
         [
             "---",
@@ -121,7 +123,7 @@ async function readTranscriptSummary(transcriptPath: string): Promise<{
     activeAgent: string;
     activeModel: string;
 }> {
-    const text = await Deno.readTextFile(transcriptPath);
+    const text = await fsReadFile(transcriptPath, "utf8");
     assertStringIncludes(text, compactInvocation);
     const entries = text.trim().split("\n")
         .filter(Boolean)
@@ -464,7 +466,7 @@ async function runAcpSurface(projectRoot: string): Promise<SurfaceSummary> {
     }
 }
 
-Deno.test("named invocation fixture matches TUI, Workspace, and ACP surfaces", async () => {
+test("named invocation fixture matches TUI, Workspace, and ACP surfaces", async () => {
     await withRuntimeCommandFixture(
         "named-invocation-cross-surface-",
         async ({ projectRoot, setModelResponseFactories }) => {
@@ -527,13 +529,13 @@ Deno.test("named invocation fixture matches TUI, Workspace, and ACP surfaces", a
     );
 });
 
-Deno.test("Workspace follows a conflicting template into its new Session and keeps planning resumable", async () => {
+test("Workspace follows a conflicting template into its new Session and keeps planning resumable", async () => {
     await withRuntimeCommandFixture(
         "workspace-template-conflict-",
         async ({ projectRoot, setModelResponseFactories }) => {
             const dir = join(projectRoot, ".wld", "prompts");
-            await Deno.mkdir(dir, { recursive: true });
-            await Deno.writeTextFile(join(dir, "separate.md"), "---\nagent: engineer\n---\nSEPARATE TEMPLATE BODY");
+            await fsMkdir(dir, { recursive: true });
+            await fsWriteFile(join(dir, "separate.md"), "---\nagent: engineer\n---\nSEPARATE TEMPLATE BODY");
             setModelResponseFactories(Array.from({ length: 4 }, () => () => fauxAssistantMessage(fauxText("done"))));
             const store = openOwnerCoordinationStore();
             const service = new WorkspaceSessionContinuationService({ store });

@@ -1,3 +1,6 @@
+import process from "node:process";
+import { chmod as fsChmod, mkdir as fsMkdir, readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promises";
+import { test } from "node:test";
 import { assert, assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { join } from "@std/path";
 import {
@@ -59,7 +62,7 @@ function makeRuntime(sessionStore = openFileSessionStore()) {
     });
 }
 
-Deno.test("bundled release from Router exposes an interactive interview before release work", async () => {
+test("bundled release from Router exposes an interactive interview before release work", async () => {
     await withRuntimeCommandFixture(
         "release-structured-interview-",
         async ({ projectRoot, setModelResponseFactories }) => {
@@ -126,17 +129,17 @@ Deno.test("bundled release from Router exposes an interactive interview before r
 });
 
 async function installClaudeCliFixture(binDir: string, logPath: string): Promise<void> {
-    await Deno.mkdir(binDir, { recursive: true });
+    await fsMkdir(binDir, { recursive: true });
     const fixturePath = new URL("./backends/claude-cli/testing/fake-claude-mcp-client.ts", import.meta.url).pathname;
     const script = `#!/bin/sh\nexec deno run -A ${JSON.stringify(fixturePath)} "$@"\n`;
     const path = join(binDir, "claude");
-    await Deno.writeTextFile(path, script);
-    await Deno.chmod(path, 0o755);
-    await Deno.writeTextFile(logPath, "");
+    await fsWriteFile(path, script);
+    await fsChmod(path, 0o755);
+    await fsWriteFile(logPath, "");
 }
 
 async function readNamedInvocationPayloads(transcriptPath: string): Promise<PersistedNamedInvocationPayload[]> {
-    const text = await Deno.readTextFile(transcriptPath);
+    const text = await fsReadFile(transcriptPath, "utf8");
     return text.trim().split("\n")
         .filter(Boolean)
         .map((line) => JSON.parse(line) as PersistedTranscriptEntry)
@@ -144,14 +147,14 @@ async function readNamedInvocationPayloads(transcriptPath: string): Promise<Pers
         .map((entry) => entry.data || {});
 }
 
-Deno.test("Prompt Template invocation sends active Segment history plus the exact expansion", async () => {
+test("Prompt Template invocation sends active Segment history plus the exact expansion", async () => {
     await withRuntimeCommandFixture(
         "named-invocation-active-segment-",
         async ({ projectRoot, setModelResponseFactories }) => {
             await setCustomSetting("workflowMetrics", true, "project", projectRoot);
             const promptDir = join(projectRoot, ".wld", "prompts");
-            await Deno.mkdir(promptDir, { recursive: true });
-            await Deno.writeTextFile(
+            await fsMkdir(promptDir, { recursive: true });
+            await fsWriteFile(
                 join(promptDir, "use-active-fact.md"),
                 [
                     "---",
@@ -216,7 +219,7 @@ Deno.test("Prompt Template invocation sends active Segment history plus the exac
                 });
                 assertEquals(second.ok, true);
                 await drainWorkflowMetrics();
-                const metrics = (await Deno.readTextFile(getWorkflowMetricsFilePath(projectRoot))).trim()
+                const metrics = (await fsReadFile(getWorkflowMetricsFilePath(projectRoot), "utf8")).trim()
                     .split("\n").map((line) => JSON.parse(line));
                 const invocation = metrics.filter((row) =>
                     row.event === "command_started" && row.command === "use-active-fact"
@@ -270,13 +273,13 @@ Deno.test("Prompt Template invocation sends active Segment history plus the exac
     );
 });
 
-Deno.test("Prompt Template invocation sends active Segment history plus the exact expansion through Claude CLI", async () => {
+test("Prompt Template invocation sends active Segment history plus the exact expansion through Claude CLI", async () => {
     await withRuntimeCommandFixture(
         "named-invocation-claude-cli-",
         async ({ projectRoot, homeDir, setModelResponseFactories }) => {
             const promptDir = join(projectRoot, ".wld", "prompts");
-            await Deno.mkdir(promptDir, { recursive: true });
-            await Deno.writeTextFile(
+            await fsMkdir(promptDir, { recursive: true });
+            await fsWriteFile(
                 join(promptDir, "claude-template.md"),
                 [
                     "---",
@@ -291,10 +294,10 @@ Deno.test("Prompt Template invocation sends active Segment history plus the exac
             const binDir = join(homeDir, "claude-bin");
             const logPath = join(homeDir, "claude-log.jsonl");
             await installClaudeCliFixture(binDir, logPath);
-            const previousPath = Deno.env.get("PATH");
-            const previousLog = Deno.env.get("RUNWIELD_CLAUDE_FIXTURE_LOG");
-            Deno.env.set("PATH", `${binDir}:${previousPath || ""}`);
-            Deno.env.set("RUNWIELD_CLAUDE_FIXTURE_LOG", logPath);
+            const previousPath = process.env["PATH"];
+            const previousLog = process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"];
+            process.env["PATH"] = `${binDir}:${previousPath || ""}`;
+            process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"] = logPath;
 
             const modelRequests: string[] = [];
             const recordToolRequest = (context: TranscriptContext) => {
@@ -362,7 +365,7 @@ Deno.test("Prompt Template invocation sends active Segment history plus the exac
                     thinkingLevel: "off",
                 });
                 assertEquals(modelRequests.length, 3);
-                const log = JSON.parse((await Deno.readTextFile(logPath)).trim().split("\n")[0]);
+                const log = JSON.parse((await fsReadFile(logPath, "utf8")).trim().split("\n")[0]);
                 assertStringIncludes(log.stdin, "Remember active Claude fact ACTIVE-CLI-SEGMENT-ALPHA.");
                 assertStringIncludes(log.stdin, "Tool call write");
                 assertStringIncludes(log.stdin, "ACTIVE-CLI-TOOL-EXCHANGE");
@@ -396,22 +399,22 @@ Deno.test("Prompt Template invocation sends active Segment history plus the exac
             } finally {
                 await runtime.closeAllSessionsWhenIdle?.();
                 store.close();
-                if (previousPath === undefined) Deno.env.delete("PATH");
-                else Deno.env.set("PATH", previousPath);
-                if (previousLog === undefined) Deno.env.delete("RUNWIELD_CLAUDE_FIXTURE_LOG");
-                else Deno.env.set("RUNWIELD_CLAUDE_FIXTURE_LOG", previousLog);
+                if (previousPath === undefined) delete process.env["PATH"];
+                else process.env["PATH"] = previousPath;
+                if (previousLog === undefined) delete process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"];
+                else process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"] = previousLog;
             }
         },
     );
 });
 
-Deno.test("Prompt Template invocation rejects unsupported Claude CLI thinking before process launch", async () => {
+test("Prompt Template invocation rejects unsupported Claude CLI thinking before process launch", async () => {
     await withRuntimeCommandFixture(
         "named-invocation-claude-cli-thinking-",
         async ({ projectRoot, homeDir }) => {
             const promptDir = join(projectRoot, ".wld", "prompts");
-            await Deno.mkdir(promptDir, { recursive: true });
-            await Deno.writeTextFile(
+            await fsMkdir(promptDir, { recursive: true });
+            await fsWriteFile(
                 join(promptDir, "claude-deep.md"),
                 [
                     "---",
@@ -426,10 +429,10 @@ Deno.test("Prompt Template invocation rejects unsupported Claude CLI thinking be
             const binDir = join(homeDir, "claude-thinking-bin");
             const logPath = join(homeDir, "claude-thinking-log.jsonl");
             await installClaudeCliFixture(binDir, logPath);
-            const previousPath = Deno.env.get("PATH");
-            const previousLog = Deno.env.get("RUNWIELD_CLAUDE_FIXTURE_LOG");
-            Deno.env.set("PATH", `${binDir}:${previousPath || ""}`);
-            Deno.env.set("RUNWIELD_CLAUDE_FIXTURE_LOG", logPath);
+            const previousPath = process.env["PATH"];
+            const previousLog = process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"];
+            process.env["PATH"] = `${binDir}:${previousPath || ""}`;
+            process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"] = logPath;
 
             const store = openFileSessionStore();
             const runtime = makeRuntime(store);
@@ -449,7 +452,7 @@ Deno.test("Prompt Template invocation rejects unsupported Claude CLI thinking be
                     'does not support thinkingLevel "high" for RunWield named invocations',
                 );
 
-                assertEquals(await Deno.readTextFile(logPath), "");
+                assertEquals(await fsReadFile(logPath, "utf8"), "");
                 assertEquals(runtime.getSessionSnapshot(sessionId)?.activeAgent, beforeSnapshot?.activeAgent);
                 assertEquals(runtime.getSessionSnapshot(sessionId)?.activeModel, beforeSnapshot?.activeModel);
                 assertEquals(
@@ -459,22 +462,22 @@ Deno.test("Prompt Template invocation rejects unsupported Claude CLI thinking be
             } finally {
                 await runtime.closeAllSessionsWhenIdle?.();
                 store.close();
-                if (previousPath === undefined) Deno.env.delete("PATH");
-                else Deno.env.set("PATH", previousPath);
-                if (previousLog === undefined) Deno.env.delete("RUNWIELD_CLAUDE_FIXTURE_LOG");
-                else Deno.env.set("RUNWIELD_CLAUDE_FIXTURE_LOG", previousLog);
+                if (previousPath === undefined) delete process.env["PATH"];
+                else process.env["PATH"] = previousPath;
+                if (previousLog === undefined) delete process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"];
+                else process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"] = previousLog;
             }
         },
     );
 });
 
-Deno.test("Prompt Template invocation uses ordinary Claude CLI handling for large requests", async () => {
+test("Prompt Template invocation uses ordinary Claude CLI handling for large requests", async () => {
     await withRuntimeCommandFixture(
         "named-invocation-claude-capacity-",
         async ({ projectRoot, homeDir }) => {
             const promptDir = join(projectRoot, ".wld", "prompts");
-            await Deno.mkdir(promptDir, { recursive: true });
-            await Deno.writeTextFile(
+            await fsMkdir(promptDir, { recursive: true });
+            await fsWriteFile(
                 join(promptDir, "too-large.md"),
                 [
                     "---",
@@ -487,10 +490,10 @@ Deno.test("Prompt Template invocation uses ordinary Claude CLI handling for larg
             const binDir = join(homeDir, "claude-capacity-bin");
             const logPath = join(homeDir, "claude-capacity-log.jsonl");
             await installClaudeCliFixture(binDir, logPath);
-            const previousPath = Deno.env.get("PATH");
-            const previousLog = Deno.env.get("RUNWIELD_CLAUDE_FIXTURE_LOG");
-            Deno.env.set("PATH", `${binDir}:${previousPath || ""}`);
-            Deno.env.set("RUNWIELD_CLAUDE_FIXTURE_LOG", logPath);
+            const previousPath = process.env["PATH"];
+            const previousLog = process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"];
+            process.env["PATH"] = `${binDir}:${previousPath || ""}`;
+            process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"] = logPath;
             const runtime = makeRuntime();
             try {
                 const created = await runtime.createInteractiveSession({ cwd: projectRoot, mode: "new" });
@@ -499,26 +502,26 @@ Deno.test("Prompt Template invocation uses ordinary Claude CLI handling for larg
                     initialImages: [],
                 });
                 assertEquals(result.ok, true);
-                const log = JSON.parse((await Deno.readTextFile(logPath)).trim().split("\n")[0]);
+                const log = JSON.parse((await fsReadFile(logPath, "utf8")).trim().split("\n")[0]);
                 assertStringIncludes(log.stdin, "x ".repeat(100));
             } finally {
                 await runtime.closeAllSessionsWhenIdle?.();
-                if (previousPath === undefined) Deno.env.delete("PATH");
-                else Deno.env.set("PATH", previousPath);
-                if (previousLog === undefined) Deno.env.delete("RUNWIELD_CLAUDE_FIXTURE_LOG");
-                else Deno.env.set("RUNWIELD_CLAUDE_FIXTURE_LOG", previousLog);
+                if (previousPath === undefined) delete process.env["PATH"];
+                else process.env["PATH"] = previousPath;
+                if (previousLog === undefined) delete process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"];
+                else process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"] = previousLog;
             }
         },
     );
 });
 
-Deno.test("Prompt Template expansion survives a file-backed resume and follow-up", async () => {
+test("Prompt Template expansion survives a file-backed resume and follow-up", async () => {
     await withRuntimeCommandFixture(
         "named-invocation-file-resume-",
         async ({ projectRoot, setModelResponseFactories }) => {
             const promptDir = join(projectRoot, ".wld", "prompts");
-            await Deno.mkdir(promptDir, { recursive: true });
-            await Deno.writeTextFile(
+            await fsMkdir(promptDir, { recursive: true });
+            await fsWriteFile(
                 join(promptDir, "resume-template.md"),
                 ["---", "agent: operator", "---", "Persisted expansion for {{input}}"].join("\n"),
             );
@@ -586,7 +589,7 @@ Deno.test("Prompt Template expansion survives a file-backed resume and follow-up
                 assertStringIncludes(request, "Persisted expansion for {{input}}\\n\\nsaved work");
                 assertEquals(request.includes("/resume-template saved work"), false);
             }
-            const transcriptEntries = (await Deno.readTextFile(transcriptPath)).trim().split("\n")
+            const transcriptEntries = (await fsReadFile(transcriptPath, "utf8")).trim().split("\n")
                 .filter(Boolean)
                 .map((line) => JSON.parse(line) as PersistedTranscriptEntry);
             const edits = transcriptEntries.filter((entry) => entry.type === "context_edit");
@@ -596,13 +599,13 @@ Deno.test("Prompt Template expansion survives a file-backed resume and follow-up
     );
 });
 
-Deno.test("Prompt Template invocation stores persisted image references", async () => {
+test("Prompt Template invocation stores persisted image references", async () => {
     await withRuntimeCommandFixture(
         "named-invocation-image-reference-",
         async ({ projectRoot, setModelResponseFactory }) => {
             const promptDir = join(projectRoot, ".wld", "prompts");
-            await Deno.mkdir(promptDir, { recursive: true });
-            await Deno.writeTextFile(
+            await fsMkdir(promptDir, { recursive: true });
+            await fsWriteFile(
                 join(promptDir, "inspect-image.md"),
                 ["---", "agent: operator", "---", "Inspect the attached image."].join("\n"),
             );
@@ -635,7 +638,7 @@ Deno.test("Prompt Template invocation stores persisted image references", async 
                 assertStringIncludes(modelRequest, "Inspect the attached image.");
                 assertStringIncludes(modelRequest, imageData);
 
-                const transcriptEntries = (await Deno.readTextFile(segment.transcriptPath)).trim().split("\n")
+                const transcriptEntries = (await fsReadFile(segment.transcriptPath, "utf8")).trim().split("\n")
                     .filter(Boolean)
                     .map((line) => JSON.parse(line) as PersistedTranscriptEntry);
                 const metadata = transcriptEntries.find((entry) =>
@@ -670,13 +673,13 @@ Deno.test("Prompt Template invocation stores persisted image references", async 
     );
 });
 
-Deno.test("Prompt Template invocation rejects unsupported thinking before a model call", async () => {
+test("Prompt Template invocation rejects unsupported thinking before a model call", async () => {
     await withRuntimeCommandFixture(
         "named-invocation-unsupported-thinking-",
         async ({ projectRoot, setModelResponseFactory }) => {
             const promptDir = join(projectRoot, ".wld", "prompts");
-            await Deno.mkdir(promptDir, { recursive: true });
-            await Deno.writeTextFile(
+            await fsMkdir(promptDir, { recursive: true });
+            await fsWriteFile(
                 join(promptDir, "deep.md"),
                 ["---", "agent: operator", "thinkingLevel: high", "---", "Think deeply about {{input}}"].join("\n"),
             );
@@ -702,13 +705,13 @@ Deno.test("Prompt Template invocation rejects unsupported thinking before a mode
     );
 });
 
-Deno.test("Prompt Templates use the current workflow tools and ordinary execution path", async () => {
+test("Prompt Templates use the current workflow tools and ordinary execution path", async () => {
     await withRuntimeCommandFixture(
         "named-invocation-workflow-authority-",
         async ({ projectRoot, setModelResponseFactory }) => {
             const promptDir = join(projectRoot, ".wld", "prompts");
-            await Deno.mkdir(promptDir, { recursive: true });
-            await Deno.writeTextFile(
+            await fsMkdir(promptDir, { recursive: true });
+            await fsWriteFile(
                 join(promptDir, "finish-work.md"),
                 ["---", "agent: engineer", "---", "Try to complete the workflow."].join("\n"),
             );
@@ -740,13 +743,13 @@ Deno.test("Prompt Templates use the current workflow tools and ordinary executio
     );
 });
 
-Deno.test("Prompt Template model override persists for ordinary follow-ups", async () => {
+test("Prompt Template model override persists for ordinary follow-ups", async () => {
     await withRuntimeCommandFixture(
         "named-invocation-one-shot-model-",
         async ({ projectRoot, setModelResponseFactories }) => {
             const promptDir = join(projectRoot, ".wld", "prompts");
-            await Deno.mkdir(promptDir, { recursive: true });
-            await Deno.writeTextFile(
+            await fsMkdir(promptDir, { recursive: true });
+            await fsWriteFile(
                 join(promptDir, "alt-model.md"),
                 [
                     "---",

@@ -1,9 +1,13 @@
+import { mkdtemp as fsMkdtemp, rm as fsRm } from "node:fs/promises";
+import { test } from "node:test";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { openOwnerCoordinationStore } from "../../shared/owner-coordination/index.js";
 import { createOwnerWorkspaceApp } from "./server.js";
 
-Deno.test("paired app leaves a restored pairing page, survives server restart, and respects revocation", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "workspace-pairing-persistence-" });
+test("paired app leaves a restored pairing page, survives server restart, and respects revocation", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "workspace-pairing-persistence-"));
     const dbPath = `${dir}/owner.sqlite3`;
     const publicOrigin = "https://workspace.example.test";
     let store = openOwnerCoordinationStore({ dbPath });
@@ -75,6 +79,6 @@ Deno.test("paired app leaves a restored pairing page, survives server restart, a
         assertEquals(protectedPage.headers.getSetCookie(), []);
     } finally {
         store.close();
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });

@@ -1,9 +1,11 @@
+import { readFile as fsReadFile } from "node:fs/promises";
+import { test } from "node:test";
 import { assert, assertEquals } from "@std/assert";
 import { withWorkflowMetricsFixture } from "../../testing/workflow-metrics-fixture.ts";
 import { recordSlashCommandMetric, SlashCommandMetricsTracker } from "./command-metrics.ts";
 import { getWorkflowMetricsFilePath } from "./metrics.js";
 
-Deno.test("recordSlashCommandMetric records direct start and finish observations", async () => {
+test("recordSlashCommandMetric records direct start and finish observations", async () => {
     await withWorkflowMetricsFixture(async ({ projectRoot, readMetrics }) => {
         const invocationId = "inv-direct-1";
 
@@ -55,7 +57,7 @@ Deno.test("recordSlashCommandMetric records direct start and finish observations
     });
 });
 
-Deno.test("SlashCommandMetricsTracker measures duration and emits linked start/finish events", async () => {
+test("SlashCommandMetricsTracker measures duration and emits linked start/finish events", async () => {
     await withWorkflowMetricsFixture(async ({ projectRoot, readMetrics }) => {
         const tracker = new SlashCommandMetricsTracker({
             command: "tdd",
@@ -97,7 +99,7 @@ Deno.test("SlashCommandMetricsTracker measures duration and emits linked start/f
     });
 });
 
-Deno.test("SlashCommandMetricsTracker records failures with reason codes", async () => {
+test("SlashCommandMetricsTracker records failures with reason codes", async () => {
     await withWorkflowMetricsFixture(async ({ projectRoot, readMetrics }) => {
         const tracker = new SlashCommandMetricsTracker({
             command: "unknown-cmd",
@@ -121,7 +123,7 @@ Deno.test("SlashCommandMetricsTracker records failures with reason codes", async
     });
 });
 
-Deno.test("both command finish APIs drain writes before returning", async () => {
+test("both command finish APIs drain writes before returning", async () => {
     await withWorkflowMetricsFixture(async ({ projectRoot }) => {
         const tracker = new SlashCommandMetricsTracker({
             projectRoot,
@@ -140,7 +142,7 @@ Deno.test("both command finish APIs drain writes before returning", async () => 
             phase: "finish",
             outcome: "failed",
         });
-        const lines = (await Deno.readTextFile(getWorkflowMetricsFilePath(projectRoot))).trim().split("\n")
+        const lines = (await fsReadFile(getWorkflowMetricsFilePath(projectRoot), "utf8")).trim().split("\n")
             .map((line) => JSON.parse(line));
         assertEquals(lines.filter((line) => line.event === "command_finished").length, 2);
     });

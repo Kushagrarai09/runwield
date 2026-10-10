@@ -1,3 +1,7 @@
+import { mkdtemp as fsMkdtemp, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
+import { test } from "node:test";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { assertEquals, assertRejects } from "@std/assert";
 import {
     fetchLatestRunWieldRcRelease,
@@ -26,7 +30,7 @@ function updatePorts(fetch, now = 10) {
     return { network: { fetch }, clock: fixedClock(now) };
 }
 
-Deno.test("normalizes RunWield release versions", () => {
+test("normalizes RunWield release versions", () => {
     assertEquals(normalizeRunWieldVersion("1.2.3"), "v1.2.3");
     assertEquals(normalizeRunWieldVersion("v1.2.3-rc.4"), "v1.2.3-rc.4");
     assertEquals(parseRunWieldReleaseVersion("v1.2.3"), {
@@ -39,7 +43,7 @@ Deno.test("normalizes RunWield release versions", () => {
     });
 });
 
-Deno.test("compares stable and candidate release versions", () => {
+test("compares stable and candidate release versions", () => {
     assertEquals(isNewerRunWieldVersion("v1.2.4", "v1.2.3"), true);
     assertEquals(isNewerRunWieldVersion("v1.2.3", "v1.2.3"), false);
     assertEquals(isNewerRunWieldVersion("v1.2.3", "v1.2.4"), false);
@@ -48,13 +52,13 @@ Deno.test("compares stable and candidate release versions", () => {
     assertEquals(isNewerRunWieldVersion("v1.2.3-rc.1", "v1.2.3"), false);
 });
 
-Deno.test("non-release current versions are updateable when they differ from latest", () => {
+test("non-release current versions are updateable when they differ from latest", () => {
     assertEquals(isNewerRunWieldVersion("v1.2.3", "abc1234"), true);
     assertEquals(isNewerRunWieldVersion("v1.2.3", "1.2.3"), false);
 });
 
-Deno.test("cache reads fresh valid metadata and rejects stale or malformed data", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-update-cache-" });
+test("cache reads fresh valid metadata and rejects stale or malformed data", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-update-cache-"));
     try {
         const cachePath = `${dir}/update-check.json`;
         await writeUpdateCheckCache({ latestVersion: "1.2.3", checkedAt: 1000, cachePath });
@@ -64,18 +68,18 @@ Deno.test("cache reads fresh valid metadata and rejects stale or malformed data"
         });
         assertEquals(await readUpdateCheckCache(fixedClock(7000), { ttlMs: 5000, cachePath }), null);
 
-        await Deno.writeTextFile(cachePath, "not json");
+        await fsWriteFile(cachePath, "not json");
         assertEquals(await readUpdateCheckCache(fixedClock(2000), { ttlMs: 5000, cachePath }), null);
 
-        await Deno.writeTextFile(cachePath, JSON.stringify({ latestVersion: "bad", checkedAt: 1000 }));
+        await fsWriteFile(cachePath, JSON.stringify({ latestVersion: "bad", checkedAt: 1000 }));
         assertEquals(await readUpdateCheckCache(fixedClock(2000), { ttlMs: 5000, cachePath }), null);
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("cached availability recomputes against current version", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-update-availability-" });
+test("cached availability recomputes against current version", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-update-availability-"));
     try {
         const cachePath = `${dir}/update-check.json`;
         await writeUpdateCheckCache({ latestVersion: "v2.0.0", checkedAt: 1000, cachePath });
@@ -90,11 +94,11 @@ Deno.test("cached availability recomputes against current version", async () => 
             checkedAt: 1000,
         });
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("refresh fetches GitHub latest and ignores cache write failures", async () => {
+test("refresh fetches GitHub latest and ignores cache write failures", async () => {
     /** @type {string[]} */
     const calls = [];
     /** @param {string | URL | Request} url */
@@ -112,7 +116,7 @@ Deno.test("refresh fetches GitHub latest and ignores cache write failures", asyn
     assertEquals(result.checkedAt, 10);
 });
 
-Deno.test("latest API rejects malformed release data", async () => {
+test("latest API rejects malformed release data", async () => {
     const fetchImpl = () => Promise.resolve(new Response(JSON.stringify({ name: "RunWield" }), { status: 200 }));
     await assertRejects(
         () =>
@@ -125,7 +129,7 @@ Deno.test("latest API rejects malformed release data", async () => {
     );
 });
 
-Deno.test("latest release lookup falls back to GitHub web redirect after API 403", async () => {
+test("latest release lookup falls back to GitHub web redirect after API 403", async () => {
     /** @type {string[]} */
     const calls = [];
     const webResponse = new Response("", { status: 200 });
@@ -147,7 +151,7 @@ Deno.test("latest release lookup falls back to GitHub web redirect after API 403
     assertEquals(calls, [LATEST_RELEASE_API_URL, LATEST_RELEASE_WEB_URL]);
 });
 
-Deno.test("latest RC lookup selects the highest published candidate", async () => {
+test("latest RC lookup selects the highest published candidate", async () => {
     /** @type {string[]} */
     const calls = [];
     /** @param {string | URL | Request} url */
@@ -173,7 +177,7 @@ Deno.test("latest RC lookup selects the highest published candidate", async () =
     assertEquals(calls, [RELEASES_API_URL]);
 });
 
-Deno.test("latest RC lookup falls back to the releases page when the API rate limit is exhausted", async () => {
+test("latest RC lookup falls back to the releases page when the API rate limit is exhausted", async () => {
     /** @type {string[]} */
     const calls = [];
     /** @param {string | URL | Request} url */
@@ -197,7 +201,7 @@ Deno.test("latest RC lookup falls back to the releases page when the API rate li
     assertEquals(calls, [RELEASES_API_URL, RELEASES_WEB_URL]);
 });
 
-Deno.test("latest RC lookup reports when no candidate is published", async () => {
+test("latest RC lookup reports when no candidate is published", async () => {
     const fetchImpl = () => Promise.resolve(new Response(JSON.stringify([{ tag_name: "v1.2.3", prerelease: false }])));
     await assertRejects(
         () => fetchLatestRunWieldRcRelease({ fetch: /** @type {typeof globalThis.fetch} */ (fetchImpl) }),
@@ -206,7 +210,7 @@ Deno.test("latest RC lookup reports when no candidate is published", async () =>
     );
 });
 
-Deno.test("constructs tag-pinned installer URLs", () => {
+test("constructs tag-pinned installer URLs", () => {
     assertEquals(getTagPinnedInstallerUrls("1.2.3"), [
         "https://raw.githubusercontent.com/gandazgul/runwield/v1.2.3/install.sh",
         "https://github.com/gandazgul/runwield/raw/refs/tags/v1.2.3/install.sh",

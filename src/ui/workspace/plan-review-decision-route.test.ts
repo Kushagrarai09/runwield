@@ -1,4 +1,6 @@
 // @ts-nocheck: owner Workspace routes and the fixture expose JavaScript records.
+import { writeFile as fsWriteFile } from "node:fs/promises";
+import { test } from "node:test";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { join } from "@std/path";
 import { ensurePlanIdentity, loadPlan, savePlan } from "../../plan-store.js";
@@ -117,7 +119,7 @@ async function withOpenReview(run) {
     );
 }
 
-Deno.test("Workspace rejects an approval if the reviewed Plan body changes while the review is open", async () => {
+test("Workspace rejects an approval if the reviewed Plan body changes while the review is open", async () => {
     await withOpenReview(async ({ fixture, answer }) => {
         const before = await loadPlan(fixture.projectRoot, "saved");
         await savePlan(
@@ -141,11 +143,11 @@ Deno.test("Workspace rejects an approval if the reviewed Plan body changes while
     });
 });
 
-Deno.test("Workspace sends review feedback images to the resumed planning Agent", async () => {
+test("Workspace sends review feedback images to the resumed planning Agent", async () => {
     await withOpenReview(async ({ fixture, answer }) => {
         const imagePath = join(fixture.projectRoot, "review.png");
         const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
-        await Deno.writeFile(imagePath, Uint8Array.from(atob(png), (char) => char.charCodeAt(0)));
+        await fsWriteFile(imagePath, Uint8Array.from(atob(png), (char) => char.charCodeAt(0)));
         const response = await answer("image-feedback", {
             approved: false,
             feedback: "Please use this screenshot.",

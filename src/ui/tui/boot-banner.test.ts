@@ -1,3 +1,6 @@
+import process from "node:process";
+import { mkdir as fsMkdir, writeFile as fsWriteFile } from "node:fs/promises";
+import { test } from "node:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { join } from "@std/path";
 import { Container, type TUI, TuiMainScreen } from "@earendil-works/pi-tui";
@@ -52,11 +55,11 @@ async function createRuntimeSession(projectRoot: string): Promise<{ runtime: Ses
     return { runtime, sessionId: created.sessionId };
 }
 
-Deno.test("renderBootBanner reports fixture prompts, skills, settings, context, and blocked prompts", async () => {
+test("renderBootBanner reports fixture prompts, skills, settings, context, and blocked prompts", async () => {
     await withRuntimeCommandFixture("boot-banner-full-", async ({ projectRoot }) => {
-        await Deno.mkdir(join(projectRoot, ".wld", "skills", "fixture-diagnose"), { recursive: true });
-        await Deno.writeTextFile(join(projectRoot, "RUNWIELD.md"), "# Fixture context\n");
-        await Deno.writeTextFile(
+        await fsMkdir(join(projectRoot, ".wld", "skills", "fixture-diagnose"), { recursive: true });
+        await fsWriteFile(join(projectRoot, "RUNWIELD.md"), "# Fixture context\n");
+        await fsWriteFile(
             join(projectRoot, ".wld", "skills", "fixture-diagnose", "SKILL.md"),
             "---\nname: fixture-diagnose\ndescription: Fixture skill\n---\n",
         );
@@ -103,7 +106,7 @@ Deno.test("renderBootBanner reports fixture prompts, skills, settings, context, 
     });
 });
 
-Deno.test("renderBootBanner reports an empty prompt-template registry", async () => {
+test("renderBootBanner reports an empty prompt-template registry", async () => {
     await withRuntimeCommandFixture("boot-banner-empty-", async ({ projectRoot }) => {
         const { runtime, sessionId } = await createRuntimeSession(projectRoot);
         const harness = makeBannerHarness();
@@ -126,9 +129,9 @@ Deno.test("renderBootBanner reports an empty prompt-template registry", async ()
     });
 });
 
-Deno.test("renderBootBanner persists and caps missing-Snip warnings in fixture init state", async () => {
+test("renderBootBanner persists and caps missing-Snip warnings in fixture init state", async () => {
     await withRuntimeCommandFixture("boot-banner-snip-", async ({ projectRoot }) => {
-        Deno.chdir(projectRoot);
+        process.chdir(projectRoot);
         const { runtime, sessionId } = await createRuntimeSession(projectRoot);
         const harness = makeBannerHarness();
         try {

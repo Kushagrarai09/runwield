@@ -1,3 +1,5 @@
+import { readFile as fsReadFile, realpath as fsRealpath, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
+import { test } from "node:test";
 import { assert, assertEquals, assertExists } from "@std/assert";
 import { join } from "@std/path";
 import { setCustomSetting } from "../settings.js";
@@ -13,7 +15,7 @@ import {
     sanitizeMetricDetails,
 } from "./metrics.js";
 
-Deno.test("isWorkflowMetricsEnabled honors boolean and object opt-in settings", () => {
+test("isWorkflowMetricsEnabled honors boolean and object opt-in settings", () => {
     assertEquals(isWorkflowMetricsEnabled(undefined), false);
     assertEquals(isWorkflowMetricsEnabled(false), false);
     assertEquals(isWorkflowMetricsEnabled({ enabled: false }), false);
@@ -21,7 +23,7 @@ Deno.test("isWorkflowMetricsEnabled honors boolean and object opt-in settings", 
     assertEquals(isWorkflowMetricsEnabled({ enabled: true }), true);
 });
 
-Deno.test("recordWorkflowMetric skips writes when disabled", async () => {
+test("recordWorkflowMetric skips writes when disabled", async () => {
     await withWorkflowMetricsFixture(async ({ projectRoot, readMetrics }) => {
         await setCustomSetting("workflowMetrics", false, "project", projectRoot);
         await recordWorkflowMetric(
@@ -32,34 +34,34 @@ Deno.test("recordWorkflowMetric skips writes when disabled", async () => {
     });
 });
 
-Deno.test("recordWorkflowMetric writes worktree events under the primary project", async () => {
+test("recordWorkflowMetric writes worktree events under the primary project", async () => {
     await withWorkflowMetricsFixture(async ({ projectRoot }) => {
         const worktreePath = `${projectRoot}-linked`;
         try {
             await git(projectRoot, ["init", "-b", "main"]);
             await git(projectRoot, ["config", "user.email", "runwield@example.com"]);
             await git(projectRoot, ["config", "user.name", "RunWield Test"]);
-            await Deno.writeTextFile(join(projectRoot, "README.md"), "base\n");
+            await fsWriteFile(join(projectRoot, "README.md"), "base\n");
             await git(projectRoot, ["add", "README.md"]);
             await git(projectRoot, ["commit", "-m", "base"]);
             await git(projectRoot, ["worktree", "add", "-b", "side", worktreePath, "main"]);
 
-            const primaryRoot = await Deno.realPath(projectRoot);
+            const primaryRoot = await fsRealpath(projectRoot);
             await setCustomSetting("workflowMetrics", true, "project", primaryRoot);
             await recordWorkflowMetric({ category: "execution", event: "task_completed" }, worktreePath);
 
-            const contents = await Deno.readTextFile(getWorkflowMetricsFilePath(primaryRoot));
+            const contents = await fsReadFile(getWorkflowMetricsFilePath(primaryRoot), "utf8");
             const metrics = contents.trim().split("\n").map((line) => JSON.parse(line));
             assertEquals(metrics.length, 1);
             assertEquals(metrics[0].category, "execution");
         } finally {
             await git(projectRoot, ["worktree", "remove", "--force", worktreePath]).catch(() => {});
-            await Deno.remove(worktreePath, { recursive: true }).catch(() => {});
+            await fsRm(worktreePath, { recursive: true }).catch(() => {});
         }
     });
 });
 
-Deno.test("recordWorkflowMetric writes sanitized JSONL when enabled", async () => {
+test("recordWorkflowMetric writes sanitized JSONL when enabled", async () => {
     await withWorkflowMetricsFixture(async ({ projectRoot, readMetrics }) => {
         const record = await recordWorkflowMetric(
             {
@@ -91,11 +93,11 @@ Deno.test("recordWorkflowMetric writes sanitized JSONL when enabled", async () =
     });
 });
 
-Deno.test("recordWorkflowMetric swallows write failures", async () => {
+test("recordWorkflowMetric swallows write failures", async () => {
     await withWorkflowMetricsFixture(async ({ homeDir, projectRoot, readMetrics }) => {
         const runwieldPath = join(homeDir, ".wld");
-        await Deno.remove(runwieldPath, { recursive: true }).catch(() => {});
-        await Deno.writeTextFile(runwieldPath, "blocks the metrics directory");
+        await fsRm(runwieldPath, { recursive: true }).catch(() => {});
+        await fsWriteFile(runwieldPath, "blocks the metrics directory");
 
         const record = await recordWorkflowMetric(
             { category: "routing", event: "dispatch_selected", details: { routingIntent: "FEATURE" } },
@@ -107,7 +109,7 @@ Deno.test("recordWorkflowMetric swallows write failures", async () => {
     });
 });
 
-Deno.test("sanitizeMetricDetails redacts sensitive keys, paths, and long strings", () => {
+test("sanitizeMetricDetails redacts sensitive keys, paths, and long strings", () => {
     const long = "x".repeat(400);
     const sanitized = /** @type {any} */ (sanitizeMetricDetails({
         prompt: "secret prompt",
@@ -122,7 +124,7 @@ Deno.test("sanitizeMetricDetails redacts sensitive keys, paths, and long strings
     assert(sanitized.nested.value.length < long.length);
 });
 
-Deno.test("sanitizeMetricDetails redacts generic relative paths but preserves affectedPaths metadata", () => {
+test("sanitizeMetricDetails redacts generic relative paths but preserves affectedPaths metadata", () => {
     const sanitized = /** @type {any} */ (sanitizeMetricDetails({
         path: "src/private/file.js",
         file: "docs/plans/secret.md",
@@ -133,7 +135,7 @@ Deno.test("sanitizeMetricDetails redacts generic relative paths but preserves af
     assertEquals(sanitized.affectedPaths, ["src/visible.js", "docs/visible.md", "[path-redacted]"]);
 });
 
-Deno.test("sanitizeMetricDetails omits non-plain objects instead of stringifying them", () => {
+test("sanitizeMetricDetails omits non-plain objects instead of stringifying them", () => {
     const sanitized = /** @type {any} */ (sanitizeMetricDetails({
         ok: true,
         error: new Error("/Users/example/project/secret.js failed with private output"),
@@ -146,7 +148,7 @@ Deno.test("sanitizeMetricDetails omits non-plain objects instead of stringifying
     assertEquals(sanitized.items, ["safe"]);
 });
 
-Deno.test("recordWorkflowMetric accepts each workflow metric category", async () => {
+test("recordWorkflowMetric accepts each workflow metric category", async () => {
     await withWorkflowMetricsFixture(async ({ projectRoot, readMetrics }) => {
         const categories = [
             "routing",
@@ -169,7 +171,7 @@ Deno.test("recordWorkflowMetric accepts each workflow metric category", async ()
     });
 });
 
-Deno.test("classifyToolSubUsage returns coarse categories only", () => {
+test("classifyToolSubUsage returns coarse categories only", () => {
     assertEquals(classifyToolSubUsage("bash", { command: "deno task ci --filter secret" }), "validation_command");
     assertEquals(classifyToolSubUsage("bash", { command: "git status --short" }), "git");
     assertEquals(classifyToolSubUsage("code_search", { query: "private query" }), "search");
@@ -182,7 +184,7 @@ Deno.test("classifyToolSubUsage returns coarse categories only", () => {
     assertEquals(classifyToolSubUsage("edit_docs", { oldText: "before", newText: "after" }), "edit");
 });
 
-Deno.test("tool usage metrics omit raw commands, queries, file contents, messages, and results", async () => {
+test("tool usage metrics omit raw commands, queries, file contents, messages, and results", async () => {
     await withWorkflowMetricsFixture(async ({ projectRoot, readMetrics }) => {
         await recordToolCallStarted(
             "tool-1",
@@ -213,7 +215,7 @@ Deno.test("tool usage metrics omit raw commands, queries, file contents, message
     });
 });
 
-Deno.test("dedicated Frontend Engineer metrics strip identity and content", async () => {
+test("dedicated Frontend Engineer metrics strip identity and content", async () => {
     await withWorkflowMetricsFixture(async ({ projectRoot, readMetrics }) => {
         await recordWorkflowMetric({
             category: "execution",
@@ -317,7 +319,7 @@ Deno.test("dedicated Frontend Engineer metrics strip identity and content", asyn
     });
 });
 
-Deno.test("dedicated Frontend Engineer metrics omit invalid values", async () => {
+test("dedicated Frontend Engineer metrics omit invalid values", async () => {
     await withWorkflowMetricsFixture(async ({ projectRoot }) => {
         const record = await recordWorkflowMetric({
             category: "execution",

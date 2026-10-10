@@ -1,3 +1,5 @@
+import { getCwd } from "../../constants.js";
+import { test } from "node:test";
 import { assertEquals, assertThrows } from "@std/assert";
 import { mapRuntimeEventToAcpUpdate } from "../../acp/event-mapper.js";
 import { createSessionRuntimeEvent, RuntimeEventTypes } from "../../shared/session/session-runtime-events.js";
@@ -116,7 +118,7 @@ function makeRuntimeHarness(sessionId, queuedMessages = [], workflowContext = nu
         },
         getSessionSnapshot: (/** @type {string} */ id) => ({
             id,
-            cwd: Deno.cwd(),
+            cwd: getCwd(),
             name: null,
             queuedMessages,
             workflowContext,
@@ -126,7 +128,7 @@ function makeRuntimeHarness(sessionId, queuedMessages = [], workflowContext = nu
     return { runtime, sessionId, interactionAdapters };
 }
 
-Deno.test("TUI redraws when a question opens, resolves, or is canceled", () => {
+test("TUI redraws when a question opens, resolves, or is canceled", () => {
     const { runtime, sessionId } = makeRuntimeHarness("question-lifecycle");
     const { uiAPI } = makeUi();
     let renders = 0;
@@ -149,7 +151,7 @@ Deno.test("TUI redraws when a question opens, resolves, or is canceled", () => {
     }
 });
 
-Deno.test("TUI adapter does not advertise a Pair form while attached", () => {
+test("TUI adapter does not advertise a Pair form while attached", () => {
     const { runtime, sessionId, interactionAdapters } = makeRuntimeHarness("pair-capability-lifetime");
     const { uiAPI } = makeUi();
     let canceledPrompts = 0;
@@ -170,7 +172,7 @@ Deno.test("TUI adapter does not advertise a Pair form while attached", () => {
     assertEquals(interactionAdapters, [interactionAdapters[0], null]);
 });
 
-Deno.test("attachTuiRuntimeAdapter suppresses local shell user echo and keeps shell tool title", () => {
+test("attachTuiRuntimeAdapter suppresses local shell user echo and keeps shell tool title", () => {
     const sessionId = "runtime-session";
     const { runtime } = makeRuntimeHarness(sessionId);
     const { transcript, uiAPI } = makeUi();
@@ -189,7 +191,7 @@ Deno.test("attachTuiRuntimeAdapter suppresses local shell user echo and keeps sh
     assertEquals(transcript, ["tool:start:local-shell:bash:! git st"]);
 });
 
-Deno.test("TUI and ACP adapters consume the same semantic runtime transcript", () => {
+test("TUI and ACP adapters consume the same semantic runtime transcript", () => {
     const { runtime, sessionId } = makeRuntimeHarness("adapter-parity");
     const { transcript, uiAPI } = makeUi();
     /** @type {Array<{ reason: string, sessionName: string | undefined, agentName: string | undefined }>} */
@@ -285,7 +287,7 @@ Deno.test("TUI and ACP adapters consume the same semantic runtime transcript", (
     assertEquals(attentionRequests, [{ reason: "agentStopped", sessionName: undefined, agentName: "Guide" }]);
 });
 
-Deno.test("TUI adapter renders display images from read tool results", () => {
+test("TUI adapter renders display images from read tool results", () => {
     const { runtime, sessionId } = makeRuntimeHarness("tool-image-display");
     const { transcript, uiAPI } = makeUi();
     const adapter = attachTuiRuntimeAdapter({ runtime, sessionId, uiAPI });
@@ -322,7 +324,7 @@ Deno.test("TUI adapter renders display images from read tool results", () => {
     ]);
 });
 
-Deno.test("TUI adapter keeps standalone image fallback when a tool block is hidden", () => {
+test("TUI adapter keeps standalone image fallback when a tool block is hidden", () => {
     const { runtime, sessionId } = makeRuntimeHarness("hidden-tool-image-display");
     const { transcript, uiAPI } = makeUi();
     const adapter = attachTuiRuntimeAdapter({ runtime, sessionId, uiAPI });
@@ -351,7 +353,7 @@ Deno.test("TUI adapter keeps standalone image fallback when a tool block is hidd
     assertEquals(transcript, ["image:image/png:abc"]);
 });
 
-Deno.test("TUI adapter clears successful validation immediately without waiting for another user message", () => {
+test("TUI adapter clears successful validation immediately without waiting for another user message", () => {
     const { runtime, sessionId } = makeRuntimeHarness("validation-panel-lifecycle");
     const { transcript, validationProgressUpdates, uiAPI } = makeUi();
     const adapter = attachTuiRuntimeAdapter({ runtime, sessionId, uiAPI });
@@ -384,7 +386,7 @@ Deno.test("TUI adapter clears successful validation immediately without waiting 
     adapter.dispose();
 });
 
-Deno.test("TUI adapter clears active validation panel on terminal runtime errors", () => {
+test("TUI adapter clears active validation panel on terminal runtime errors", () => {
     const { runtime, sessionId } = makeRuntimeHarness("validation-panel-terminal-error");
     const { transcript, uiAPI } = makeUi();
     const adapter = attachTuiRuntimeAdapter({ runtime, sessionId, uiAPI });
@@ -420,7 +422,7 @@ Deno.test("TUI adapter clears active validation panel on terminal runtime errors
     adapter.dispose();
 });
 
-Deno.test("TUI adapter uses reviewer ledger report updates only for the validation panel", () => {
+test("TUI adapter uses reviewer ledger report updates only for the validation panel", () => {
     const { runtime, sessionId } = makeRuntimeHarness("review-ledger-report", [], {
         routingIntent: "FEATURE",
         complexity: "LOW",
@@ -444,7 +446,7 @@ Deno.test("TUI adapter uses reviewer ledger report updates only for the validati
     adapter.dispose();
 });
 
-Deno.test("TUI adapter excludes OPERATION task_completed reports from later validation panels", () => {
+test("TUI adapter excludes OPERATION task_completed reports from later validation panels", () => {
     const { runtime, sessionId } = makeRuntimeHarness("operation-report-exclusion", [], {
         routingIntent: "OPERATION",
         complexity: "LOW",
@@ -477,7 +479,7 @@ Deno.test("TUI adapter excludes OPERATION task_completed reports from later vali
     adapter.dispose();
 });
 
-Deno.test("TUI adapter preserves workflow routing intent across model and thinking updates", () => {
+test("TUI adapter preserves workflow routing intent across model and thinking updates", () => {
     const { runtime, sessionId } = makeRuntimeHarness("workflow-context-preserved", [], {
         routingIntent: "FEATURE",
         complexity: "LOW",
@@ -500,7 +502,7 @@ Deno.test("TUI adapter preserves workflow routing intent across model and thinki
     adapter.dispose();
 });
 
-Deno.test("TUI adapter clears hidden pre-validation reports on next user message", () => {
+test("TUI adapter clears hidden pre-validation reports on next user message", () => {
     const { runtime, sessionId } = makeRuntimeHarness("hidden-report-clear", [], {
         routingIntent: "FEATURE",
         complexity: "LOW",
@@ -527,7 +529,7 @@ Deno.test("TUI adapter clears hidden pre-validation reports on next user message
     adapter.dispose();
 });
 
-Deno.test("TUI renders Runtime cancellation events instead of key handlers rendering directly", () => {
+test("TUI renders Runtime cancellation events instead of key handlers rendering directly", () => {
     const { runtime, sessionId } = makeRuntimeHarness("adapter-cancellation");
     const { transcript, uiAPI } = makeUi();
     const adapter = attachTuiRuntimeAdapter({ runtime, sessionId, uiAPI });
@@ -544,7 +546,7 @@ Deno.test("TUI renders Runtime cancellation events instead of key handlers rende
     assertEquals(transcript, ["system:info:RunWield:Agent run canceled."]);
 });
 
-Deno.test("TUI adapter ignores replayed thinking because it is not active work", () => {
+test("TUI adapter ignores replayed thinking because it is not active work", () => {
     const { runtime, sessionId } = makeRuntimeHarness("replayed-thinking");
     const { uiAPI, transcript } = makeUi();
 
@@ -567,7 +569,7 @@ Deno.test("TUI adapter ignores replayed thinking because it is not active work",
     assertEquals(transcript, []);
 });
 
-Deno.test("TUI adapter renders Agent switch notices only for marked root handoffs", () => {
+test("TUI adapter renders Agent switch notices only for marked root handoffs", () => {
     const { runtime, sessionId } = makeRuntimeHarness("agent-switch-notice", [], null, "guide");
     const { transcript, uiAPI } = makeUi();
     const adapter = attachTuiRuntimeAdapter({ runtime, sessionId, uiAPI });
@@ -600,7 +602,7 @@ Deno.test("TUI adapter renders Agent switch notices only for marked root handoff
     assertEquals(transcript, ["system:info:RunWield:Agent switched to Operator"]);
 });
 
-Deno.test("TUI adapter suppresses triage report tool blocks", () => {
+test("TUI adapter suppresses triage report tool blocks", () => {
     const { runtime, sessionId } = makeRuntimeHarness("adapter-triage-report");
     const { transcript, uiAPI } = makeUi();
     const adapter = attachTuiRuntimeAdapter({ runtime, sessionId, uiAPI });
@@ -629,7 +631,7 @@ Deno.test("TUI adapter suppresses triage report tool blocks", () => {
     assertEquals(transcript, []);
 });
 
-Deno.test("TUI adapter renders normalized thinking deltas and one tool start", () => {
+test("TUI adapter renders normalized thinking deltas and one tool start", () => {
     const { runtime, sessionId } = makeRuntimeHarness("adapter-coalesce");
     const { transcript, uiAPI } = makeUi();
     const adapter = attachTuiRuntimeAdapter({ runtime, sessionId, uiAPI });
@@ -688,7 +690,7 @@ Deno.test("TUI adapter renders normalized thinking deltas and one tool start", (
     ]);
 });
 
-Deno.test("TUI adapter projects core queued, consumed, and dequeued message transitions", () => {
+test("TUI adapter projects core queued, consumed, and dequeued message transitions", () => {
     const { runtime, sessionId } = makeRuntimeHarness("adapter-queue");
     const { transcript, uiAPI } = makeUi();
     const adapter = attachTuiRuntimeAdapter({ runtime, sessionId, uiAPI });
@@ -746,7 +748,7 @@ Deno.test("TUI adapter projects core queued, consumed, and dequeued message tran
     ]);
 });
 
-Deno.test("TUI adapter hydrates queued messages from the core session snapshot", () => {
+test("TUI adapter hydrates queued messages from the core session snapshot", () => {
     const queued = /** @type {import('../../shared/session/session-runtime-events.js').RuntimeQueuedMessage} */ ({
         id: "already-queued",
         text: "already queued",
@@ -763,7 +765,7 @@ Deno.test("TUI adapter hydrates queued messages from the core session snapshot",
     assertEquals(transcript, [`queue:add:${queued.id}:already queued`]);
 });
 
-Deno.test("TUI adapter rerenders when Runtime agent or workflow footer state changes", () => {
+test("TUI adapter rerenders when Runtime agent or workflow footer state changes", () => {
     const { runtime, sessionId } = makeRuntimeHarness("adapter-workflow-context");
     const { uiAPI } = makeUi();
     let renders = 0;
@@ -785,7 +787,7 @@ Deno.test("TUI adapter rerenders when Runtime agent or workflow footer state cha
     assertEquals(renders, 2);
 });
 
-Deno.test("TUI adapter does not repaint for invisible idle managed sync", () => {
+test("TUI adapter does not repaint for invisible idle managed sync", () => {
     const { runtime, sessionId } = makeRuntimeHarness("adapter-idle-managed-sync");
     const { uiAPI } = makeUi();
     let renders = 0;
@@ -806,7 +808,7 @@ Deno.test("TUI adapter does not repaint for invisible idle managed sync", () => 
     assertEquals(renders, 0);
 });
 
-Deno.test("a second TUI adapter for one Runtime session fails instead of duplicating output", () => {
+test("a second TUI adapter for one Runtime session fails instead of duplicating output", () => {
     const { runtime, sessionId } = makeRuntimeHarness("adapter-replacement");
     const { transcript, uiAPI } = makeUi();
 
@@ -866,7 +868,7 @@ Deno.test("a second TUI adapter for one Runtime session fails instead of duplica
     ]);
 });
 
-Deno.test("TUI displays an already reported backend error once while preserving other failures", () => {
+test("TUI displays an already reported backend error once while preserving other failures", () => {
     const { runtime, sessionId } = makeRuntimeHarness("backend-error-once");
     const { transcript, uiAPI } = makeUi();
     const adapter = attachTuiRuntimeAdapter({ runtime, sessionId, uiAPI });
@@ -888,7 +890,7 @@ Deno.test("TUI displays an already reported backend error once while preserving 
     adapter.dispose();
 });
 
-Deno.test("TUI does not alert for Workspace- or ACP-owned attention", () => {
+test("TUI does not alert for Workspace- or ACP-owned attention", () => {
     const { runtime, sessionId } = makeRuntimeHarness("notification-owner");
     const { uiAPI } = makeUi();
     /** @type {string[]} */
@@ -910,7 +912,7 @@ Deno.test("TUI does not alert for Workspace- or ACP-owned attention", () => {
     adapter.dispose();
 });
 
-Deno.test("TUI adapter shows shared provider notices without displaying diagnostic bodies", () => {
+test("TUI adapter shows shared provider notices without displaying diagnostic bodies", () => {
     const { runtime, sessionId } = makeRuntimeHarness("provider-friendly-notice");
     const { transcript, uiAPI } = makeUi();
     const adapter = attachTuiRuntimeAdapter({ runtime, sessionId, uiAPI });
@@ -924,7 +926,7 @@ Deno.test("TUI adapter shows shared provider notices without displaying diagnost
     adapter.dispose();
 });
 
-Deno.test("TUI completion waits for settlement, occurs once, and ignores failures and replay", async () => {
+test("TUI completion waits for settlement, occurs once, and ignores failures and replay", async () => {
     for (const outcome of ["verified", "failed", "paused"]) {
         for (const replay of [false, true]) {
             const { runtime, sessionId } = makeRuntimeHarness(`completion-${outcome}-${replay}`);
@@ -970,7 +972,7 @@ Deno.test("TUI completion waits for settlement, occurs once, and ignores failure
     }
 });
 
-Deno.test("TUI completion does not interrupt replacement Sessions or a new user turn", async () => {
+test("TUI completion does not interrupt replacement Sessions or a new user turn", async () => {
     for (const replace of [false, true]) {
         const { runtime, sessionId } = makeRuntimeHarness(`completion-replaced-${replace}`);
         const { uiAPI } = makeUi();
