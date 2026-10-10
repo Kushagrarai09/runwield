@@ -1,3 +1,5 @@
+import { rename as fsRename } from "node:fs/promises";
+import { mkdir as fsMkdir, readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promises";
 import { dirname, join, relative } from "@std/path";
 import { loadPlan } from "../plan-store.js";
 
@@ -117,18 +119,18 @@ function validateChecklistMarkdown(childPlanName: string, checklistMarkdown: str
 
 async function readTextIfExists(path: string): Promise<string | null> {
     try {
-        return await Deno.readTextFile(path);
+        return await fsReadFile(path, "utf8");
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) return null;
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
         throw error;
     }
 }
 
 async function writeAtomic(path: string, text: string): Promise<void> {
-    await Deno.mkdir(dirname(path), { recursive: true });
+    await fsMkdir(dirname(path), { recursive: true });
     const tmp = `${path}.${crypto.randomUUID()}.tmp`;
-    await Deno.writeTextFile(tmp, text);
-    await Deno.rename(tmp, path);
+    await fsWriteFile(tmp, text);
+    await fsRename(tmp, path);
 }
 
 export async function appendEpicManualQaSection(
@@ -196,8 +198,8 @@ async function moveFileIfPresent(
     if (await readTextIfExists(toPath) !== null) {
         throw new Error(`Epic Artifact already exists: ${projectRelativePath(projectRoot, toPath)}`);
     }
-    await Deno.mkdir(dirname(toPath), { recursive: true });
-    await Deno.rename(fromPath, toPath);
+    await fsMkdir(dirname(toPath), { recursive: true });
+    await fsRename(fromPath, toPath);
     return { fileName, fromPath, toPath, relativePath: projectRelativePath(projectRoot, toPath) };
 }
 
@@ -218,7 +220,7 @@ export async function moveEpicArtifactsToArchive(
         }
         return moved;
     } catch (error) {
-        for (const item of moved.toReversed()) await Deno.rename(item.toPath, item.fromPath).catch(() => {});
+        for (const item of moved.toReversed()) await fsRename(item.toPath, item.fromPath).catch(() => {});
         throw error;
     }
 }
@@ -240,7 +242,7 @@ export async function moveEpicArtifactsFromArchive(
         }
         return moved;
     } catch (error) {
-        for (const item of moved.toReversed()) await Deno.rename(item.toPath, item.fromPath).catch(() => {});
+        for (const item of moved.toReversed()) await fsRename(item.toPath, item.fromPath).catch(() => {});
         throw error;
     }
 }

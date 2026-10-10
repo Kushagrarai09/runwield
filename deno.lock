@@ -124,6 +124,7 @@
     "npm:@tanstack/react-table@^8.21.3": "8.21.3_react@19.3.0_react-dom@19.3.0",
     "npm:@types/bun@1.3.12": "1.3.12",
     "npm:@types/node@26.6.4": "26.6.4",
+    "npm:@types/proper-lockfile@4.1.4": "4.1.4",
     "npm:@types/react-dom@19.2.3": "19.2.3_@types+react@19.2.18",
     "npm:@types/react-dom@^19.2.3": "19.2.3_@types+react@19.2.18",
     "npm:@types/react@19.2.18": "19.2.18",
@@ -3524,6 +3525,12 @@
         "undici-types"
       ]
     },
+    "@types/proper-lockfile@4.1.4": {
+      "integrity": "sha512-uo2ABllncSqg9F1D4nugVl9v93RmjxF6LJzQLMLDdPaXCUIDPeOJ21Gbqi43xNKzBi/WQ0Q0dICqufzQbMjipQ==",
+      "dependencies": [
+        "@types/retry"
+      ]
+    },
     "@types/react-dom@19.2.3_@types+react@19.2.18": {
       "integrity": "sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ==",
       "dependencies": [
@@ -6822,6 +6829,7 @@
         "npm:@tanstack/react-table@8.21.3",
         "npm:@types/bun@1.3.12",
         "npm:@types/node@26.6.4",
+        "npm:@types/proper-lockfile@4.1.4",
         "npm:@types/react-dom@19.2.3",
         "npm:@types/react@19.2.18",
         "npm:@vitejs/plugin-react@6.1.0",

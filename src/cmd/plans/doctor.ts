@@ -1,3 +1,6 @@
+import { captureForegroundProcess } from "../../shared/captured-process.ts";
+import { opendir as fsOpendir } from "node:fs/promises";
+import { readFile as fsReadFile, realpath as fsRealpath, stat as fsStat } from "node:fs/promises";
 import { effectiveDeliveryBranch } from "../../shared/workflow/plan-branch.ts";
 /**
  * @module cmd/plans/doctor
@@ -411,11 +414,11 @@ async function collectPlanIssues(
     planIds: Map<string, string>,
 ) {
     try {
-        for await (const entry of Deno.readDir(join(root, ...prefix))) {
+        for await (const entry of await fsOpendir(join(root, ...prefix))) {
             const entryPath = join(root, ...prefix, entry.name);
             const isPlanPath = entry.name.endsWith(".md");
             const planName = isPlanPath ? [...prefix, entry.name.replace(/\.md$/, "")].join("/") : "";
-            if (entry.isDirectory) {
+            if (entry.isDirectory()) {
                 if (isPlanPath) {
                     issues.push({
                         kind: "non_regular_plan_path",
@@ -427,7 +430,7 @@ async function collectPlanIssues(
                 }
                 continue;
             }
-            if (entry.isSymlink && isPlanPath) {
+            if (entry.isSymbolicLink() && isPlanPath) {
                 issues.push({
                     kind: "non_regular_plan_path",
                     planName,
@@ -460,7 +463,7 @@ async function collectPlanIssues(
             }
         }
     } catch (error) {
-        if (!(error instanceof Deno.errors.NotFound)) throw error;
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     }
 }
 
@@ -540,14 +543,14 @@ async function collectArchivedPlanParseIssues(
 
     async function visit(prefix: string[]) {
         try {
-            for await (const entry of Deno.readDir(join(archivedRoot, ...prefix))) {
+            for await (const entry of await fsOpendir(join(archivedRoot, ...prefix))) {
                 const entryPath = join(archivedRoot, ...prefix, entry.name);
                 const isPlanPath = entry.name.endsWith(".md");
-                if (entry.isDirectory) {
+                if (entry.isDirectory()) {
                     if (!isPlanPath) await visit([...prefix, entry.name]);
                     continue;
                 }
-                if (!isPlanPath || entry.isSymlink) continue;
+                if (!isPlanPath || entry.isSymbolicLink()) continue;
                 const planName = [...prefix, entry.name.replace(/\.md$/, "")].join("/");
                 if (isEpicArtifactPlanName(planName)) continue;
                 try {
@@ -572,7 +575,7 @@ async function collectArchivedPlanParseIssues(
                 }
             }
         } catch (error) {
-            if (!(error instanceof Deno.errors.NotFound)) throw error;
+            if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
         }
     }
     await visit([]);
@@ -654,7 +657,7 @@ async function collectWorktreeJournalIssues(
     for (const entry of entries) {
         if (entry.path === projectRoot) continue;
         const journalDir = getTransitionJournalDir(entry.path);
-        if (!(await Deno.stat(journalDir).then((stat) => stat.isDirectory).catch(() => false))) continue;
+        if (!(await fsStat(journalDir).then((stat) => stat.isDirectory()).catch(() => false))) continue;
         const reconciliations = await reconcileTransitionRecoveryRecords(entry.path, {
             apply: repair,
             diagnostic: !repair,
@@ -696,8 +699,8 @@ async function collectStalePlanLockIssues(
     const lockDir = resolveProjectRuntimeLayout(projectRoot).selected.planLocksDir;
     const results: Array<{ issue?: DoctorIssue; repaired?: boolean }> = [];
     try {
-        for await (const entry of Deno.readDir(lockDir)) {
-            if (!entry.isFile || !entry.name.endsWith(".lock")) continue;
+        for await (const entry of await fsOpendir(lockDir)) {
+            if (!entry.isFile() || !entry.name.endsWith(".lock")) continue;
             const path = join(lockDir, entry.name);
             const snapshot = await readLockFileSnapshot(path);
             if (!snapshot) continue;
@@ -720,7 +723,7 @@ async function collectStalePlanLockIssues(
             });
         }
     } catch (error) {
-        if (!(error instanceof Deno.errors.NotFound)) throw error;
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     }
     return results;
 }
@@ -808,14 +811,14 @@ async function runPlansDoctorPass(projectRoot: string, repair: boolean, layout: 
         // migrating around a conflict is how a readable registry becomes unreadable.
         await listEntries(projectRoot, { migrate: true }).catch(() => []);
     }
-    const canonicalRoot = await Deno.realPath(projectRoot).catch(() => projectRoot);
+    const canonicalRoot = await fsRealpath(projectRoot).catch(() => projectRoot);
     const registryPaths = new Set(
         await Promise.all(
-            entries.map((entry) => Deno.realPath(entry.path).catch(() => entry.path)),
+            entries.map((entry) => fsRealpath(entry.path).catch(() => entry.path)),
         ),
     );
     for (const path of gitWorktreePaths) {
-        const canonicalPath = await Deno.realPath(path).catch(() => path);
+        const canonicalPath = await fsRealpath(path).catch(() => path);
         if (canonicalPath !== canonicalRoot && !registryPaths.has(canonicalPath)) {
             issues.push({
                 kind: "orphan_git_worktree",
@@ -896,14 +899,15 @@ async function runPlansDoctorPass(projectRoot: string, repair: boolean, layout: 
     if (repair) {
         for (const plan of identityDocuments) {
             if (plan.attrs.planId) continue;
-            const exists = await Deno.stat(plan.path).then((stat) => stat.isFile).catch(() => false);
+            const exists = await fsStat(plan.path).then((stat) => stat.isFile()).catch(() => false);
             if (!exists) continue;
             const documentRoot = getPlanDocumentRoot(plan.path);
             const lockDir = resolveProjectRuntimeLayout(documentRoot).selected.planLocksDir;
-            const hasLock = await Array.fromAsync(Deno.readDir(lockDir))
-                .then((locks) => locks.some((lock) => lock.isFile && lock.name.endsWith(".lock")))
+            const hasLock = await fsOpendir(lockDir)
+                .then((directory) => Array.fromAsync(directory))
+                .then((locks) => locks.some((lock) => lock.isFile() && lock.name.endsWith(".lock")))
                 .catch((error) => {
-                    if (error instanceof Deno.errors.NotFound) return false;
+                    if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
                     throw error;
                 });
             if (hasLock) continue;
@@ -959,7 +963,7 @@ async function runPlansDoctorPass(projectRoot: string, repair: boolean, layout: 
             await isCommittedArchive(projectRoot, plan.name, plan.path).catch(() => false)
         ) continue;
         {
-            const markdown = await Deno.readTextFile(plan.path).catch(() => undefined);
+            const markdown = await fsReadFile(plan.path, "utf8").catch(() => undefined);
             const publication = await verifyRecordedPublication(
                 projectRoot,
                 plan.attrs,
@@ -1120,8 +1124,8 @@ async function runPlansDoctorPass(projectRoot: string, repair: boolean, layout: 
             }
         }
         try {
-            const stat = await Deno.stat(entry.path);
-            if (!stat.isDirectory) throw new Error("not a directory");
+            const stat = await fsStat(entry.path);
+            if (!stat.isDirectory()) throw new Error("not a directory");
         } catch {
             const safelyPrunable = entry.status === "abandoned" || entry.publication?.phase === "cleanup_complete";
             issues.push({
@@ -1166,13 +1170,11 @@ async function runPlansDoctorPass(projectRoot: string, repair: boolean, layout: 
 
 /** Committed archives are history, not an instruction to restart an old delivery. */
 async function isCommittedArchive(projectRoot: string, planName: string, path: string): Promise<boolean> {
-    const result = await new Deno.Command("git", {
+    const result = await captureForegroundProcess("git", {
         cwd: projectRoot,
         args: ["show", `HEAD:docs/plans/${planName}.md`],
-        stdout: "piped",
-        stderr: "null",
-    }).output();
-    return result.success && new TextDecoder().decode(result.stdout) === await Deno.readTextFile(path);
+    });
+    return result.success && new TextDecoder().decode(result.stdout) === await fsReadFile(path, "utf8");
 }
 
 export async function runPlansDoctor(projectRoot: string, repair = true) {

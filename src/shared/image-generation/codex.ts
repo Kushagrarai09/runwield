@@ -1,3 +1,7 @@
+import { tmpdir } from "node:os";
+import { mkdtemp } from "node:fs/promises";
+import nodeProcess from "node:process";
+import { readFile as fsReadFile, realpath as fsRealpath, rm as fsRm, stat as fsStat } from "node:fs/promises";
 import { Buffer } from "node:buffer";
 import { isAbsolute, join, relative } from "@std/path";
 import type { ImageContent } from "@earendil-works/pi-ai";
@@ -69,7 +73,7 @@ export async function generateCodexImage(request: CodexImageRequest): Promise<Im
     request.signal?.throwIfAborted();
     const executable = await resolveCodexExecutable();
     request.signal?.throwIfAborted();
-    const cwd = await Deno.makeTempDir({ prefix: "runwield-codex-image-" });
+    const cwd = await mkdtemp(join(tmpdir(), "runwield-codex-image-"));
     const startedAt = Date.now();
     const pending = new Map<number, PendingRequest>();
     const completed = Promise.withResolvers<CodexTurn>();
@@ -249,22 +253,22 @@ export async function generateCodexImage(request: CodexImageRequest): Promise<Im
         ) {
             throw new Error("Codex did not complete exactly one native image with a savedPath. No output was saved.");
         }
-        const source = await Deno.realPath(image.savedPath);
-        const generatedRoot = join(Deno.env.get("CODEX_HOME") || join(getHomeDir(), ".codex"), "generated_images");
-        const hostRoot = await Deno.realPath(generatedRoot).catch(() => "");
-        if (!inside(await Deno.realPath(cwd), source) && (!hostRoot || !inside(hostRoot, source))) {
+        const source = await fsRealpath(image.savedPath);
+        const generatedRoot = join(nodeProcess.env["CODEX_HOME"] || join(getHomeDir(), ".codex"), "generated_images");
+        const hostRoot = await fsRealpath(generatedRoot).catch(() => "");
+        if (!inside(await fsRealpath(cwd), source) && (!hostRoot || !inside(hostRoot, source))) {
             throw new Error("Codex image path is outside its generated-image storage.");
         }
-        const stat = await Deno.stat(source);
+        const stat = await fsStat(source);
         if (
-            !stat.isFile || !stat.mtime || stat.mtime.getTime() < startedAt - 1000 || stat.size === 0 ||
+            !stat.isFile() || !stat.mtime || stat.mtime.getTime() < startedAt - 1000 || stat.size === 0 ||
             stat.size > 32 * 1024 * 1024
         ) {
             throw new Error("Codex returned a stale, empty or oversized image file.");
         }
         return {
             type: "image",
-            data: Buffer.from(await Deno.readFile(source)).toString("base64"),
+            data: Buffer.from(await fsReadFile(source)).toString("base64"),
             mimeType: mimeTypeForImagePath(source),
         };
     } finally {
@@ -290,6 +294,6 @@ export async function generateCodexImage(request: CodexImageRequest): Promise<Im
         await Promise.allSettled([process?.done, pump, stderr]);
         await writer?.close().catch(() => undefined);
         writer?.releaseLock();
-        await Deno.remove(cwd, { recursive: true });
+        await fsRm(cwd, { recursive: true });
     }
 }

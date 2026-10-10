@@ -1,3 +1,7 @@
+import { tmpdir } from "node:os";
+import { mkdtemp } from "node:fs/promises";
+import { captureForegroundProcess } from "../captured-process.ts";
+import { rm as fsRm, stat as fsStat } from "node:fs/promises";
 /**
  * Storage boundary for the durable publication state machine.
  *
@@ -35,7 +39,7 @@ import {
 type GitResult = { code: number; stdout: string; stderr: string };
 
 async function git(cwd: string, args: string[]): Promise<GitResult> {
-    const output = await new Deno.Command("git", { cwd, args, stdout: "piped", stderr: "piped" }).output();
+    const output = await captureForegroundProcess("git", { cwd, args });
     const decoder = new TextDecoder();
     return {
         code: output.code,
@@ -86,8 +90,8 @@ async function integratedEvidence(
     projectRoot: string,
     attempt: PublicationAttempt,
 ): Promise<PublicationPhaseEvidence | null> {
-    const stat = await Deno.stat(attempt.publicationRoot).catch(() => null);
-    if (!stat?.isDirectory) return null;
+    const stat = await fsStat(attempt.publicationRoot).catch(() => null);
+    if (!stat?.isDirectory()) return null;
     if ((await git(attempt.publicationRoot, ["rev-parse", "--verify", "MERGE_HEAD"])).code === 0) return null;
     const head = await git(attempt.publicationRoot, ["rev-parse", "HEAD"]);
     if (head.code !== 0 || !head.stdout) return null;
@@ -203,7 +207,7 @@ async function publishedEvidence(
     if (head !== integrationCommit || attempt.deliveryMetadataVersion) {
         // The publication clone may already have been cleaned up. Fetch into an
         // independent bare repository, never the user's checkout or its refs.
-        const inspectionRoot = await Deno.makeTempDir({ prefix: "runwield-publication-proof-" });
+        const inspectionRoot = await mkdtemp(join(tmpdir(), "runwield-publication-proof-"));
         try {
             if ((await git(projectRoot, ["init", "--bare", inspectionRoot])).code !== 0) return null;
             const fetched = await git(projectRoot, [
@@ -230,7 +234,7 @@ async function publishedEvidence(
                 ))
             ) return null;
         } finally {
-            await Deno.remove(inspectionRoot, { recursive: true });
+            await fsRm(inspectionRoot, { recursive: true });
         }
     }
     return {
@@ -465,7 +469,7 @@ async function settlePublicationIndex(
     // redirect index recovery to a different repository or branch.
     const remoteUrl = await git(projectRoot, ["remote", "get-url", attempt.upstreamRemote]);
     if (remoteUrl.code !== 0 || !remoteUrl.stdout) throw new Error("Published Work Record upstream is unavailable.");
-    const inspection = await Deno.makeTempDir({ prefix: "runwield-record-index-proof-" });
+    const inspection = await mkdtemp(join(tmpdir(), "runwield-record-index-proof-"));
     try {
         if ((await git(projectRoot, ["init", "--bare", inspection])).code !== 0) {
             throw new Error("Cannot inspect published Work Records.");
@@ -484,7 +488,7 @@ async function settlePublicationIndex(
         await retainDeliveryCommit(projectRoot, inspection, attempt);
         await indexPublishedWorkRecords(projectRoot, inspection, head.stdout, paths, port, attempt.publishedCommit);
     } finally {
-        await Deno.remove(inspection, { recursive: true });
+        await fsRm(inspection, { recursive: true });
     }
 }
 
@@ -530,9 +534,7 @@ export async function cleanupStoredPublication(
     }
     const stillPublished = await publishedEvidence(projectRoot, attempt);
     if (!stillPublished) {
-        const worktreeKept = await Deno.stat(attempt.executionCwd).then((value) => value.isDirectory).catch(() =>
-            false
-        );
+        const worktreeKept = await fsStat(attempt.executionCwd).then((value) => value.isDirectory()).catch(() => false);
         const branchKept = (await git(projectRoot, [
             "show-ref",
             "--verify",
@@ -551,7 +553,7 @@ export async function cleanupStoredPublication(
     let worktreeKept = false;
     let branchKept = false;
     try {
-        const worktreeExists = await Deno.stat(attempt.executionCwd).then((value) => value.isDirectory).catch(() =>
+        const worktreeExists = await fsStat(attempt.executionCwd).then((value) => value.isDirectory()).catch(() =>
             false
         );
         if (worktreeExists) {
@@ -602,8 +604,8 @@ export async function cleanupStoredPublication(
             `Git kept branch ${attempt.executionBranch}: ${error instanceof Error ? error.message : String(error)}`,
         );
     }
-    await Deno.remove(attempt.publicationRoot, { recursive: true }).catch((error) => {
-        if (!(error instanceof Deno.errors.NotFound)) {
+    await fsRm(attempt.publicationRoot, { recursive: true }).catch((error) => {
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
             details.push(`RunWield kept publication checkout ${attempt.publicationRoot}: ${String(error)}`);
         }
     });

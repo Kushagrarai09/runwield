@@ -1,10 +1,11 @@
+import { test } from "node:test";
 import { assert, assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import { withRuntimeCommandFixture } from "../../cmd/testing/runtime-command-fixture.ts";
 import { makeManagedSessionFixture } from "../../testing/managed-session-fixture.ts";
 import { WorkspaceSessionContinuationService } from "./server/session-continuation.js";
 
-Deno.test("Workspace reuses the owning runtime Session for the next continuation", async () => {
+test("Workspace reuses the owning runtime Session for the next continuation", async () => {
     await withRuntimeCommandFixture(
         "workspace-retained-owner-",
         async ({ homeDir, projectRoot, setModelResponseFactories }) => {

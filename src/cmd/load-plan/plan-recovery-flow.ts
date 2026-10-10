@@ -1,3 +1,5 @@
+import { captureForegroundProcess } from "../../shared/captured-process.ts";
+import { stat as fsStat } from "node:fs/promises";
 /**
  * @module cmd/load-plan/plan-recovery-flow
  * The Plan Recovery menu coordinator for in-progress, failed, and implemented Plans.
@@ -262,30 +264,23 @@ async function isAttemptPhysicallyLost(
     worktree: RecoveryWorktreeContext | null,
 ): Promise<boolean> {
     if (!worktree?.id || !worktree.path || !worktree.branch) return false;
-    const pathExists = await Deno.stat(worktree.path).then((info) => info.isDirectory).catch(() => false);
+    const pathExists = await fsStat(worktree.path).then((info) => info.isDirectory()).catch(() => false);
     if (pathExists) return false;
     const branchExists = await createGitPort().branchHead(projectRoot, worktree.branch)
         .then(() => true)
         .catch(() => false);
     if (branchExists) return false;
-    const command = new Deno.Command("git", {
-        cwd: projectRoot,
-        args: ["worktree", "list", "--porcelain"],
-        stdout: "piped",
-        stderr: "null",
-    });
-    const output = await command.output().catch(() => null);
+    const command = captureForegroundProcess("git", { cwd: projectRoot, args: ["worktree", "list", "--porcelain"] });
+    const output = await command.catch(() => null);
     if (!output || !output.success) return true;
     const records = new TextDecoder().decode(output.stdout).trim().split(/\n\n+/);
     const record = records.find((value) => value.split("\n").includes(`worktree ${worktree.path}`));
     const head = record?.split("\n").find((line) => line.startsWith("HEAD "))?.slice(5);
     if (!head) return true;
-    const proof = await new Deno.Command("git", {
+    const proof = await captureForegroundProcess("git", {
         cwd: projectRoot,
         args: ["rev-parse", "--verify", `${head}^{commit}`],
-        stdout: "null",
-        stderr: "null",
-    }).output().catch(() => null);
+    }).catch(() => null);
     return !proof?.success;
 }
 

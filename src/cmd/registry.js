@@ -320,7 +320,7 @@ export const commandRegistry = {
             const result = await runTerminalAuthSetup(argv);
             if (result.status === "ready") return;
             console.error(result.message);
-            Deno.exit(1);
+            process.exit(1);
         },
         surfaces: ["cli", "slash"],
     },

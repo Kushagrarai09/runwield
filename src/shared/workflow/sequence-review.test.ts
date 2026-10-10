@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import { dirname } from "@std/path";
 import { withProcessGlobalTestLock } from "../../testing/process-global-lock.ts";
 import { getTransitionJournalPath } from "./state-transition.ts";
@@ -182,7 +183,7 @@ Deno.test("Sibling Plan ID dependency survives a child rename", async () => {
         await updatePlanFrontMatter(cwd, "sequence/search", { dependencies: [first.planId] }, {}, {
             expectedRevision: documents[2].revision,
         });
-        await Deno.rename(first.planPath, first.planPath.replace("/index.md", "/renamed.md"));
+        await fs.rename(first.planPath, first.planPath.replace("/index.md", "/renamed.md"));
         const dependencies = await resolveSiblingChildPlanDependencies(cwd, "sequence", [first.planId]);
         assertEquals(dependencies[0].planName, "sequence/renamed");
         assertEquals(dependencies[0].planId, first.planId);
@@ -380,7 +381,7 @@ for (const failurePoint of ["acceptance", "commit"] as const) {
     Deno.test(`Sequence ${failurePoint} persistence failure cannot dispatch a child and permits retry`, async () => {
         await withProcessGlobalTestLock(async () => {
             const { cwd, hostedSession } = await setup();
-            const originalRename = Deno.rename;
+            const originalRename = fs.rename;
             const abort = new AbortController();
             const waiting = waitForWorkflowToolEvent(hostedSession, {
                 kinds: ["plan_written"],
@@ -395,9 +396,9 @@ for (const failurePoint of ["acceptance", "commit"] as const) {
                 const journalDir = dirname(getTransitionJournalPath(cwd, "unused"));
                 let failed = false;
                 // Fail the filesystem replacement, keeping real Plan writes, locks and journals.
-                Deno.rename = async (from, to) => {
+                fs.rename = async (from, to) => {
                     if (!failed && dirname(String(to)) === journalDir) {
-                        const record: SequenceJournalState = JSON.parse(await Deno.readTextFile(from));
+                        const record: SequenceJournalState = JSON.parse(await fs.readFile(from, "utf8"));
                         const atFailure = failurePoint === "commit"
                             ? record.state === "committed"
                             : record.state === "applying" &&
@@ -439,7 +440,7 @@ for (const failurePoint of ["acceptance", "commit"] as const) {
                 for (const doc of documents) {
                     assertEquals((await loadPlan(cwd, doc.planName))?.revision, doc.revision);
                 }
-                Deno.rename = originalRename;
+                fs.rename = originalRename;
                 const retry = await applySequenceReviewDecision({
                     cwd,
                     documents: await prepareSequenceReview(cwd, "sequence"),
@@ -455,7 +456,7 @@ for (const failurePoint of ["acceptance", "commit"] as const) {
                 assertEquals(listPendingWorkflowToolEvents(hostedSession).length, 1);
                 assertEquals(retry.workflowOutcome?.planName, "sequence/index");
             } finally {
-                Deno.rename = originalRename;
+                fs.rename = originalRename;
                 abort.abort();
                 await waiting;
                 await Deno.remove(cwd, { recursive: true });

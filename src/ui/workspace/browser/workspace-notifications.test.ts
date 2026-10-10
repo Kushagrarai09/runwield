@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assertEquals } from "@std/assert";
 import { startWorkspaceNotifications } from "./workspace-notifications.ts";
 
@@ -23,7 +24,7 @@ class BrowserNotification {
     close() {}
 }
 
-Deno.test("Workspace alerts survive page navigation and reconnect after browser page suspension", async () => {
+test("Workspace alerts survive page navigation and reconnect after browser page suspension", async () => {
     Reflect.set(globalThis, "EventSource", BrowserEventSource);
     Reflect.set(globalThis, "Notification", BrowserNotification);
     Reflect.set(globalThis, "location", { href: "https://workspace.example/projects" });

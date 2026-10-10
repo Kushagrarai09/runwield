@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assertEquals } from "@std/assert";
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool, SessionManager } from "@earendil-works/pi-coding-agent";
@@ -7,7 +8,7 @@ import { withWorkflowMetricsFixture } from "../../testing/workflow-metrics-fixtu
 import { ExecutionMetricsRecorder } from "../workflow/execution-metrics.ts";
 import { CLAUDE_CLI_MCP_PROVENANCE, startRunWieldMcpBridge } from "./bridged-tools/mcp-bridge.ts";
 
-Deno.test("authenticated bridge records admitted results and known-tool rejections in its execution", async () => {
+test("authenticated bridge records admitted results and known-tool rejections in its execution", async () => {
     await withWorkflowMetricsFixture(async ({ projectRoot, readMetrics }) => {
         const recorder = new ExecutionMetricsRecorder({ projectRoot, backend: "claude-cli" });
         const tool = defineTool({

@@ -1,3 +1,4 @@
+import { realpath as fsRealpath } from "node:fs/promises";
 import {
     canonicalizeStoredPlanName,
     canonicalPlanStatus,
@@ -39,9 +40,9 @@ export interface PublicationCleanupNotice {
 
 async function canonicalFilePath(path: string): Promise<string> {
     try {
-        return await Deno.realPath(path);
+        return await fsRealpath(path);
     } catch (error) {
-        if (!(error instanceof Deno.errors.NotFound)) throw error;
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
         const parent = dirname(path);
         return parent === path ? path : resolve(await canonicalFilePath(parent), basename(path));
     }

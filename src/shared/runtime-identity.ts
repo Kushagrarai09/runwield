@@ -6,7 +6,7 @@ interface DenoBuildRuntime {
 }
 export function isStandaloneExecutable(): boolean {
     if (versions.deno) {
-        const runtime: DenoBuildRuntime = Reflect.get(globalThis, "Deno");
+        const runtime: DenoBuildRuntime = Reflect.get(globalThis, String("Deno"));
         return runtime.build.standalone;
     }
     // Bun compiled modules live in its embedded filesystem. Source execution

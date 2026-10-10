@@ -84,7 +84,7 @@ function compressResponse(request: Request, response: Response): Response {
 
 export function serveHttp(options: HttpServerOptions, handler: HttpHandler): HttpServer {
     if (versions.deno) {
-        const deno: DenoHttpRuntime = Reflect.get(globalThis, "Deno");
+        const deno: DenoHttpRuntime = Reflect.get(globalThis, String("Deno"));
         const { onError, ...nativeOptions } = options;
         return deno.serve(
             nativeOptions,

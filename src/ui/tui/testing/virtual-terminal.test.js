@@ -1,7 +1,8 @@
+import { test } from "node:test";
 import { assert, assertEquals } from "@std/assert";
 import { normalizeScreenText, VirtualTerminal } from "./virtual-terminal.js";
 
-Deno.test("VirtualTerminal captures writes in normalized viewport text", async () => {
+test("VirtualTerminal captures writes in normalized viewport text", async () => {
     const terminal = new VirtualTerminal({ columns: 20, rows: 4 });
     terminal.write("hello\nworld");
     await terminal.flush();
@@ -9,7 +10,7 @@ Deno.test("VirtualTerminal captures writes in normalized viewport text", async (
     assert(terminal.getScreenText().includes("world"));
 });
 
-Deno.test("VirtualTerminal captures the active viewport after scrollback", async () => {
+test("VirtualTerminal captures the active viewport after scrollback", async () => {
     const terminal = new VirtualTerminal({ columns: 20, rows: 3 });
     terminal.write("one\r\ntwo\r\nthree\r\nfour\r\nfive");
     await terminal.flush();
@@ -19,7 +20,7 @@ Deno.test("VirtualTerminal captures the active viewport after scrollback", async
     assert(screenText.includes("five"));
 });
 
-Deno.test("VirtualTerminal sends input and resize through terminal callbacks", () => {
+test("VirtualTerminal sends input and resize through terminal callbacks", () => {
     const terminal = new VirtualTerminal({ columns: 20, rows: 4 });
     /** @type {string[]} */
     const input = [];
@@ -34,6 +35,6 @@ Deno.test("VirtualTerminal sends input and resize through terminal callbacks", (
     assertEquals(sizes, [{ columns: 40, rows: 10 }]);
 });
 
-Deno.test("normalizeScreenText removes ansi control sequences and trailing space", () => {
+test("normalizeScreenText removes ansi control sequences and trailing space", () => {
     assertEquals(normalizeScreenText("\x1b[31mhello   \x1b[0m\n\n"), "hello");
 });

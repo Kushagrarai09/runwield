@@ -1,4 +1,5 @@
 // @ts-nocheck: Workspace service is JavaScript and returns projected event records.
+import fs from "node:fs/promises";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { createSessionRuntime } from "../../shared/session/session-runtime.ts";
 import {
@@ -154,11 +155,11 @@ Deno.test("Workspace hides only unnamed empty Sessions and paginates the visible
                 source: "catalog",
             });
         }
-        const readTextFile = Deno.readTextFile;
+        const readFile = fs.readFile;
         const transcriptsRead = [];
-        Deno.readTextFile = (path, options) => {
+        fs.readFile = (path, options) => {
             if (String(path).endsWith(".jsonl")) transcriptsRead.push(String(path));
-            return readTextFile(path, options);
+            return readFile(path, options);
         };
         try {
             const recent = await service.listSessions(fixture.project.projectId, { pageSize: 1, includeTotal: false });
@@ -179,7 +180,7 @@ Deno.test("Workspace hides only unnamed empty Sessions and paginates the visible
             assertEquals(navigation.sessions.map((session) => session.displayName), ["Hello"]);
             assert(transcriptsRead.length <= 2);
         } finally {
-            Deno.readTextFile = readTextFile;
+            fs.readFile = readFile;
         }
         const first = await service.listSessions(fixture.project.projectId, { pageSize: 1 });
         const second = await service.listSessions(fixture.project.projectId, { pageSize: 1, page: 1 });
@@ -1364,7 +1365,7 @@ Deno.test("sidebar expansion reads only five unseen matching Session names plus 
     const store = fixture.openStore();
     const service = new WorkspaceSessionContinuationService({ store });
     const ids = new Map();
-    const readTextFile = Deno.readTextFile;
+    const readFile = fs.readFile;
     try {
         for (let i = 1; i <= 20; i++) {
             const timestamp = `2026-09-${String(i).padStart(2, "0")}T00:00:00.000Z`;
@@ -1427,9 +1428,9 @@ Deno.test("sidebar expansion reads only five unseen matching Session names plus 
             }
         }
         const reads = [];
-        Deno.readTextFile = (path, options) => {
+        fs.readFile = (path, options) => {
             if (String(path).endsWith(".jsonl")) reads.push(String(path));
-            return readTextFile(path, options);
+            return readFile(path, options);
         };
         const query = new URLSearchParams({
             pageSize: "5",
@@ -1457,7 +1458,7 @@ Deno.test("sidebar expansion reads only five unseen matching Session names plus 
         assertEquals(reads.length, 6);
         assertEquals(reads.some((path) => path.endsWith("expand-15.jsonl")), false);
     } finally {
-        Deno.readTextFile = readTextFile;
+        fs.readFile = readFile;
         service.close();
         store.close();
         await fixture.cleanup();

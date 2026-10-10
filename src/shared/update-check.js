@@ -1,3 +1,5 @@
+import { readFileSync as fsReadFileSync } from "node:fs";
+import { mkdir as fsMkdir, readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promises";
 /**
  * @module shared/update-check
  * Stable-channel update discovery and installer helpers.
@@ -155,7 +157,7 @@ export function readUpdateCheckCacheSync(clock, options = {}) {
     const ttlMs = options.ttlMs ?? UPDATE_CHECK_CACHE_TTL_MS;
     const cachePath = options.cachePath || getUpdateCheckCachePath();
     try {
-        return parseFreshCacheText(Deno.readTextFileSync(cachePath), now, ttlMs);
+        return parseFreshCacheText(fsReadFileSync(cachePath, "utf8"), now, ttlMs);
     } catch (_error) {
         return null;
     }
@@ -171,7 +173,7 @@ export async function readUpdateCheckCache(clock, options = {}) {
     const ttlMs = options.ttlMs ?? UPDATE_CHECK_CACHE_TTL_MS;
     const cachePath = options.cachePath || getUpdateCheckCachePath();
     try {
-        return parseFreshCacheText(await Deno.readTextFile(cachePath), now, ttlMs);
+        return parseFreshCacheText(await fsReadFile(cachePath, "utf8"), now, ttlMs);
     } catch (_error) {
         return null;
     }
@@ -187,8 +189,8 @@ export async function writeUpdateCheckCache(options) {
         throw new Error(`Invalid RunWield release version: ${options.latestVersion}`);
     }
     const checkedAt = options.checkedAt;
-    await Deno.mkdir(dirname(cachePath), { recursive: true });
-    await Deno.writeTextFile(cachePath, `${JSON.stringify({ latestVersion, checkedAt }, null, 2)}\n`);
+    await fsMkdir(dirname(cachePath), { recursive: true });
+    await fsWriteFile(cachePath, `${JSON.stringify({ latestVersion, checkedAt }, null, 2)}\n`);
 }
 
 /**

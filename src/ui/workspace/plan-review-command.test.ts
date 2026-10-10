@@ -1,11 +1,12 @@
 // @ts-nocheck: owner Workspace app and managed fixture expose JavaScript records.
+import { test } from "node:test";
 import { assert, assertEquals } from "@std/assert";
 import { ensurePlanIdentity, savePlan } from "../../plan-store.js";
 import { makeManagedSessionFixture } from "../../testing/managed-session-fixture.ts";
 import { withRuntimeCommandFixture } from "../../cmd/testing/runtime-command-fixture.ts";
 import { createOwnerWorkspaceApp } from "./server.js";
 
-Deno.test("owner Plan review command opens a saved review through the authorized route without a user turn", async () => {
+test("owner Plan review command opens a saved review through the authorized route without a user turn", async () => {
     await withRuntimeCommandFixture(
         "workspace-reopen-plan-",
         async ({ homeDir, projectRoot, setModelResponseFactory }) => {

@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { withRuntimeCommandFixture } from "../../cmd/testing/runtime-command-fixture.ts";
@@ -5,7 +6,7 @@ import { loadPlan, savePlan } from "../../plan-store.js";
 import { listWorkRecords } from "../work-records/index.ts";
 import { createSessionRuntime } from "./session-runtime.ts";
 
-Deno.test("record retry belongs to the active Session and cancellation preserves delivered code", async () => {
+test("record retry belongs to the active Session and cancellation preserves delivered code", async () => {
     await withRuntimeCommandFixture("record-retry-cancel-", async ({ projectRoot, setModelResponseFactory }) => {
         await savePlan(projectRoot, "delivered", "# Delivered", {
             planId: "delivered",

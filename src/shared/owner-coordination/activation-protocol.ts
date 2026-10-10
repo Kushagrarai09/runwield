@@ -1,3 +1,8 @@
+import { renameSync as fsRenameSync } from "node:fs";
+import { chmodSync as fsChmodSync } from "node:fs";
+import { writeFileSync as fsWriteFileSync } from "node:fs";
+import { mkdirSync as fsMkdirSync } from "node:fs";
+import { readFileSync as fsReadFileSync } from "node:fs";
 /*
  * @module shared/owner-coordination/activation-protocol
  * Owner-wide opt-in marker for Session activation protocol rollout.
@@ -42,9 +47,9 @@ export function getActivationProtocolMarkerPath(dbPath: string) {
 
 function readMarker(markerPath: string): ActivationProtocolMarker | null {
     try {
-        return JSON.parse(Deno.readTextFileSync(markerPath));
+        return JSON.parse(fsReadFileSync(markerPath, "utf8"));
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) return null;
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
         return { invalid: true };
     }
 }
@@ -118,15 +123,15 @@ export function acknowledgeActivationProtocol(
         null,
         2,
     ) + "\n";
-    Deno.mkdirSync(dirname(markerPath), { recursive: true, mode: 0o700 });
+    fsMkdirSync(dirname(markerPath), { recursive: true, mode: 0o700 });
     const temporaryPath = `${markerPath}.${crypto.randomUUID()}.tmp`;
-    Deno.writeTextFileSync(temporaryPath, body, { mode: 0o600 });
+    fsWriteFileSync(temporaryPath, body, { mode: 0o600 });
     try {
-        Deno.chmodSync(temporaryPath, 0o600);
+        fsChmodSync(temporaryPath, 0o600);
     } catch {
         // Best effort on filesystems without chmod.
     }
-    Deno.renameSync(temporaryPath, markerPath);
+    fsRenameSync(temporaryPath, markerPath);
     return getActivationProtocolStatus(database);
 }
 

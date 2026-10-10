@@ -1,3 +1,5 @@
+import { captureForegroundProcess } from "../captured-process.ts";
+import { realpath as fsRealpath } from "node:fs/promises";
 import { effectiveDeliveryBranch } from "./plan-branch.ts";
 /**
  * Fail-closed resolver for Workflow Validation execution context.
@@ -113,8 +115,8 @@ export interface ResolveValidationExecutionContextOptions {
 }
 
 async function runGit(cwd: string, args: string[]): Promise<string> {
-    const command = new Deno.Command("git", { cwd, args, stdout: "piped", stderr: "piped" });
-    const output = await command.output();
+    const command = captureForegroundProcess("git", { cwd, args });
+    const output = await command;
     const stdout = new TextDecoder().decode(output.stdout).trim();
     const stderr = new TextDecoder().decode(output.stderr).trim();
     if (output.code !== 0) throw new Error(stderr || stdout || `git ${args.join(" ")} failed`);
@@ -166,7 +168,7 @@ function blocked(reason: string, message: string): BlockedValidationContext {
 async function realPath(value: string | undefined): Promise<string | undefined> {
     if (!isNonEmptyString(value)) return undefined;
     try {
-        return await Deno.realPath(String(value));
+        return await fsRealpath(String(value));
     } catch {
         return undefined;
     }

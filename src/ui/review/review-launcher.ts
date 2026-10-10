@@ -1,3 +1,5 @@
+import { captureForegroundProcess } from "../../shared/captured-process.ts";
+import process from "node:process";
 import type { SequenceReviewDocument } from "../../shared/workflow/sequence-review.ts";
 /**
  * @module ui/review/review-launcher
@@ -194,10 +196,10 @@ function installProcessExitCleanup(): void {
             const handler = (): void => {
                 void (async () => {
                     await stopActiveReviewSurfaces();
-                    Deno.exit(exitCode);
+                    process.exit(exitCode);
                 })();
             };
-            Deno.addSignalListener(signal, handler);
+            process.on(signal, handler);
             processExitCleanupSignalHandlers.push({ signal, handler });
         } catch {
             // Some platforms and test environments do not support all signals.
@@ -210,7 +212,7 @@ function uninstallProcessExitCleanup(): void {
     globalThis.removeEventListener("unload", stopActiveReviewSurfacesBestEffort);
     for (const { signal, handler } of processExitCleanupSignalHandlers) {
         try {
-            Deno.removeSignalListener(signal, handler);
+            process.off(signal, handler);
         } catch {
             // Best-effort cleanup for runtimes without signal support.
         }
@@ -247,12 +249,7 @@ interface CodeReviewStatus {
 async function loadCodeReviewStatus(cwd: string): Promise<CodeReviewStatus> {
     const empty: CodeReviewStatus = { stagedFiles: [], unstagedFiles: [], untrackedFiles: [] };
     try {
-        const output = await new Deno.Command("git", {
-            args: ["status", "--porcelain=v1", "-z"],
-            cwd,
-            stdout: "piped",
-            stderr: "null",
-        }).output();
+        const output = await captureForegroundProcess("git", { args: ["status", "--porcelain=v1", "-z"], cwd });
         if (!output.success) return empty;
         return parseGitPorcelainStatus(new TextDecoder().decode(output.stdout));
     } catch {

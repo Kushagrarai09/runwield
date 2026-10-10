@@ -1,3 +1,11 @@
+import { rename as fsRename } from "node:fs/promises";
+import {
+    chmod as fsChmod,
+    mkdir as fsMkdir,
+    readFile as fsReadFile,
+    rm as fsRm,
+    writeFile as fsWriteFile,
+} from "node:fs/promises";
 /** @module shared/collaboration/secrets */
 
 import { dirname, join } from "@std/path";
@@ -82,10 +90,12 @@ async function resolveSecretStorePath(location) {
 export async function readSecretStore(location) {
     const path = await resolveSecretStorePath(location);
     try {
-        const raw = await Deno.readTextFile(path);
+        const raw = await fsReadFile(path, "utf8");
         return normalizeSecretStore(JSON.parse(raw));
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) return { schemaVersion: SECRET_STORE_SCHEMA_VERSION, records: {} };
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+            return { schemaVersion: SECRET_STORE_SCHEMA_VERSION, records: {} };
+        }
         throw new Error(`Unable to read collaboration secret store: ${redactSecrets(error)}`);
     }
 }
@@ -97,21 +107,21 @@ export async function readSecretStore(location) {
 export async function writeSecretStore(location, document) {
     const path = await resolveSecretStorePath(location);
     const normalized = normalizeSecretStore(document);
-    await Deno.mkdir(dirname(path), { recursive: true });
+    await fsMkdir(dirname(path), { recursive: true });
     const tempPath = `${path}.${crypto.randomUUID()}.tmp`;
     const content = `${JSON.stringify(normalized, null, 2)}\n`;
     try {
-        await Deno.writeTextFile(tempPath, content, { mode: 0o600 });
+        await fsWriteFile(tempPath, content, { mode: 0o600 });
         try {
-            await Deno.chmod(tempPath, 0o600);
+            await fsChmod(tempPath, 0o600);
         } catch { /* best effort */ }
-        await Deno.rename(tempPath, path);
+        await fsRename(tempPath, path);
         try {
-            await Deno.chmod(path, 0o600);
+            await fsChmod(path, 0o600);
         } catch { /* best effort */ }
     } catch (error) {
         try {
-            await Deno.remove(tempPath);
+            await fsRm(tempPath);
         } catch { /* ignore cleanup */ }
         throw new Error(`Unable to write collaboration secret store: ${redactSecrets(error)}`);
     }
@@ -337,7 +347,7 @@ export function normalizeSecretStore(value) {
  */
 export async function ensureProjectSecretStoreIgnored(projectRoot) {
     const layout = await enterProjectRuntime(projectRoot);
-    await Deno.mkdir(layout.primary.internalRoot, { recursive: true });
+    await fsMkdir(layout.primary.internalRoot, { recursive: true });
     await ensureRunWieldOwnedGitignoreBlock(layout.primary.checkoutRoot);
 }
 

@@ -1,3 +1,4 @@
+import process from "node:process";
 import { parseArgs } from "@std/cli/parse-args";
 import { COMMAND_NAMES } from "../registry.js";
 import { printCommandHelp } from "../help/index.ts";
@@ -27,7 +28,7 @@ export async function runOnboardCommand(argv: string[], options: OnboardCommandO
         return;
     }
 
-    if (!Deno.stdin.isTerminal() || !Deno.stdout.isTerminal()) {
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
         console.error("[RunWield] wld onboard requires an interactive terminal.");
         return;
     }

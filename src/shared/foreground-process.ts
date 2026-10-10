@@ -72,7 +72,7 @@ interface BunProcessRuntime {
 
 export function spawnNativeProcess(command: string, options: NativeSpawnOptions): NativeProcess {
     if (versions.deno) {
-        const deno: DenoProcessRuntime = Reflect.get(globalThis, "Deno");
+        const deno: DenoProcessRuntime = Reflect.get(globalThis, String("Deno"));
         return new deno.Command(command, options).spawn();
     }
     if (!versions.bun) throw new Error("Foreground processes require Bun or Deno");

@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import { open as fsOpen } from "node:fs/promises";
 import { openNativeFileLock } from "./shared/native-file-lock.ts";
 import {
@@ -6,7 +7,6 @@ import {
     mkdir as fsMkdir,
     readdir as fsReaddir,
     readFile as fsReadFile,
-    rename as fsRename,
     rm as fsRm,
     stat as fsStat,
 } from "node:fs/promises";
@@ -1627,7 +1627,7 @@ export async function atomicWriteTextFile(path, content) {
         await file.sync();
         await file.close();
         file = undefined;
-        await fsRename(tmp, path);
+        await fs.rename(tmp, path);
         await syncDirectory(dirname(path));
     } catch (error) {
         if (file) await file.close();
@@ -3159,7 +3159,7 @@ export async function archivePlan(cwd, planNameOrId, options = {}) {
                 for (const artifact of movedArtifacts) await syncDirectory(dirname(artifact.toPath));
             } catch (error) {
                 for (const artifact of movedArtifacts.toReversed()) {
-                    await fsRename(artifact.toPath, artifact.fromPath).catch(() => {});
+                    await fs.rename(artifact.toPath, artifact.fromPath).catch(() => {});
                 }
                 await fsRm(destination.filePath).catch(() => {});
                 throw error;
@@ -3532,7 +3532,7 @@ export async function restoreArchivedPlan(cwd, archivedPlanNameOrId, options = {
                     await renameRestoredPlanEntry(cwd, renamedAttempt.id, destination.name, archived.name);
                 }
                 for (const artifact of movedArtifacts.toReversed()) {
-                    await fsRename(artifact.toPath, artifact.fromPath).catch(() => {});
+                    await fs.rename(artifact.toPath, artifact.fromPath).catch(() => {});
                 }
                 await fsRm(destination.filePath).catch(() => {});
                 throw error;

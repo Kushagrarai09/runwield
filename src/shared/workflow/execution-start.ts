@@ -1,4 +1,6 @@
 // @ts-nocheck: extracted from checked JSDoc workflow.js; tightening types is out of scope for this structural split.
+import { captureForegroundProcess } from "../captured-process.ts";
+import { stat as fsStat } from "node:fs/promises";
 import { prepareEditedSiblingPlans } from "./epic-sibling-drafts.ts";
 import { CLI_BIN } from "../../constants.js";
 import {
@@ -80,14 +82,9 @@ async function runCymbalIndexForExecutionWorktree(hostedSession, worktreePath) {
     emitIndexingExecutionWorktree(hostedSession);
     let output;
     try {
-        output = await new Deno.Command("cymbal", {
-            args: ["index", "."],
-            cwd: worktreePath,
-            stdout: "piped",
-            stderr: "piped",
-        }).output();
+        output = await captureForegroundProcess("cymbal", { args: ["index", "."], cwd: worktreePath });
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) {
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") {
             emitExecutionWorktreeIndexWarning(hostedSession, "the cymbal executable was not found.");
             return;
         }
@@ -805,8 +802,8 @@ export async function startActiveExecutionWorkflow(
                 );
             }
             {
-                const worktreeStat = await Deno.stat(workflow.executionCwd).catch(() => null);
-                if (!worktreeStat?.isDirectory) {
+                const worktreeStat = await fsStat(workflow.executionCwd).catch(() => null);
+                if (!worktreeStat?.isDirectory()) {
                     throw new Error(
                         `Execution preparation worktree is not attached for ${planName}: ${workflow.executionCwd}`,
                     );

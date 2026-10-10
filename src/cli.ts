@@ -1,3 +1,4 @@
+import { isStandaloneExecutable } from "./shared/runtime-identity.ts";
 /**
  * @module cli
  * RunWield — Plan-by-Default Coding Harness
@@ -56,7 +57,7 @@ if (cliArgs[0] !== "remote") exposeBundledHelpersSync();
 
 if (!isProtocolOnlyStartup(cliArgs)) initializeAgentBrowserSession();
 
-if (versions.deno && Reflect.get(globalThis, "Deno").build.standalone) {
+if (versions.deno && isStandaloneExecutable()) {
     Object.defineProperty(globalThis, "require", {
         value: createRequire(import.meta.url),
         configurable: true,

@@ -2251,7 +2251,12 @@ async function runComposedTuiScenario(scenario, options) {
                 } else if (typed.type === "uiPresentationState") {
                     composition.uiAPI.setBusy?.(true);
                     events.push("ui:spinner:busy");
-                    composition.uiAPI.setManagedSyncStatus?.({ status: "stale", owningSurfaceKind: "tui" });
+                    composition.uiAPI.setManagedSyncStatus?.({
+                        status: "degraded",
+                        localGeneration: 1,
+                        latestGeneration: 2,
+                        owningSurfaceKind: "tui",
+                    });
                     events.push("ui:managed-sync:stale");
                     composition.uiAPI.appendQueuedMessage?.("golden-queued", "Queued steering message");
                     events.push("ui:queued-steering:add");

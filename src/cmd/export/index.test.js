@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assertEquals } from "@std/assert";
 import { runExportCommand } from "./index.ts";
 
@@ -22,7 +23,7 @@ function makeContext(exportSession) {
     };
 }
 
-Deno.test("runExportCommand exports through SessionRuntime", async () => {
+test("runExportCommand exports through SessionRuntime", async () => {
     const fixture = makeContext(
         /** @param {string} _id @param {string} outputPath */
         (_id, outputPath) => Promise.resolve(outputPath),
@@ -33,7 +34,7 @@ Deno.test("runExportCommand exports through SessionRuntime", async () => {
     assertEquals(fixture.wasCleared(), true);
 });
 
-Deno.test("runExportCommand reports Runtime export errors", async () => {
+test("runExportCommand reports Runtime export errors", async () => {
     const fixture = makeContext(() => Promise.reject(new Error("export failed")));
     assertEquals(await runExportCommand([], fixture.context), "failed");
 

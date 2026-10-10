@@ -1,4 +1,5 @@
 import { versions } from "node:process";
+import { isStandaloneExecutable } from "../../shared/runtime-identity.ts";
 import { Worker } from "node:worker_threads";
 import { resizeImage } from "@earendil-works/pi-coding-agent";
 import { encodeCreatedImage } from "../../shared/image-generation.ts";
@@ -37,7 +38,7 @@ export async function checkPackagedImageResize(): Promise<void> {
     // A four-by-two red PNG, small enough to keep the package check self-contained.
     const png = "iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAIAAADwyuo0AAAAEElEQVR4nGP4z8AARwzIHABvqgf5gNwAKAAAAABJRU5ErkJggg==";
     const bytes = Uint8Array.from(atob(png), (character) => character.charCodeAt(0));
-    if (versions.bun && Reflect.get(globalThis, "Bun").isStandaloneExecutable) await checkBunWorker(bytes);
+    if (versions.bun && isStandaloneExecutable()) await checkBunWorker(bytes);
     const result = await resizeImage(bytes, "image/png", { maxWidth: 2, maxHeight: 2 });
     if (
         !result?.wasResized || result.originalWidth !== 4 || result.originalHeight !== 2 ||

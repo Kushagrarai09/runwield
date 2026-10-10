@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createAssistantMessageEventStream, normalizeContext } from "@earendil-works/pi-ai";
 import { formatProviderError, normalizeProviderStream } from "./provider-errors.ts";
@@ -36,7 +37,7 @@ const partial = {
     stopReason: "pending",
 };
 
-Deno.test("standalone EOF keeps partial response and final result in sync", async () => {
+test("standalone EOF keeps partial response and final result in sync", async () => {
     const source = createAssistantMessageEventStream();
     const stream = normalizeProviderStream(() => source, model, context);
     source.push({ type: "start", partial });
@@ -64,7 +65,7 @@ Deno.test("standalone EOF keeps partial response and final result in sync", asyn
 });
 
 for (const failureKind of ["sync", "rejected", "iterator"]) {
-    Deno.test(`${failureKind} provider failure settles with the last partial reply`, async () => {
+    test(`${failureKind} provider failure settles with the last partial reply`, async () => {
         const source = createAssistantMessageEventStream();
         if (failureKind === "iterator") {
             /** @type {import('@earendil-works/pi-ai').AssistantMessage} */
@@ -104,7 +105,7 @@ for (const failureKind of ["sync", "rejected", "iterator"]) {
     });
 }
 
-Deno.test("only an isolated EOF is normalized; abort and successful text are unchanged", async () => {
+test("only an isolated EOF is normalized; abort and successful text are unchanged", async () => {
     for (const diagnostic of ["401 Unauthorized: Unexpected EOF", "insufficient_quota EOF", "invalid JSON EOF"]) {
         const source = createAssistantMessageEventStream();
         const stream = normalizeProviderStream(() => source, model, context);
@@ -143,7 +144,7 @@ Deno.test("only an isolated EOF is normalized; abort and successful text are unc
     assertEquals((await good.result()).content, [{ type: "text", text: "Unexpected EOF" }]);
 });
 
-Deno.test("display text is safe and specific without exposing the provider body", () => {
+test("display text is safe and specific without exposing the provider body", () => {
     const cases = [
         ["Unexpected EOF", "stopped responding"],
         ["socket hang up", "stopped responding"],
@@ -163,7 +164,7 @@ Deno.test("display text is safe and specific without exposing the provider body"
     }
 });
 
-Deno.test("provider receives the original model, context, options and cancellation signal once", async () => {
+test("provider receives the original model, context, options and cancellation signal once", async () => {
     const controller = new AbortController();
     const options = { signal: controller.signal, temperature: 0.4 };
     const source = createAssistantMessageEventStream();
@@ -185,7 +186,7 @@ Deno.test("provider receives the original model, context, options and cancellati
     assertEquals(calls, 1);
 });
 
-Deno.test("final EOF cache usage is retained when ordinary token counters are zero", async () => {
+test("final EOF cache usage is retained when ordinary token counters are zero", async () => {
     const source = createAssistantMessageEventStream();
     const stream = normalizeProviderStream(() => source, model, context);
     source.push({ type: "start", partial });

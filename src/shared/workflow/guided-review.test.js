@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assertEquals } from "@std/assert";
 import {
     buildFallbackGuidedReviewExplainer,
@@ -37,7 +38,7 @@ index 1111111..2222222 100644
 +export const more = true;
 `;
 
-Deno.test("recommendGuidedReview scores complexity and cross-area diffs", () => {
+test("recommendGuidedReview scores complexity and cross-area diffs", () => {
     const recommendation = recommendGuidedReview({
         planAttrs: { complexity: "HIGH", dependencies: ["child"] },
         planContent: "frontend UI flow",
@@ -50,7 +51,7 @@ Deno.test("recommendGuidedReview scores complexity and cross-area diffs", () => 
     assertEquals(recommendation.stats.meaningfulAreas.length >= 3, true);
 });
 
-Deno.test("recommendGuidedReview applies child Planned Change and visual path signals precisely", () => {
+test("recommendGuidedReview applies child Planned Change and visual path signals precisely", () => {
     const projectRecommendation = recommendGuidedReview({
         planAttrs: { classification: "PROJECT", dependencies: ["child"], parentPlan: "epic" },
         planContent: "backend change",
@@ -69,20 +70,20 @@ Deno.test("recommendGuidedReview applies child Planned Change and visual path si
     assertEquals(featureRecommendation.reasons.includes("visual or interactive change"), true);
 });
 
-Deno.test("buildGuidedReviewPolicy auto-starts for auto recommendations", () => {
+test("buildGuidedReviewPolicy auto-starts for auto recommendations", () => {
     const recommendation = recommendGuidedReview({ planAttrs: { complexity: "HIGH" }, diffText: DIFF });
     assertEquals(buildGuidedReviewPolicy("auto", recommendation).autoStart, true);
     assertEquals(buildGuidedReviewPolicy("none", recommendation).autoStart, false);
 });
 
-Deno.test("buildFallbackGuidedReviewExplainer creates structured explainer blocks", () => {
+test("buildFallbackGuidedReviewExplainer creates structured explainer blocks", () => {
     const guide = buildFallbackGuidedReviewExplainer({ diffText: DIFF });
     assertEquals(guide.schemaVersion, "1.0");
     assertEquals(guide.sections[0].blocks.some((block) => block.type === "mermaid"), true);
     assertEquals(guide.sections[0].blocks.some((block) => block.type === "diff"), true);
 });
 
-Deno.test("validateGuidedReviewExplainer adds coverage fallbacks for omitted changed files", () => {
+test("validateGuidedReviewExplainer adds coverage fallbacks for omitted changed files", () => {
     const result = validateGuidedReviewExplainer({
         schemaVersion: "1.0",
         title: "Partial guide",
@@ -95,7 +96,7 @@ Deno.test("validateGuidedReviewExplainer adds coverage fallbacks for omitted cha
     assertEquals(result.value.everythingElse, [{ file: "src/b.js" }]);
 });
 
-Deno.test("validateGuidedReviewExplainer rejects unsafe refs and widgets", () => {
+test("validateGuidedReviewExplainer rejects unsafe refs and widgets", () => {
     const result = validateGuidedReviewExplainer({
         schemaVersion: "1.0",
         title: "Bad guide",
@@ -116,7 +117,7 @@ Deno.test("validateGuidedReviewExplainer rejects unsafe refs and widgets", () =>
     assertEquals(result.errors.some((/** @type {string} */ error) => error.includes("role must be one of")), true);
 });
 
-Deno.test("buildGuidedReviewPrompt asks for strict JSON and Plan-grounded changed-file refs", () => {
+test("buildGuidedReviewPrompt asks for strict JSON and Plan-grounded changed-file refs", () => {
     const prompt = buildGuidedReviewPrompt({
         diffText: DIFF,
         gitRef: "test",

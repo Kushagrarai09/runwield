@@ -11,7 +11,9 @@ export interface VersionCommandOptions {
     uiAPI?: UiAPI;
 }
 
-const TARGET_ARCH: string = versions.deno ? Reflect.get(globalThis, "Deno").build.target : `${arch}-${platform}`;
+const TARGET_ARCH: string = versions.deno
+    ? Reflect.get(globalThis, String("Deno")).build.target
+    : `${arch}-${platform}`;
 
 /**
  * Run the version command — prints "runwield <version> (<target-triple>)" to stdout,

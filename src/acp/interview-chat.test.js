@@ -1,7 +1,8 @@
+import { test } from "node:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { formatInterviewQuestion, parseInterviewReply } from "./interview-chat.ts";
 
-Deno.test("interview chat only matches a unique exact label or displayed number", () => {
+test("interview chat only matches a unique exact label or displayed number", () => {
     /** @type {import('../shared/session/session-runtime-interactions.js').RuntimeInteractionRequest} */
     const interaction = {
         type: "select",

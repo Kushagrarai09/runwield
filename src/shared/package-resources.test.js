@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assertEquals } from "@std/assert";
 import {
     countPackageResourcesForSource,
@@ -5,7 +6,7 @@ import {
     getPackagePromptTemplatePaths,
 } from "./package-resources.ts";
 
-Deno.test("filterEnabledPackagePrompts returns enabled package prompts only", () => {
+test("filterEnabledPackagePrompts returns enabled package prompts only", () => {
     const resources = filterEnabledPackagePrompts(
         /** @type {any} */ ({
             themes: [],
@@ -34,7 +35,7 @@ Deno.test("filterEnabledPackagePrompts returns enabled package prompts only", ()
     assertEquals(getPackagePromptTemplatePaths(resources), ["/pkg/prompts/explain.md"]);
 });
 
-Deno.test("countPackageResourcesForSource separates package resource types", () => {
+test("countPackageResourcesForSource separates package resource types", () => {
     const resolved = {
         themes: [{
             path: "/pkg/themes/a.json",

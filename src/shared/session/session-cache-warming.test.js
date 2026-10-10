@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assert, assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
@@ -15,7 +16,7 @@ function makeWarmingEligible(session) {
     model.cost = { input: 100, output: 1, cacheRead: 1, cacheWrite: 100 };
 }
 
-Deno.test("RunWield cache policy prevents an otherwise eligible Pi warming request", async () => {
+test("RunWield cache policy prevents an otherwise eligible Pi warming request", async () => {
     await withRuntimeCommandFixture(
         "runwield-cache-warming-",
         async ({ projectRoot, setModelResponseFactories }) => {

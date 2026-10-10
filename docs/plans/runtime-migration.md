@@ -555,11 +555,46 @@ credentials are changed. New socket tests exercise one-byte input, bounded heade
 listener closure; the SFTP authentication test now pipelines the first protocol packet with its credential.
 
 The first Bun subset passed 12 of 13 files; the remote cache fixture needed its copied metadata helper linked back to
-its real dependency resolution root. Full source type checking and all Deno CI pre-test gates pass. The complete Deno suite passed 639 of 641 files in
-678.9 seconds (`.ci-cache/remote-full-ci.log`); two copied-source fixtures lacked newly imported dependencies. Both pass
-with their dependency lists repaired (`.ci-cache/remote-fixtures-deno.log`, 5.2 seconds). The final macOS workspace
-build, scoped Bun type gate and all 103 registered test files pass (`.ci-cache/remote-ci-bun-final.log`). Linux also
-passes all 103 registered files (`.ci-cache/linux-remote-suite.log`); the subsequent fixture dependency-list additions
-were checked under Deno and macOS Bun. All three independent axes approve, including those fixture corrections.
-Tests review T20 strengthened helper cancellation to prove the child was alive before cancellation and absent afterward,
-with a deadline well before its natural exit. This is not a completed cutover claim.
+its real dependency resolution root. Full source type checking and all Deno CI pre-test gates pass. The complete Deno
+suite passed 639 of 641 files in 678.9 seconds (`.ci-cache/remote-full-ci.log`); two copied-source fixtures lacked newly
+imported dependencies. Both pass with their dependency lists repaired (`.ci-cache/remote-fixtures-deno.log`, 5.2
+seconds). The final macOS workspace build, scoped Bun type gate and all 103 registered test files pass
+(`.ci-cache/remote-ci-bun-final.log`). Linux also passes all 103 registered files (`.ci-cache/linux-remote-suite.log`);
+the subsequent fixture dependency-list additions were checked under Deno and macOS Bun. All three independent axes
+approve, including those fixture corrections. Tests review T20 strengthened helper cancellation to prove the child was
+alive before cancellation and absent afterward, with a deadline well before its natural exit. This is not a completed
+cutover claim.
+
+## Remaining application runtime and broader qualification (in progress, 2026-10-10)
+
+The next slice ports remaining production command, workflow and UI filesystem/process/terminal paths to the portable
+adapters and Node APIs. This includes ACP stdin, guided-review subprocesses, clipboard operations, validation capture,
+Git batch input, image output staging and recovery journals. Existing HOME/cwd access stays lazy and fixture mutation
+stays serialized. The packaged image smoke check now uses the compiled-runtime identity detector to require Bun's
+embedded image worker explicitly. Deno remains the default release lane.
+
+The Bun type gate now includes the production application graph, preserving the previously checked foundation/tests. SDK
+aliases use their shipped declarations for type checking; the runtime alias map remains unchanged. The pinned
+proper-lockfile declaration package is recorded in both lockfiles. Third-party declaration checking is skipped because
+the installed Bun/Node/Astro declarations conflict; application source checking remains strict. Existing JSDoc modules
+now export their types explicitly; stale UI fixture values now use the actual runtime event contract.
+
+The isolated Bun registry first expanded from 103 to 255 files. The initial run passed 227; shared fixtures still used
+Deno APIs. After porting those fixtures, all 255 pass under macOS and Linux ARM64
+(`.ci-cache/application-ci-bun-second.log`, `.ci-cache/linux-application-suite.log`). The macOS run also passes the
+Workspace build and expanded Bun type gate. The complete Deno source/test type check and lint pass.
+
+Independent review found and confirmed fixes for three regressions: S-APP-1/S7 moved opening a missing Plan-lock
+directory inside Doctor's ENOENT handler; S8 preserves the prior foundation/test type roots with explicit `files`; S9
+preserves Deno's native cancellable stdin behind the portable ACP adapter because its Node stdin cannot release a
+pending read. New actual-process ACP regressions reproduced the Deno shutdown failure before the fix and pass afterward
+for SIGINT and SIGTERM while client stdin remains open (`.ci-cache/acp-shutdown-deno-fixed.log`). Doctor's new
+real-directory regression and existing tests pass (`.ci-cache/doctor-repair-deno.log`). All three axes approve the final
+changes. These regressions bring the Bun registry to 257 files. The final macOS Workspace build, expanded types and all
+257 files pass (`.ci-cache/application-ci-bun-final.log`). Full Deno CI passed 639 of 641 selected files in 762.6
+seconds (`.ci-cache/application-full-ci.log`); two filesystem-observation tests required their production callers to use
+the same default Node filesystem boundary patched by the fixtures. Both pass after that correction
+(`.ci-cache/application-fs-observation-deno.log`, 11.7 seconds). The two newly added Doctor/ACP files pass separately as
+recorded above. All three reviewers approved the filesystem correction. Final source types, lint and the zero-seam gate
+pass. Linux's final 257-file run and rebuilt standalone qualification are pending. No cutover or all-platform
+qualification is claimed.

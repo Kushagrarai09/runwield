@@ -1,3 +1,8 @@
+import { spawnNativeProcess } from "../../../../shared/foreground-process.ts";
+import { isStandaloneExecutable } from "../../../../shared/runtime-identity.ts";
+import { captureForegroundProcess } from "../../../../shared/captured-process.ts";
+import { getCwd } from "../../../../constants.js";
+import process from "node:process";
 /** Review-surface Guided Review agent/job routes. */
 
 import {
@@ -387,11 +392,11 @@ function parseJsonFromModel(raw) {
 }
 
 function detectGuideProvider() {
-    const configured = Deno.env.get("RUNWIELD_GUIDED_REVIEW_COMMAND");
+    const configured = process.env["RUNWIELD_GUIDED_REVIEW_COMMAND"];
     if (configured) {
-        return { provider: "custom", model: Deno.env.get("RUNWIELD_GUIDED_REVIEW_MODEL") || "configured-command" };
+        return { provider: "custom", model: process.env["RUNWIELD_GUIDED_REVIEW_MODEL"] || "configured-command" };
     }
-    return { provider: "wld", model: Deno.env.get("RUNWIELD_GUIDED_REVIEW_MODEL") || "wld" };
+    return { provider: "wld", model: process.env["RUNWIELD_GUIDED_REVIEW_MODEL"] || "wld" };
 }
 
 /** @param {ReadableStream<Uint8Array>} stream */
@@ -506,23 +511,24 @@ async function writeGuidePrompt(stdin, prompt) {
 
 /** @param {string} prompt @param {AbortSignal} signal @param {string} cwd @param {{ onUsage?: (usage: GuideUsageTotals) => void }} [progress] */
 export async function runConfiguredGuideCommand(prompt, signal, cwd, progress = {}) {
-    const configured = Deno.env.get("RUNWIELD_GUIDED_REVIEW_COMMAND");
+    const configured = process.env["RUNWIELD_GUIDED_REVIEW_COMMAND"];
     const command = configured ? shellCommand(configured) : await resolveRunWieldGuideCommand(cwd);
     const provider = configured ? "custom" : "wld";
-    const child = new Deno.Command(command.command, {
+    const child = spawnNativeProcess(command.command, {
         args: command.args,
         stdin: "piped",
         stdout: "piped",
         stderr: "piped",
         cwd,
         signal,
-    }).spawn();
+    });
     const results = await Promise.allSettled([
         child.status,
         readStreamText(child.stdout),
         readGuideStderr(child.stderr, provider === "wld", progress),
         writeGuidePrompt(child.stdin, prompt),
     ]);
+    signal.throwIfAborted();
     const [statusResult, stdoutResult, stderrResult, inputResult] = results;
     if (statusResult.status === "rejected") throw statusResult.reason;
     if (stdoutResult.status === "rejected") throw stdoutResult.reason;
@@ -536,7 +542,7 @@ export async function runConfiguredGuideCommand(prompt, signal, cwd, progress = 
         stdout: stdoutResult.value,
         stderr: stderrResult.value.stderr,
         provider: stderrResult.value.metadata?.provider || provider,
-        model: stderrResult.value.metadata?.model || Deno.env.get("RUNWIELD_GUIDED_REVIEW_MODEL") ||
+        model: stderrResult.value.metadata?.model || process.env["RUNWIELD_GUIDED_REVIEW_MODEL"] ||
             (configured ? "configured-command" : "wld"),
         thinkingLevel: stderrResult.value.metadata?.thinkingLevel,
         ...(stderrResult.value.usage
@@ -549,16 +555,21 @@ export async function runConfiguredGuideCommand(prompt, signal, cwd, progress = 
 async function resolveRunWieldGuideCommand(cwd) {
     if (await commandExists("wld")) return { command: "wld", args: ["guided-review"] };
     return {
-        command: Deno.execPath(),
-        args: ["run", "-A", "--unstable-no-legacy-abort", "src/cli.ts", "guided-review"],
+        command: process.execPath,
+        args: isStandaloneExecutable() ? ["guided-review"] : [
+            "run",
+            ...(process.versions.deno ? ["-A", "--unstable-no-legacy-abort"] : []),
+            "src/cli.ts",
+            "guided-review",
+        ],
         cwd,
     };
 }
 
 /** @param {string} command */
 async function commandExists(command) {
-    const which = Deno.build.os === "windows" ? "where" : "which";
-    const output = await new Deno.Command(which, { args: [command], stdout: "null", stderr: "null" }).output().catch(
+    const which = process.platform === "win32" ? "where" : "which";
+    const output = await captureForegroundProcess(which, { args: [command], cwd: getCwd() }).catch(
         () => ({ success: false }),
     );
     return Boolean(output.success);
@@ -566,7 +577,7 @@ async function commandExists(command) {
 
 /** @param {string} configured */
 function shellCommand(configured) {
-    return Deno.build.os === "windows"
+    return process.platform === "win32"
         ? { command: "cmd", args: ["/c", configured] }
         : { command: "sh", args: ["-lc", configured] };
 }

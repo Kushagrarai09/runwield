@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assert, assertEquals, assertStrictEquals, assertStringIncludes } from "@std/assert";
 import {
     fauxAssistantMessage,
@@ -43,7 +44,7 @@ async function waitForReviewSurface(surface: Promise<string>, revision: number):
     }
 }
 
-Deno.test("reopened saved Epic chat hands feedback to Architect and shows its model-authored revision", async () => {
+test("reopened saved Epic chat hands feedback to Architect and shows its model-authored revision", async () => {
     await withRuntimeCommandFixture(
         "reopen-epic-handoff-",
         async ({ homeDir, projectRoot, setModelResponseFactories }) => {

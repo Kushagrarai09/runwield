@@ -94,7 +94,7 @@ function lockError(errno: number): NodeJS.ErrnoException {
 /** Opening does not acquire a lock or truncate an existing lock file. */
 export function openNativeFileLock(path: string, create: boolean | "exclusive" = true): NativeFileLock {
     if (versions.deno) {
-        const deno: DenoLockRuntime = Reflect.get(globalThis, "Deno");
+        const deno: DenoLockRuntime = Reflect.get(globalThis, String("Deno"));
         let file: DenoLockFile;
         try {
             file = deno.openSync(path, {

@@ -266,7 +266,7 @@ const IS_TEST_REALM = (() => {
         // Keep Deno's per-realm main module during the transition. Bun's test
         // preload supplies the stronger before-import sandbox check as well.
         /** @type {{ mainModule?: string } | undefined} */
-        const deno = Reflect.get(globalThis, "Deno");
+        const deno = Reflect.get(globalThis, String("Deno"));
         if (deno?.mainModule) return isTestModulePath(new URL(deno.mainModule).pathname);
         return isTestModulePath(argv[1] || "") || Boolean(versions.bun && argv[1] === "test") ||
             Boolean(readOptionalEnv("NODE_TEST_CONTEXT"));

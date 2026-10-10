@@ -1,3 +1,4 @@
+import { test } from "node:test";
 // THROWAWAY timing harness for the Shift+Tab thinking-level latency. Deleted after diagnosis.
 import { assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxText } from "@earendil-works/pi-ai";
@@ -23,7 +24,7 @@ async function waitFor(
     throw new Error(`Timed out waiting for ${description}.`);
 }
 
-Deno.test("measure shift+tab thinking-level latency before and after activation", async () => {
+test("measure shift+tab thinking-level latency before and after activation", async () => {
     await withRuntimeCommandFixture("debug-thinking-timing-", async ({ setModelResponseFactory }) => {
         const response = () => fauxAssistantMessage(fauxText("Fixture response."));
         setModelResponseFactory(response);

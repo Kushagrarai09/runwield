@@ -1,10 +1,11 @@
+import { test } from "node:test";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { client, ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import { withRuntimeCommandFixture } from "../cmd/testing/runtime-command-fixture.ts";
 import { startRunWieldAcpServer } from "./server.js";
 
-Deno.test("ACP SDK 1.4.0 client receives task output after its prompt ends", async () => {
+test("ACP SDK 1.4.0 client receives task output after its prompt ends", async () => {
     await withRuntimeCommandFixture("acp-sdk-background-", async ({ projectRoot, setModelResponseFactories }) => {
         setModelResponseFactories([
             () =>
@@ -62,7 +63,7 @@ Deno.test("ACP SDK 1.4.0 client receives task output after its prompt ends", asy
     });
 });
 
-Deno.test("ACP SDK Stop cancels idle background work without a late result turn", async () => {
+test("ACP SDK Stop cancels idle background work without a late result turn", async () => {
     await withRuntimeCommandFixture("acp-sdk-stop-", async ({ projectRoot, setModelResponseFactories }) => {
         let modelCalls = 0;
         setModelResponseFactories([

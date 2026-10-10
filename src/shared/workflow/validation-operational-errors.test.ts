@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assertEquals, assertLessOrEqual, assertStrictEquals } from "@std/assert";
 
 import {
@@ -6,7 +7,7 @@ import {
     sanitizeOperationalMessage,
 } from "./validation-operational-errors.ts";
 
-Deno.test("classifies typed provider failures without retrying unknown legacy text", () => {
+test("classifies typed provider failures without retrying unknown legacy text", () => {
     const rateLimit = classifyValidationOperationalError({
         source: "provider",
         kind: "rate_limited",
@@ -28,14 +29,14 @@ Deno.test("classifies typed provider failures without retrying unknown legacy te
     assertEquals(legacy.recoveryClass, "fatal");
 });
 
-Deno.test("bounds Retry-After values", () => {
+test("bounds Retry-After values", () => {
     assertEquals(parseBoundedRetryAfterMs(5, 60_000), 5000);
     assertEquals(parseBoundedRetryAfterMs(-1, 60_000), undefined);
     assertEquals(parseBoundedRetryAfterMs(120, 60_000), undefined);
     assertLessOrEqual(parseBoundedRetryAfterMs(new Date(Date.now() + 1000), 60_000) || 0, 1000);
 });
 
-Deno.test("classifies reviewer protocol, missing state, git, auth, permission, and policy failures", () => {
+test("classifies reviewer protocol, missing state, git, auth, permission, and policy failures", () => {
     assertEquals(
         classifyValidationOperationalError({
             source: "reviewer_protocol",
@@ -108,7 +109,7 @@ Deno.test("classifies reviewer protocol, missing state, git, auth, permission, a
     );
 });
 
-Deno.test("sanitizes operational text before metrics or user output", () => {
+test("sanitizes operational text before metrics or user output", () => {
     const message = sanitizeOperationalMessage(`token\n${"x".repeat(700)}`);
     assertStrictEquals(message.includes("\n"), false);
     assertLessOrEqual(message.length, 500);

@@ -1,3 +1,5 @@
+import { opendir as fsOpendir } from "node:fs/promises";
+import { lstat as fsLstat } from "node:fs/promises";
 /**
  * @module shared/project-state
  * Shared project-state detection and user-facing text.
@@ -35,8 +37,8 @@ function isDotPrefixedSegment(name: string) {
  */
 export async function isEmptyProjectDirectory(cwd: string) {
     try {
-        const rootInfo = await Deno.lstat(cwd);
-        if (!rootInfo.isDirectory || rootInfo.isSymlink) return false;
+        const rootInfo = await fsLstat(cwd);
+        if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) return false;
     } catch {
         return false;
     }
@@ -48,7 +50,7 @@ export async function isEmptyProjectDirectory(cwd: string) {
     async function containsMeaningfulFile(dir: string) {
         let entries;
         try {
-            entries = Deno.readDir(dir);
+            entries = await fsOpendir(dir);
         } catch {
             return true;
         }
@@ -60,13 +62,13 @@ export async function isEmptyProjectDirectory(cwd: string) {
                 const path = join(dir, entry.name);
                 let info;
                 try {
-                    info = await Deno.lstat(path);
+                    info = await fsLstat(path);
                 } catch {
                     return true;
                 }
 
-                if (info.isFile && info.size > 0) return true;
-                if (info.isDirectory && !info.isSymlink) {
+                if (info.isFile() && info.size > 0) return true;
+                if (info.isDirectory() && !info.isSymbolicLink()) {
                     if (await containsMeaningfulFile(path)) return true;
                 }
             }
