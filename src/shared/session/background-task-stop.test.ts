@@ -1,10 +1,11 @@
+import { test } from "node:test";
 import { assert, assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import { withRuntimeCommandFixture } from "../../cmd/testing/runtime-command-fixture.ts";
 import { createSessionRuntime } from "./session-runtime.ts";
 import { RuntimeEventTypes } from "./session-runtime-events.js";
 
-Deno.test("Stop while the root is idle cancels independent work without a late model turn", async () => {
+test("Stop while the root is idle cancels independent work without a late model turn", async () => {
     await withRuntimeCommandFixture("background-stop-", async ({ projectRoot, setModelResponseFactories }) => {
         let modelCalls = 0;
         setModelResponseFactories([
@@ -56,7 +57,7 @@ Deno.test("Stop while the root is idle cancels independent work without a late m
     });
 });
 
-Deno.test("Stop during generated turn acquisition prevents a late model request", async () => {
+test("Stop during generated turn acquisition prevents a late model request", async () => {
     await withRuntimeCommandFixture(
         "background-stop-acquisition-",
         async ({ projectRoot, setModelResponseFactories }) => {

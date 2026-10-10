@@ -1,9 +1,19 @@
+import {
+    mkdtemp as fsMkdtemp,
+    readFile as fsReadFile,
+    rm as fsRm,
+    stat as fsStat,
+    writeFile as fsWriteFile,
+} from "node:fs/promises";
+import { test } from "node:test";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { HostedSession } from "../shared/session/hosted-session.js";
 import { createBackgroundTaskTool } from "./background-task.ts";
 
-Deno.test("background_task starts real shell work and controls it through the owning Session", async () => {
-    const cwd = await Deno.makeTempDir();
+test("background_task starts real shell work and controls it through the owning Session", async () => {
+    const cwd = await fsMkdtemp(join(tmpdir(), "portable-fixture-"));
     const session = new HostedSession({ id: crypto.randomUUID(), cwd });
     const tool = createBackgroundTaskTool({ hostedSession: session, cwd, allowShellStart: true });
     try {
@@ -35,10 +45,10 @@ Deno.test("background_task starts real shell work and controls it through the ow
             await new Promise((resolve) => setTimeout(resolve, 10));
         }
         assertEquals(session.backgroundTasks.status(id).byte_count, 6);
-        assertEquals(await Deno.stat(marker).then(() => true, () => false), false);
-        await Deno.writeTextFile(release, "go");
+        assertEquals(await fsStat(marker).then(() => true, () => false), false);
+        await fsWriteFile(release, "go");
         await session.backgroundTasks.wait(id);
-        assertEquals(await Deno.readTextFile(marker), "complete");
+        assertEquals(await fsReadFile(marker, "utf8"), "complete");
         const result = await tool.execute(
             "status",
             { action: "status", task_id: id },
@@ -50,12 +60,12 @@ Deno.test("background_task starts real shell work and controls it through the ow
         assertEquals(result.details?.state, "completed");
     } finally {
         await session.backgroundTasks.cancelAllAndSuppress();
-        await Deno.remove(cwd, { recursive: true });
+        await fsRm(cwd, { recursive: true });
     }
 });
 
-Deno.test("background_task denies shell start without effective bash authority but permits task controls", async () => {
-    const cwd = await Deno.makeTempDir();
+test("background_task denies shell start without effective bash authority but permits task controls", async () => {
+    const cwd = await fsMkdtemp(join(tmpdir(), "portable-fixture-"));
     const session = new HostedSession({ id: crypto.randomUUID(), cwd });
     const tool = createBackgroundTaskTool({ hostedSession: session, cwd, allowShellStart: false });
     try {
@@ -93,12 +103,12 @@ Deno.test("background_task denies shell start without effective bash authority b
         );
     } finally {
         await session.backgroundTasks.cancelAllAndSuppress();
-        await Deno.remove(cwd, { recursive: true });
+        await fsRm(cwd, { recursive: true });
     }
 });
 
-Deno.test("restricted background starts share the foreground command policy without blocking controls", async () => {
-    const cwd = await Deno.makeTempDir({ prefix: "runwield-bg-restricted-" });
+test("restricted background starts share the foreground command policy without blocking controls", async () => {
+    const cwd = await fsMkdtemp(join(tmpdir(), "runwield-bg-restricted-"));
     const session = new HostedSession({ id: crypto.randomUUID(), cwd });
     const tool = createBackgroundTaskTool({
         hostedSession: session,
@@ -113,7 +123,7 @@ Deno.test("restricted background starts share the foreground command policy with
         assertEquals(denied.details, null);
         if (denied.content[0].type !== "text") throw new Error("Expected policy error");
         assertStringIncludes(denied.content[0].text, "report a blocker");
-        assertEquals(await Deno.stat(`${cwd}/sentinel`).then(() => true, () => false), false);
+        assertEquals(await fsStat(`${cwd}/sentinel`).then(() => true, () => false), false);
         const started = await call("start", "pwd");
         const id = started.details?.task_id ?? "";
         await session.backgroundTasks.wait(id);
@@ -134,6 +144,6 @@ Deno.test("restricted background starts share the foreground command policy with
         assertEquals(control.details?.state, "completed");
     } finally {
         await session.backgroundTasks.cancelAllAndSuppress();
-        await Deno.remove(cwd, { recursive: true });
+        await fsRm(cwd, { recursive: true });
     }
 });

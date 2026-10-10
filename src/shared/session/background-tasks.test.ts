@@ -1,10 +1,16 @@
+import { execPath, versions } from "node:process";
+import { captureForegroundProcess } from "../captured-process.ts";
+import { mkdtemp as fsMkdtemp, readFile as fsReadFile, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
+import { test } from "node:test";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { HostedSession } from "./hosted-session.js";
 import { BackgroundTasks } from "./background-tasks.ts";
 import { createRunWieldReadToolDefinition } from "../../tools/read.js";
 
 async function fixture() {
-    const cwd = await Deno.makeTempDir();
+    const cwd = await fsMkdtemp(join(tmpdir(), "portable-fixture-"));
     const session = new HostedSession({ id: crypto.randomUUID(), cwd });
     return {
         cwd,
@@ -12,12 +18,12 @@ async function fixture() {
         tasks: session.backgroundTasks as BackgroundTasks,
         cleanup: async () => {
             await session.backgroundTasks.cancelAllAndSuppress();
-            await Deno.remove(cwd, { recursive: true });
+            await fsRm(cwd, { recursive: true });
         },
     };
 }
 
-Deno.test("shell start returns before exit and publishes a final result after its logs close", async () => {
+test("shell start returns before exit and publishes a final result after its logs close", async () => {
     const f = await fixture();
     try {
         const task = f.tasks.startShell({ command: "echo ready; sleep 0.3; echo done >&2", cwd: f.cwd });
@@ -29,8 +35,8 @@ Deno.test("shell start returns before exit and publishes a final result after it
         assertEquals(final.line_count, 2);
         assertStringIncludes(final.output ?? "", "ready");
         assertStringIncludes(final.output ?? "", "done");
-        assertEquals(await Deno.readTextFile(final.log_path), "ready\n");
-        assertEquals(await Deno.readTextFile(final.err_log_path), "done\n");
+        assertEquals(await fsReadFile(final.log_path, "utf8"), "ready\n");
+        assertEquals(await fsReadFile(final.err_log_path, "utf8"), "done\n");
         assertEquals(f.tasks.pendingCompletions().length, 1);
         f.tasks.acknowledge(task.task_id);
         assertEquals(f.tasks.pendingCompletions().length, 0);
@@ -39,7 +45,7 @@ Deno.test("shell start returns before exit and publishes a final result after it
     }
 });
 
-Deno.test("five running tasks hold slots until settlement; other Sessions cannot control them", async () => {
+test("five running tasks hold slots until settlement; other Sessions cannot control them", async () => {
     const a = await fixture();
     const b = await fixture();
     try {
@@ -66,17 +72,18 @@ Deno.test("five running tasks hold slots until settlement; other Sessions cannot
     }
 });
 
-Deno.test("another host process has its own slots and cannot control this process's task ID", async () => {
+test("another host process has its own slots and cannot control this process's task ID", async () => {
     const f = await fixture();
     const script = `${f.cwd}/another-host.ts`;
     try {
         const parents = Array.from({ length: 5 }, () => f.tasks.startShell({ command: "sleep 20", cwd: f.cwd }));
         const hostedSessionUrl = new URL("./hosted-session.js", import.meta.url).href;
-        await Deno.writeTextFile(
+        await fsWriteFile(
             script,
             `
 import { HostedSession } from ${JSON.stringify(hostedSessionUrl)};
-const [id, cwd, foreignId] = Deno.args;
+import { argv } from "node:process";
+const [id, cwd, foreignId] = argv.slice(2);
 const session = new HostedSession({ id, cwd });
 try {
     let refused = false;
@@ -87,20 +94,19 @@ try {
 } finally { await session.dispose(); }
 `,
         );
-        const output = await new Deno.Command(Deno.execPath(), {
+        const output = await captureForegroundProcess(execPath, {
             args: [
-                "run",
-                "-A",
-                "--config",
-                new URL("../../../deno.json", import.meta.url).pathname,
+                ...(versions.deno
+                    ? ["run", "-A", "--config", new URL("../../../deno.json", import.meta.url).pathname]
+                    : ["--no-env-file", "--no-install"]),
                 script,
                 f.session.id,
                 f.cwd,
                 parents[0].task_id,
             ],
             cwd: f.cwd,
-        }).output();
-        assertEquals(output.success, true, new TextDecoder().decode(output.stderr));
+        });
+        assertEquals(output.code, 0, new TextDecoder().decode(output.stderr));
         assertEquals(JSON.parse(new TextDecoder().decode(output.stdout)), {
             refused: true,
             output: "child",
@@ -112,7 +118,7 @@ try {
     }
 });
 
-Deno.test("output at exactly 8192 UTF-8 bytes is inline and empty output is explicit", async () => {
+test("output at exactly 8192 UTF-8 bytes is inline and empty output is explicit", async () => {
     const f = await fixture();
     try {
         const exact = await f.tasks.wait(
@@ -128,20 +134,20 @@ Deno.test("output at exactly 8192 UTF-8 bytes is inline and empty output is expl
     }
 });
 
-Deno.test("presented output removes terminal control bytes without changing its log", async () => {
+test("presented output removes terminal control bytes without changing its log", async () => {
     const f = await fixture();
     try {
         const final = await f.tasks.wait(
             f.tasks.startShell({ command: "printf '\\033[31mred\\033[0m\\n'", cwd: f.cwd }).task_id,
         );
         assertEquals(final.output, "red\n");
-        assertEquals(await Deno.readTextFile(final.log_path), "\u001b[31mred\u001b[0m\n");
+        assertEquals(await fsReadFile(final.log_path, "utf8"), "\u001b[31mred\u001b[0m\n");
     } finally {
         await f.cleanup();
     }
 });
 
-Deno.test("large UTF-8 output uses the complete log; a final unterminated line counts", async () => {
+test("large UTF-8 output uses the complete log; a final unterminated line counts", async () => {
     const f = await fixture();
     try {
         const final = await f.tasks.wait(
@@ -150,7 +156,7 @@ Deno.test("large UTF-8 output uses the complete log; a final unterminated line c
         assertEquals(final.byte_count, 8193);
         assertEquals(final.line_count, 1);
         assertEquals(final.output, undefined);
-        assertEquals((await Deno.readTextFile(final.log_path)).length, 8192);
+        assertEquals((await fsReadFile(final.log_path, "utf8")).length, 8192);
         const read = createRunWieldReadToolDefinition(f.cwd);
         const displayed = await read.execute(
             "read-task-log",
@@ -166,7 +172,7 @@ Deno.test("large UTF-8 output uses the complete log; a final unterminated line c
     }
 });
 
-Deno.test("timeout and nonzero exit release slots", async () => {
+test("timeout and nonzero exit release slots", async () => {
     const f = await fixture();
     try {
         const timed = await f.tasks.wait(

@@ -1,3 +1,12 @@
+import { captureForegroundProcess } from "./captured-process.ts";
+import {
+    lstat as fsLstat,
+    mkdir as fsMkdir,
+    readFile as fsReadFile,
+    realpath as fsRealpath,
+    rm as fsRm,
+    stat as fsStat,
+} from "node:fs/promises";
 /**
  * @module shared/worktree
  * Git worktree helpers for isolated plan execution.
@@ -56,12 +65,11 @@ async function runGit(cwd, args) {
  */
 async function runGitResult(cwd, args) {
     try {
-        const command = new Deno.Command("git", { args, cwd, stdout: "piped", stderr: "piped" });
-        const { code, stdout, stderr } = await command.output();
+        const { code, stdout, stderr } = await captureForegroundProcess("git", { args, cwd });
         const decoder = new TextDecoder();
         return { code, stdout: decoder.decode(stdout), stderr: decoder.decode(stderr) };
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) {
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") {
             return { code: 127, stdout: "", stderr: "The git executable was not found." };
         }
         throw error;
@@ -77,7 +85,7 @@ export function slugify(value) {
 /** @param {string} path */
 async function pathExists(path) {
     try {
-        await Deno.stat(path);
+        await fsStat(path);
         return true;
     } catch {
         return false;
@@ -173,14 +181,14 @@ async function isPreparationChange(root, path, baseRef, targetRef) {
         return after.code === 0 && isRunWieldOwnedGitignoreChange(before.stdout, after.stdout);
     }
     try {
-        const stat = await Deno.lstat(join(root, path));
-        if (!stat.isFile || stat.isSymlink) return false;
-        const after = await Deno.readTextFile(join(root, path));
+        const stat = await fsLstat(join(root, path));
+        if (!stat.isFile() || stat.isSymbolicLink()) return false;
+        const after = await fsReadFile(join(root, path), "utf8");
         const staged = await runGitResult(root, ["show", ":.gitignore"]);
         return isRunWieldOwnedGitignoreChange(before.stdout, after) &&
             (staged.code === 0 ? isRunWieldOwnedGitignoreChange(before.stdout, staged.stdout) : before.code !== 0);
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) return false;
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
         throw error;
     }
 }
@@ -511,7 +519,7 @@ async function isSameFilesystemPath(a, b) {
 /** Resolve symlinked parents even when a recorded checkout has already disappeared. @param {string} path @returns {Promise<string>} */
 async function canonicalWorktreePath(path) {
     try {
-        return await Deno.realPath(path);
+        return await fsRealpath(path);
     } catch {
         const parent = dirname(path);
         if (parent === path) return path;
@@ -901,7 +909,7 @@ export async function createWorktreeGitArtifacts(
     const baseTree = (await runGit(projectRoot, ["rev-parse", `${baseCommit}^{tree}`])).trim();
 
     const projectContext = await captureWorktreeProjectContext(projectRoot, baseCommit);
-    await Deno.mkdir(parent, { recursive: true });
+    await fsMkdir(parent, { recursive: true });
     await runGit(projectRoot, ["worktree", "add", "-b", branch, path, baseCommit]);
     try {
         await materializeWorktreeProjectContext(path, projectContext);
@@ -1161,7 +1169,7 @@ async function mergeExecutionWorktreeIntoCurrentCheckout(
 async function cleanupDetachedMergeWorktree(projectRoot, mergeWorktreePath) {
     await runGit(projectRoot, ["worktree", "remove", "--force", mergeWorktreePath]).catch(async () => {
         if (await pathExists(mergeWorktreePath)) {
-            await Deno.remove(mergeWorktreePath, { recursive: true }).catch(() => {});
+            await fsRm(mergeWorktreePath, { recursive: true }).catch(() => {});
         }
     });
 }
@@ -1392,7 +1400,7 @@ async function mergeExecutionWorktreeIntoTargetBranch({
         const tempId = crypto.randomUUID().slice(0, 8);
         const mergeWorktreePath = join(parent, `${repoName}-merge-${slugify(targetBranch)}-${tempId}`);
         let preserveMergeWorktree = false;
-        await Deno.mkdir(parent, { recursive: true });
+        await fsMkdir(parent, { recursive: true });
         try {
             await runGit(projectRoot, ["worktree", "add", "--detach", mergeWorktreePath, oldTargetCommit]);
             try {

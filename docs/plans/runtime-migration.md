@@ -510,3 +510,32 @@ full Bun type coverage, and Windows/x64 qualification. A lexical inventory, excl
 comments and compatibility code, still finds 132 runtime source files with 731 Deno references
 (`.ci-cache/remaining-deno-inventory.json`); this is not a completion percentage. Deno remains the release/default lane.
 No new architectural decision needs the owner's input, and no merge, publication, release or study cohort occurred.
+
+## Delegation, background work and worktree recovery (2026-10-10)
+
+The next slice ports delegated Agent definitions, named invocations, background log persistence, Session artifact and
+transcript reads, model presets, worktree context transfer, Git safety/snapshots, execution Plan recovery, and Work
+Record storage/indexing/supersession locks. It preserves real Git fixtures, source-checkout isolation, Plan conflict and
+symlink guards, exact transcript evidence, partial-write accounting and late background-result cancellation.
+
+Eighteen delegated/background files passed under Bun (`.ci-cache/delegation-bun-third.log`). Further worktree, recovery
+and Work Record regressions are now registered in the Bun runner. Work Record rollback fault tests still exercise the
+external filesystem rename boundary, now through Node's filesystem API. Search hydration uses an external index fixture
+that removes canonical files after the initial scan, proving hydration uses that saved scan without replacing owned
+code. All three review axes approved. S6 added portable ENOENT handling at publication cleanup's caller boundary; T18
+strengthened the existing-file symlink fixture; T19 made the Linux cancellation assertion distinguish terminated zombies
+from live descendants without accepting filesystem errors as proof of termination.
+
+The complete Deno run passed 638 of 639 files in 702.7 seconds; the publication golden journey had loaded before the S6
+cleanup fix and timed out with its worktree retained (`.ci-cache/delegation-full-ci.log`). That journey passes with the
+final fix in 20.7 seconds (`.ci-cache/delegation-golden-retry.log`), as do three targeted publication/recovery files
+(`.ci-cache/s6-deno.log`). Full source types pass (`.ci-cache/delegation-final-types.log`). The macOS Bun build, scoped
+types and all 73 registered test files pass (`.ci-cache/delegation-ci-bun.log`). Linux initially passed 72 files and
+exposed the cancellation assertion's zombie assumption. All 73 files pass after its correction
+(`.ci-cache/linux-delegation-suite-final.log`); the final assertion also passes Deno
+(`.ci-cache/delegation-process-final.log`).
+
+An exploratory expansion of Bun type coverage exposed 653 diagnostic output lines across the remaining runtime graph and
+upstream declarations (`.ci-cache/worktree-bun-types.log`). The qualified type gate remains scoped to the already
+portable foundation while those files are migrated; this exploratory failure is not a passing full Bun type check.
+Remaining source migration includes remote transports, external CLI/MCP bridges and command-specific dependencies.

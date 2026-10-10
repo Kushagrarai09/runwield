@@ -561,7 +561,7 @@ export async function cleanupStoredPublication(
             }
         }
     } catch (error) {
-        if (!(error instanceof Deno.errors.NotFound)) {
+        if (!(error instanceof Error && (error.name === "NotFound" || ("code" in error && error.code === "ENOENT")))) {
             worktreeKept = true;
             details.push(
                 `Git kept worktree ${attempt.executionCwd}: ${error instanceof Error ? error.message : String(error)}`,
