@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { readdir, readFile } from "node:fs/promises";
 /**
  * @module shared/session/agents
  * Agent discovery — scans agent definitions (bundled + overrides) and returns merged metadata.
@@ -168,7 +170,7 @@ function readDisplayNameFromFrontMatterSync(internalName, projectRoot) {
         let raw;
         try {
             assertPersonalResourcePathSync(filePath, "Agent display name");
-            raw = Deno.readTextFileSync(filePath);
+            raw = readFileSync(filePath, "utf8");
         } catch (error) {
             if (error instanceof PersonalResourcePathError) throw error;
             continue;
@@ -247,7 +249,7 @@ function readBusyLinesFromFrontMatterSync(internalName, projectRoot) {
         let raw;
         try {
             assertPersonalResourcePathSync(filePath, "Agent busy lines");
-            raw = Deno.readTextFileSync(filePath);
+            raw = readFileSync(filePath, "utf8");
         } catch (error) {
             if (error instanceof PersonalResourcePathError) throw error;
             continue;
@@ -297,8 +299,8 @@ export async function listAgentDefNames(projectRoot) {
     for (const dir of getAgentDefLayerDirs(projectRoot)) {
         await assertPersonalResourcePath(dir, "Agent definitions directory");
         if (!(await directoryExists(dir))) continue;
-        for await (const entry of Deno.readDir(dir)) {
-            if ((!entry.isFile && !entry.isSymlink) || !entry.name.endsWith(".md")) continue;
+        for (const entry of await readdir(dir, { withFileTypes: true })) {
+            if ((!entry.isFile() && !entry.isSymbolicLink()) || !entry.name.endsWith(".md")) continue;
             await assertPersonalResourcePath(join(dir, entry.name), "Agent definition");
             const fileName = entry.name.replace(/\.md$/, "");
             const canonicalName = normalizeAgentInternalName(fileName);
@@ -538,7 +540,7 @@ async function readSharedPracticeBody(name, projectRoot) {
     for (const filePath of candidatePaths) {
         await assertPersonalResourcePath(filePath, `shared practice "${name}"`);
         if (!(await fileExists(filePath))) continue;
-        const raw = await Deno.readTextFile(filePath);
+        const raw = await readFile(filePath, "utf8");
         if (!hasFrontMatter(raw)) {
             throw new Error(`Shared practice fragment ${filePath} has no frontmatter`);
         }
@@ -601,7 +603,7 @@ async function loadAgentDefFromPaths(agentName, filePaths, projectRoot) {
         await assertPersonalResourcePath(filePath, `Agent definition "${agentName}"`);
         if (!(await fileExists(filePath))) continue;
 
-        const raw = await Deno.readTextFile(filePath);
+        const raw = await readFile(filePath, "utf8");
         if (!hasFrontMatter(raw)) {
             throw new Error(`Agent def ${filePath} has no frontmatter`);
         }
@@ -662,7 +664,7 @@ async function loadAgentDefFromPaths(agentName, filePaths, projectRoot) {
     if (sharedPracticePrompt) promptSegments.push(sharedPracticePrompt);
 
     const mergedPromptBody = promptSegments.join("\n\n").trim();
-    const CORE_SYSTEM_PROMPT = await Deno.readTextFile(SYSTEM_PROMPT_TEMPLATE_PATH);
+    const CORE_SYSTEM_PROMPT = await readFile(SYSTEM_PROMPT_TEMPLATE_PATH, "utf8");
     const systemPrompt = CORE_SYSTEM_PROMPT.replace("{{AGENT_PROMPT}}", mergedPromptBody);
 
     const protectedToolsForAgent = bundledTools.filter((toolName) => PROTECTED_TOOL_NAMES.includes(toolName));

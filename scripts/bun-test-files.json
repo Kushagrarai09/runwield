@@ -7,5 +7,10 @@
     "src/shared/session/file-session-storage.test.ts",
     "src/shared/remote/process-group.test.ts",
     "src/shared/native-file-lock.test.ts",
-    "src/shared/foreground-process.test.ts"
+    "src/shared/foreground-process.test.ts",
+    "src/shared/package-install.test.ts",
+    "src/shared/agent-browser-session.test.ts",
+    "src/cli-startup.test.ts",
+    "src/ui/tui/tui-crash-events.test.ts",
+    "src/cmd/update/installer-process.test.ts"
 ]

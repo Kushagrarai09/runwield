@@ -23,6 +23,14 @@
         "src/shared/native-file-lock.ts",
         "src/shared/native-file-lock.test.ts",
         "src/shared/foreground-process.ts",
-        "src/shared/foreground-process.test.ts"
+        "src/shared/foreground-process.test.ts",
+        "src/shared/package-install.ts",
+        "src/shared/package-install.test.ts",
+        "src/shared/agent-browser-session.ts",
+        "src/shared/agent-browser-session.test.ts",
+        "src/cli-startup.test.ts",
+        "src/ui/tui/tui-crash-events.ts",
+        "src/ui/tui/tui-crash-events.test.ts",
+        "src/ui/tui/tui-crash-guards.ts"
     ]
 }

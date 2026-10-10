@@ -1,7 +1,8 @@
+import { test } from "node:test";
 import { assertEquals, assertMatch, assertNotEquals } from "@std/assert";
 import { createAgentBrowserSessionCleanup } from "./agent-browser-session.ts";
 
-Deno.test("agent-browser cleanup uses a unique wld namespace and runs once", () => {
+test("agent-browser cleanup uses a unique wld namespace and runs once", () => {
     const env: Record<string, string> = {};
     let cleanupRuns = 0;
     const cleanup = createAgentBrowserSessionCleanup({
@@ -22,7 +23,7 @@ Deno.test("agent-browser cleanup uses a unique wld namespace and runs once", () 
     assertEquals(cleanupRuns, 1);
 });
 
-Deno.test("separate agent-browser cleanups cannot share a namespace", () => {
+test("separate agent-browser cleanups cannot share a namespace", () => {
     const runtime = {
         envSet() {},
         spawnCleanup() {},
@@ -34,13 +35,17 @@ Deno.test("separate agent-browser cleanups cannot share a namespace", () => {
     assertNotEquals(first.namespace, second.namespace);
 });
 
-Deno.test("agent-browser cleanup tolerates an unavailable helper", () => {
+test("agent-browser cleanup tolerates an unavailable helper", () => {
+    let attempted = 0;
     const cleanup = createAgentBrowserSessionCleanup({
         envSet() {},
         spawnCleanup() {
+            attempted += 1;
             throw new Error("agent-browser is unavailable");
         },
     });
-
+    cleanup.initialize();
     cleanup.cleanupSync();
+    cleanup.cleanupSync();
+    assertEquals(attempted, 1);
 });

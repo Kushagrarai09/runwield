@@ -330,3 +330,28 @@ immediate startup-abort assertions.
 
 This is another implementation checkpoint. Application startup and packaging migration continue; these checks do not
 claim the whole Bun CLI or Workspace is ready.
+
+## Bun CLI startup and terminal cleanup (2026-10-10)
+
+Bun now runs source `--help`, `--version`, and the invalid-option path from an unrelated working directory with an
+isolated HOME. Startup uses portable argv, helper metadata/namespace handling, agent/theme reads and platform/exit APIs.
+Package-helper discovery keeps its real-executable symlink resolution and complete-helper-directory checks. Clipboard
+system commands use the migrated foreground process implementation; the installer preserves literal arguments,
+environment and POSIX signal-derived exit statuses.
+
+Bun does not dispatch the browser-style fatal events used by Deno. A runtime event adapter now restores terminal state
+through `uncaughtExceptionMonitor` and unhandled-rejection handling, then preserves fatal process termination. Real
+subprocess tests assert emitted restoration lines and nonzero exit, and verify uninstall removes the handler. Deno keeps
+its browser event path. Signals use bound process event methods.
+
+All fourteen migrated Bun files passed on macOS ARM64 (64 passed, five platform skips) and Linux ARM64 (67 passed, two
+Windows skips). Reports: `.ci-cache/bun-report-p68wy2/run.json` and
+`.ci-cache/linux-bun-runner/bun-report-JlDCYd/run.json`. Source CLI probes exercised bundled definitions outside the
+repository cwd and verified help/version did not create `.wld` or `.agents`. Full Deno type checking and the selected
+Bun type scope passed. Targeted existing package, agent, theme, TUI, clipboard and update tests passed; the Agent
+command fixture needed approved local Unix-socket permission (`.ci-cache/agents-listener-deno.log`). New startup,
+crash-event and installer process tests also passed through the Deno runner.
+
+All three review axes approved after independently confirming S2 (installer SIGTERM/SIGINT statuses retained) and T9/T10
+(exact restoration marker assertions and exercised helper failure cleanup). Workspace serving and complete application
+packaging are the next boundaries. CLI help success is not evidence that all interactive commands work yet.
