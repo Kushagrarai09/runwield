@@ -1,3 +1,5 @@
+import { mkdir as fsMkdir, readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promises";
+import process from "node:process";
 /**
  * @module scripts/curate-router-judgement-csv
  *
@@ -141,9 +143,9 @@ export async function main(argv) {
 
     const inputPath = args.in || getDefaultRouterJudgementCsvPath();
     const outputPath = args.out || inputPath;
-    await Deno.mkdir(dirname(outputPath), { recursive: true });
-    const result = curateRows(parseCsv(await Deno.readTextFile(inputPath)));
-    await Deno.writeTextFile(outputPath, toCsv(JUDGEMENT_COLUMNS, result.rows));
+    await fsMkdir(dirname(outputPath), { recursive: true });
+    const result = curateRows(parseCsv(await fsReadFile(inputPath, "utf8")));
+    await fsWriteFile(outputPath, toCsv(JUDGEMENT_COLUMNS, result.rows));
     console.log(JSON.stringify(
         {
             output: outputPath,
@@ -157,5 +159,5 @@ export async function main(argv) {
 }
 
 if (import.meta.main) {
-    await main(Deno.args);
+    await main(process.argv.slice(2));
 }

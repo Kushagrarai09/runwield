@@ -1,3 +1,19 @@
+import { prepareDocsFixtureDependencies } from "./docs-fixture-dependencies.ts";
+
+import { captureScriptProcess } from "./script-process.ts";
+import { test } from "node:test";
+import { tmpdir } from "node:os";
+import {
+    chmod as fsChmod,
+    copyFile as fsCopyFile,
+    mkdir as fsMkdir,
+    mkdtemp as fsMkdtemp,
+    readdir as fsReaddir,
+    readFile as fsReadFile,
+    rm as fsRm,
+    writeFile as fsWriteFile,
+} from "node:fs/promises";
+import process from "node:process";
 import { assert, assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { dirname, fromFileUrl, join, resolve } from "@std/path";
 import { PUBLIC_DOCS, stagePublicDocs } from "./public-docs.ts";
@@ -7,12 +23,12 @@ const repositoryRoot = resolve(dirname(fromFileUrl(import.meta.url)), "..");
 const reconcileScript = join(repositoryRoot, "scripts", "reconcile-docs-branch.sh");
 
 async function run(cwd: string, ...args: string[]): Promise<string> {
-    const output = await new Deno.Command(args[0], {
+    const output = await captureScriptProcess(args[0], {
         args: args.slice(1),
         cwd,
         stdout: "piped",
         stderr: "piped",
-    }).output();
+    });
     const stdout = new TextDecoder().decode(output.stdout);
     const stderr = new TextDecoder().decode(output.stderr);
     if (!output.success) throw new Error(`${stdout}\n${stderr}`);
@@ -20,57 +36,60 @@ async function run(cwd: string, ...args: string[]): Promise<string> {
 }
 
 async function write(path: string, content: string): Promise<void> {
-    await Deno.mkdir(resolve(path, ".."), { recursive: true });
-    await Deno.writeTextFile(path, content);
+    await fsMkdir(resolve(path, ".."), { recursive: true });
+    await fsWriteFile(path, content);
 }
 
 async function copyTree(source: string, destination: string): Promise<void> {
-    await Deno.mkdir(destination, { recursive: true });
-    for await (const entry of Deno.readDir(source)) {
+    await fsMkdir(destination, { recursive: true });
+    for await (const entry of await fsReaddir(source, { withFileTypes: true })) {
         if ([".astro", "content", "node_modules"].includes(entry.name)) continue;
         const from = join(source, entry.name);
         const to = join(destination, entry.name);
-        if (entry.isDirectory) await copyTree(from, to);
-        else if (entry.isFile) await Deno.copyFile(from, to);
+        if (entry.isDirectory()) await copyTree(from, to);
+        else if (entry.isFile()) await fsCopyFile(from, to);
     }
 }
 
 async function buildDocs(work: string): Promise<string> {
+    await prepareDocsFixtureDependencies(work);
     await stagePublicDocs(work, join(work, "docs-site", "src", "content", "docs"));
-    const output = await new Deno.Command(Deno.execPath(), {
-        args: ["run", "-A", "npm:astro@7.3.3", "build"],
+    const output = await captureScriptProcess(process.execPath, {
+        args: process.versions.deno
+            ? ["run", "-A", "npm:astro@7.3.3", "build"]
+            : [join(work, "docs-site", "node_modules", "astro", "bin", "astro.mjs"), "build"],
         cwd: join(work, "docs-site"),
         stdout: "piped",
         stderr: "piped",
-    }).output();
+    });
     assert(output.success, new TextDecoder().decode(output.stderr));
-    return await Deno.readTextFile(join(work, "dist", "docs", "quickstart", "index.html"));
+    return await fsReadFile(join(work, "dist", "docs", "quickstart", "index.html"), "utf8");
 }
 
 async function publishDocs(work: string, live: string): Promise<void> {
     await buildDocs(work);
-    await Deno.remove(live, { recursive: true }).catch((error) => {
-        if (!(error instanceof Deno.errors.NotFound)) throw error;
+    await fsRm(live, { recursive: true }).catch((error) => {
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     });
     await copyTree(join(work, "dist", "docs"), live);
 }
 
 async function runWithEnv(cwd: string, env: Record<string, string>, ...args: string[]): Promise<string> {
-    const output = await new Deno.Command(args[0], {
+    const output = await captureScriptProcess(args[0], {
         args: args.slice(1),
         cwd,
         env,
         stdout: "piped",
         stderr: "piped",
-    }).output();
+    });
     const stdout = new TextDecoder().decode(output.stdout);
     const stderr = new TextDecoder().decode(output.stderr);
     if (!output.success) throw new Error(`${stdout}\n${stderr}`);
     return stdout.trim();
 }
 
-Deno.test("docs branch publishes Stable content, preserves corrections, and stops on conflicts", async () => {
-    const root = await Deno.makeTempDir();
+test("docs branch publishes Stable content, preserves corrections, and stops on conflicts", async () => {
+    const root = await fsMkdtemp(join(tmpdir(), "runwield-fixture-"));
     const remote = join(root, "remote.git");
     const work = join(root, "work");
     try {
@@ -128,21 +147,21 @@ Deno.test("docs branch publishes Stable content, preserves corrections, and stop
 
         await run(work, "bash", reconcileScript, "v1.0.0", "true", sourceSha);
         assertStringIncludes(
-            await Deno.readTextFile(join(work, "docs", "user-documentation", "quickstart.md")),
+            await fsReadFile(join(work, "docs", "user-documentation", "quickstart.md"), "utf8"),
             "STABLE-A",
         );
         assertEquals(
-            (await Deno.readTextFile(join(work, "docs", "user-documentation", "quickstart.md"))).includes(
+            (await fsReadFile(join(work, "docs", "user-documentation", "quickstart.md"), "utf8")).includes(
                 "UNRELEASED-B",
             ),
             false,
         );
         assertStringIncludes(
-            await Deno.readTextFile(join(work, "docs", "user-documentation", "index.md")),
+            await fsReadFile(join(work, "docs", "user-documentation", "index.md"), "utf8"),
             "Clean home",
         );
-        assertStringIncludes(await Deno.readTextFile(join(work, "src", "product.ts")), "STABLE-A");
-        const stableARelease = JSON.parse(await Deno.readTextFile(join(work, "docs-site", "release.json")));
+        assertStringIncludes(await fsReadFile(join(work, "src", "product.ts"), "utf8"), "STABLE-A");
+        const stableARelease = JSON.parse(await fsReadFile(join(work, "docs-site", "release.json"), "utf8"));
         assertEquals(stableARelease.version, "v1.0.0");
         assertEquals(stableARelease.sourceRef === "v1.0.0", false);
         await run(work, "git", "merge-base", "--is-ancestor", stableARelease.sourceRef, "HEAD");
@@ -158,9 +177,9 @@ Deno.test("docs branch publishes Stable content, preserves corrections, and stop
         await run(work, "git", "push", "origin", "HEAD:docs/stable");
         const live = join(root, "live");
         await publishDocs(work, live);
-        assertStringIncludes(await Deno.readTextFile(join(live, "quickstart", "index.html")), "v1.0.0");
+        assertStringIncludes(await fsReadFile(join(live, "quickstart", "index.html"), "utf8"), "v1.0.0");
         assertStringIncludes(
-            await Deno.readTextFile(join(live, "contributing", "index.html")),
+            await fsReadFile(join(live, "contributing", "index.html"), "utf8"),
             "DOCS-CORRECTION",
         );
 
@@ -173,12 +192,12 @@ Deno.test("docs branch publishes Stable content, preserves corrections, and stop
         const stableBSha = await run(work, "git", "rev-parse", "HEAD");
         await run(work, "bash", reconcileScript, "v1.0.1", "false", stableBSha);
         assertStringIncludes(
-            await Deno.readTextFile(join(work, "docs", "user-documentation", "quickstart.md")),
+            await fsReadFile(join(work, "docs", "user-documentation", "quickstart.md"), "utf8"),
             "STABLE-B",
         );
-        assertStringIncludes(await Deno.readTextFile(join(work, "docs", "contributing.md")), "DOCS-CORRECTION");
-        assertStringIncludes(await Deno.readTextFile(join(work, "src", "product.ts")), "UNRELEASED-B");
-        const stableBRelease = JSON.parse(await Deno.readTextFile(join(work, "docs-site", "release.json")));
+        assertStringIncludes(await fsReadFile(join(work, "docs", "contributing.md"), "utf8"), "DOCS-CORRECTION");
+        assertStringIncludes(await fsReadFile(join(work, "src", "product.ts"), "utf8"), "UNRELEASED-B");
+        const stableBRelease = JSON.parse(await fsReadFile(join(work, "docs-site", "release.json"), "utf8"));
         assertEquals(stableBRelease.version, "v1.0.1");
         assertEquals(stableBRelease.sourceRef === "v1.0.1", false);
         await run(work, "git", "merge-base", "--is-ancestor", stableBRelease.sourceRef, "HEAD");
@@ -187,20 +206,20 @@ Deno.test("docs branch publishes Stable content, preserves corrections, and stop
         assertStringIncludes(stableBHtml, "STABLE-B");
         assertStringIncludes(stableBHtml, "v1.0.1");
         assertStringIncludes(
-            await Deno.readTextFile(join(work, "dist", "docs", "contributing", "index.html")),
+            await fsReadFile(join(work, "dist", "docs", "contributing", "index.html"), "utf8"),
             "DOCS-CORRECTION",
         );
 
         await publishDocs(work, live);
         const configPath = join(work, "docs-site", "astro.config.mjs");
-        const validConfig = await Deno.readTextFile(configPath);
-        await Deno.writeTextFile(configPath, "this is not valid JavaScript {");
+        const validConfig = await fsReadFile(configPath, "utf8");
+        await fsWriteFile(configPath, "this is not valid JavaScript {");
         await assertRejects(() => publishDocs(work, live));
-        assertStringIncludes(await Deno.readTextFile(join(live, "index.html")), "Clean home");
-        assertStringIncludes(await Deno.readTextFile(join(live, "quickstart", "index.html")), "STABLE-B");
-        await Deno.writeTextFile(configPath, validConfig);
+        assertStringIncludes(await fsReadFile(join(live, "index.html"), "utf8"), "Clean home");
+        assertStringIncludes(await fsReadFile(join(live, "quickstart", "index.html"), "utf8"), "STABLE-B");
+        await fsWriteFile(configPath, validConfig);
         await publishDocs(work, live);
-        assertStringIncludes(await Deno.readTextFile(join(live, "quickstart", "index.html")), "STABLE-B");
+        assertStringIncludes(await fsReadFile(join(live, "quickstart", "index.html"), "utf8"), "STABLE-B");
         assertEquals(await run(work, "git", "tag", "--points-at", "v1.0.1"), "v1.0.1");
 
         const correction = join(root, "correction");
@@ -218,7 +237,7 @@ Deno.test("docs branch publishes Stable content, preserves corrections, and stop
         const bin = join(root, "bin");
         const marker = join(root, "correction-pushed");
         const realGit = await run(root, "bash", "-c", "command -v git");
-        await Deno.mkdir(bin);
+        await fsMkdir(bin);
         await write(
             join(bin, "git"),
             `#!/usr/bin/env bash
@@ -230,13 +249,13 @@ fi
 exec "$REAL_GIT" "$@"
 `,
         );
-        await Deno.chmod(join(bin, "git"), 0o755);
+        await fsChmod(join(bin, "git"), 0o755);
         await assertRejects(
             () =>
                 runWithEnv(
                     work,
                     {
-                        PATH: `${bin}:${Deno.env.get("PATH") ?? ""}`,
+                        PATH: `${bin}:${process.env["PATH"] ?? ""}`,
                         RACE_MARKER: marker,
                         REAL_GIT: realGit,
                         CORRECTION_WORK: correction,
@@ -256,7 +275,7 @@ exec "$REAL_GIT" "$@"
         );
         await run(work, "bash", reconcileScript, "v1.0.1", "false", stableBSha);
         assertStringIncludes(
-            await Deno.readTextFile(join(work, "docs", "user-documentation", "settings.md")),
+            await fsReadFile(join(work, "docs", "user-documentation", "settings.md"), "utf8"),
             "ARRIVING-CORRECTION",
         );
 
@@ -284,12 +303,12 @@ exec "$REAL_GIT" "$@"
         );
         assertEquals((await run(work, "git", "tag", "--list", "v1.*")).split("\n").length, 3);
     } finally {
-        await Deno.remove(root, { recursive: true });
+        await fsRm(root, { recursive: true });
     }
 });
 
-Deno.test("docs branch preserves corrections across divergent Stable release branches", async () => {
-    const root = await Deno.makeTempDir();
+test("docs branch preserves corrections across divergent Stable release branches", async () => {
+    const root = await fsMkdtemp(join(tmpdir(), "runwield-fixture-"));
     const remote = join(root, "remote.git");
     const work = join(root, "work");
     try {
@@ -338,21 +357,21 @@ Deno.test("docs branch preserves corrections across divergent Stable release bra
 
         await run(work, "bash", reconcileScript, "v1.0.1", "false", stableBSha);
 
-        assertStringIncludes(await Deno.readTextFile(join(work, "src", "product.ts")), "STABLE-B");
+        assertStringIncludes(await fsReadFile(join(work, "src", "product.ts"), "utf8"), "STABLE-B");
         assertStringIncludes(
-            await Deno.readTextFile(join(work, "docs", "user-documentation", "index.md")),
+            await fsReadFile(join(work, "docs", "user-documentation", "index.md"), "utf8"),
             "Corrected guide",
         );
-        assertEquals(JSON.parse(await Deno.readTextFile(join(work, "docs-site", "release.json"))).version, "v1.0.1");
+        assertEquals(JSON.parse(await fsReadFile(join(work, "docs-site", "release.json"), "utf8")).version, "v1.0.1");
         await run(work, "git", "merge-base", "--is-ancestor", previousDocsTip, "HEAD");
         await run(work, "git", "merge-base", "--is-ancestor", "v1.0.1", "HEAD");
     } finally {
-        await Deno.remove(root, { recursive: true });
+        await fsRm(root, { recursive: true });
     }
 });
 
-Deno.test("docs source validation rejects stale and product-changing commits", async () => {
-    const root = await Deno.makeTempDir();
+test("docs source validation rejects stale and product-changing commits", async () => {
+    const root = await fsMkdtemp(join(tmpdir(), "runwield-fixture-"));
     const remote = join(root, "remote.git");
     const work = join(root, "work");
     try {
@@ -398,6 +417,6 @@ Deno.test("docs source validation rejects stale and product-changing commits", a
             "changes product path",
         );
     } finally {
-        await Deno.remove(root, { recursive: true });
+        await fsRm(root, { recursive: true });
     }
 });

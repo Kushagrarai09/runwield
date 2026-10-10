@@ -1,3 +1,14 @@
+import { serveHttp } from "../src/shared/http-server.ts";
+import { tmpdir } from "node:os";
+import { test } from "node:test";
+import {
+    mkdir as fsMkdir,
+    mkdtemp as fsMkdtemp,
+    readdir as fsReaddir,
+    readFile as fsReadFile,
+    rm as fsRm,
+    writeFile as fsWriteFile,
+} from "node:fs/promises";
 import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { join } from "@std/path";
 import {
@@ -25,15 +36,15 @@ async function collectMarkdownFiles(rootDir, relativeDir = "") {
     /** @type {string[]} */
     const files = [];
     const currentDir = relativeDir ? join(rootDir, ...relativeDir.split("/")) : rootDir;
-    for await (const entry of Deno.readDir(currentDir)) {
+    for await (const entry of await fsReaddir(currentDir, { withFileTypes: true })) {
         const relativePath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
-        if (entry.isDirectory) files.push(...await collectMarkdownFiles(rootDir, relativePath));
-        else if (entry.isFile && entry.name.endsWith(".md")) files.push(relativePath);
+        if (entry.isDirectory()) files.push(...await collectMarkdownFiles(rootDir, relativePath));
+        else if (entry.isFile() && entry.name.endsWith(".md")) files.push(relativePath);
     }
     return files.sort();
 }
 
-Deno.test("parseReleaseCheckOptions accepts build identity and binary-only CI mode", () => {
+test("parseReleaseCheckOptions accepts build identity and binary-only CI mode", () => {
     assertEquals(parseReleaseCheckOptions(["--build-version", "v1.2.3-rc.1"]), {
         buildVersion: "v1.2.3-rc.1",
         includeGolden: true,
@@ -42,7 +53,7 @@ Deno.test("parseReleaseCheckOptions accepts build identity and binary-only CI mo
     assertEquals(parseReleaseCheckOptions([]), { buildVersion: undefined, includeGolden: true });
 });
 
-Deno.test("assertBinaryVersionOutput requires the requested release identity", () => {
+test("assertBinaryVersionOutput requires the requested release identity", () => {
     assertBinaryVersionOutput("runwield v1.2.3-rc.1 (x86_64-unknown-linux-gnu)\n", "v1.2.3-rc.1");
     assertThrows(
         () => assertBinaryVersionOutput("runwield v1.2.3 (x86_64-unknown-linux-gnu)\n", "v1.2.3-rc.1"),
@@ -55,21 +66,21 @@ Deno.test("assertBinaryVersionOutput requires the requested release identity", (
  * @param {(root: string) => Promise<void>} fn
  */
 async function withTemporaryVersionProject(fn) {
-    const root = await Deno.makeTempDir({ prefix: "wld-release-check-project-" });
+    const root = await fsMkdtemp(join(tmpdir(), "wld-release-check-project-"));
     try {
-        await Deno.mkdir(join(root, "src", "shared"), { recursive: true });
-        await Deno.writeTextFile(join(root, "src", "shared", "version.js"), 'export const VERSION = "original";\n');
+        await fsMkdir(join(root, "src", "shared"), { recursive: true });
+        await fsWriteFile(join(root, "src", "shared", "version.js"), 'export const VERSION = "original";\n');
         await fn(root);
     } finally {
-        await Deno.remove(root, { recursive: true });
+        await fsRm(root, { recursive: true });
     }
 }
 
-Deno.test("runReleaseCheck propagates build identity to compile and preserves stage order", async () => {
+test("runReleaseCheck propagates build identity to compile and preserves stage order", async () => {
     await withTemporaryVersionProject(async (root) => {
         /** @type {string[]} */
         const stages = [];
-        /** @type {Array<{ command: string, args: string[], env?: Record<string, string> }>} */
+        /** @type {Array<{ command: string, args: string[], env?: NodeJS.ProcessEnv }>} */
         const calls = [];
         await runReleaseCheck({
             buildVersion: "v1.2.3-rc.1",
@@ -81,7 +92,7 @@ Deno.test("runReleaseCheck propagates build identity to compile and preserves st
                 calls.push({ command, args, env: options.env });
                 if (command === "deno" && args.includes("scripts/compile.js")) {
                     stages.push("compile");
-                    await Deno.writeTextFile(
+                    await fsWriteFile(
                         join(root, "src", "shared", "version.js"),
                         'export const VERSION = "compiled";\n',
                     );
@@ -136,13 +147,13 @@ Deno.test("runReleaseCheck propagates build identity to compile and preserves st
         ]);
         assertEquals(calls[0].env, { WLD_BUILD_VERSION: "v1.2.3-rc.1" });
         assertEquals(
-            await Deno.readTextFile(join(root, "src", "shared", "version.js")),
+            await fsReadFile(join(root, "src", "shared", "version.js"), "utf8"),
             'export const VERSION = "original";\n',
         );
     });
 });
 
-Deno.test("runReleaseCheck can leave Golden qualification to a parallel CI job", async () => {
+test("runReleaseCheck can leave Golden qualification to a parallel CI job", async () => {
     await withTemporaryVersionProject(async (root) => {
         /** @type {string[]} */
         const commands = [];
@@ -167,7 +178,7 @@ Deno.test("runReleaseCheck can leave Golden qualification to a parallel CI job",
     });
 });
 
-Deno.test("runReleaseCheck short-circuits after compile failure and restores generated version", async () => {
+test("runReleaseCheck short-circuits after compile failure and restores generated version", async () => {
     await withTemporaryVersionProject(async (root) => {
         /** @type {string[]} */
         const stages = [];
@@ -181,7 +192,7 @@ Deno.test("runReleaseCheck short-circuits after compile failure and restores gen
                     remove: () => Promise.resolve(),
                     async run(command) {
                         stages.push(command === "deno" ? "compile" : "version");
-                        await Deno.writeTextFile(
+                        await fsWriteFile(
                             join(root, "src", "shared", "version.js"),
                             'export const VERSION = "failed";\n',
                         );
@@ -206,13 +217,13 @@ Deno.test("runReleaseCheck short-circuits after compile failure and restores gen
 
         assertEquals(stages, ["compile"]);
         assertEquals(
-            await Deno.readTextFile(join(root, "src", "shared", "version.js")),
+            await fsReadFile(join(root, "src", "shared", "version.js"), "utf8"),
             'export const VERSION = "original";\n',
         );
     });
 });
 
-Deno.test("release check rejects worker errors even when image fallback exits successfully", async () => {
+test("release check rejects worker errors even when image fallback exits successfully", async () => {
     await withTemporaryVersionProject(async (root) => {
         let laterChecks = 0;
         const laterCheck = () => {
@@ -245,7 +256,7 @@ Deno.test("release check rejects worker errors even when image fallback exits su
     });
 });
 
-Deno.test("runReleaseCheck restores generated version after binary version mismatch", async () => {
+test("runReleaseCheck restores generated version after binary version mismatch", async () => {
     await withTemporaryVersionProject(async (root) => {
         /** @type {string[]} */
         const stages = [];
@@ -260,7 +271,7 @@ Deno.test("runReleaseCheck restores generated version after binary version misma
                     async run(command, args) {
                         if (command === "deno" && args.includes("scripts/compile.js")) {
                             stages.push("compile");
-                            await Deno.writeTextFile(
+                            await fsWriteFile(
                                 join(root, "src", "shared", "version.js"),
                                 'export const VERSION = "compiled";\n',
                             );
@@ -292,31 +303,31 @@ Deno.test("runReleaseCheck restores generated version after binary version misma
 
         assertEquals(stages, ["compile", "workspace-review-routes", "version"]);
         assertEquals(
-            await Deno.readTextFile(join(root, "src", "shared", "version.js")),
+            await fsReadFile(join(root, "src", "shared", "version.js"), "utf8"),
             'export const VERSION = "original";\n',
         );
     });
 });
 
-Deno.test("release compile includes required bundled markdown and theme assets", () => {
+test("release compile includes required bundled markdown and theme assets", () => {
     assertRequiredBundledAssetsConfigured();
 });
 
-Deno.test("readReviewUrl extracts Plan review URL from command output", () => {
+test("readReviewUrl extracts Plan review URL from command output", () => {
     assertEquals(
         readReviewUrl("[RunWield] Plan read-only view: http://127.0.0.1:1234/review/plan?token=abc-123\n"),
         "http://127.0.0.1:1234/review/plan?token=abc-123",
     );
 });
 
-Deno.test("readWorkspaceUrl extracts Plans UI URL from command output", () => {
+test("readWorkspaceUrl extracts Plans UI URL from command output", () => {
     assertEquals(
         readWorkspaceUrl("[RunWield] Workspace: http://127.0.0.1:1234/?token=abc-123\n"),
         "http://127.0.0.1:1234/?token=abc-123",
     );
 });
 
-Deno.test("assertBinaryWorkspaceHtml requires the real built Workspace shell", () => {
+test("assertBinaryWorkspaceHtml requires the real built Workspace shell", () => {
     assertBinaryWorkspaceHtml(
         '<main data-astro-workspace-shell><astro-island component-url="/_astro/Workspace.js"></astro-island></main>',
     );
@@ -327,7 +338,7 @@ Deno.test("assertBinaryWorkspaceHtml requires the real built Workspace shell", (
     );
 });
 
-Deno.test("collectReviewAssetUrls finds Astro assets needed by review HTML", () => {
+test("collectReviewAssetUrls finds Astro assets needed by review HTML", () => {
     const html =
         '<link rel="stylesheet" href="/_astro/app.css"><astro-island component-url="/_astro/Review.js"></astro-island>';
 
@@ -337,7 +348,7 @@ Deno.test("collectReviewAssetUrls finds Astro assets needed by review HTML", () 
     ]);
 });
 
-Deno.test("collectNestedReviewAssetUrls finds dynamic import chunks", () => {
+test("collectNestedReviewAssetUrls finds dynamic import chunks", () => {
     const source =
         'const chunk = () => import("./ArtifactReadSurface.js"); import { x } from "./client.js"; import "./side-effect.js";';
 
@@ -348,14 +359,14 @@ Deno.test("collectNestedReviewAssetUrls finds dynamic import chunks", () => {
     ]);
 });
 
-Deno.test("collectBundledAgentReferenceFiles covers all agent definitions, prompts, and plan formats", async () => {
+test("collectBundledAgentReferenceFiles covers all agent definitions, prompts, and plan formats", async () => {
     assertEquals(
         await collectBundledAgentReferenceFiles(),
         await collectMarkdownFiles(join("src", "agent-definitions")),
     );
 });
 
-Deno.test("collectExtractedBundledMarkdownFiles covers agent definitions and bundled skills", async () => {
+test("collectExtractedBundledMarkdownFiles covers agent definitions and bundled skills", async () => {
     const extracted = await collectExtractedBundledMarkdownFiles();
     assertEquals(
         extracted.map((file) => `${file.cacheDir}/${file.relativePath}`),
@@ -368,26 +379,26 @@ Deno.test("collectExtractedBundledMarkdownFiles covers agent definitions and bun
     );
 });
 
-Deno.test("assertExtractedBundledAgentReferenceFiles accepts copied bundled markdown", async () => {
-    const homeDir = await Deno.makeTempDir({ prefix: "runwield-reference-home-" });
+test("assertExtractedBundledAgentReferenceFiles accepts copied bundled markdown", async () => {
+    const homeDir = await fsMkdtemp(join(tmpdir(), "runwield-reference-home-"));
     try {
         for (const { sourceDir, cacheDir, relativePath } of await collectExtractedBundledMarkdownFiles()) {
             const relativeParts = relativePath.split("/");
             const targetDir = join(homeDir, cacheDir, ...relativeParts.slice(0, -1));
             const targetPath = join(targetDir, relativeParts.at(-1) || "");
-            const source = await Deno.readTextFile(join(sourceDir, relativePath));
-            await Deno.mkdir(targetDir, { recursive: true });
-            await Deno.writeTextFile(targetPath, source);
+            const source = await fsReadFile(join(sourceDir, relativePath), "utf8");
+            await fsMkdir(targetDir, { recursive: true });
+            await fsWriteFile(targetPath, source);
         }
 
         await assertExtractedBundledAgentReferenceFiles(homeDir);
     } finally {
-        await Deno.remove(homeDir, { recursive: true });
+        await fsRm(homeDir, { recursive: true });
     }
 });
 
-Deno.test("assertExtractedBundledAgentReferenceFiles rejects missing bundled markdown", async () => {
-    const homeDir = await Deno.makeTempDir({ prefix: "runwield-reference-home-missing-" });
+test("assertExtractedBundledAgentReferenceFiles rejects missing bundled markdown", async () => {
+    const homeDir = await fsMkdtemp(join(tmpdir(), "runwield-reference-home-missing-"));
     try {
         await assertRejects(
             () => assertExtractedBundledAgentReferenceFiles(homeDir),
@@ -395,12 +406,12 @@ Deno.test("assertExtractedBundledAgentReferenceFiles rejects missing bundled mar
             "Release binary did not extract bundled agent definition markdown file",
         );
     } finally {
-        await Deno.remove(homeDir, { recursive: true });
+        await fsRm(homeDir, { recursive: true });
     }
 });
 
-Deno.test("assertReviewAssetsLoad fails when a dynamic review chunk is missing", async () => {
-    const server = Deno.serve({ hostname: "127.0.0.1", port: 0, onListen() {} }, (request) => {
+test("assertReviewAssetsLoad fails when a dynamic review chunk is missing", async () => {
+    const server = serveHttp({ hostname: "127.0.0.1", port: 0, onListen() {} }, (request) => {
         const url = new URL(request.url);
         if (url.pathname === "/_astro/Review.js") {
             return new Response('export const load = () => import("./MissingChunk.js");', {

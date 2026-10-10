@@ -1,3 +1,4 @@
+import type { FetchRequest } from "../../shared/fetch-request.ts";
 /**
  * @module cmd/update
  * Install the latest Stable RunWield release through the public installer.
@@ -22,7 +23,7 @@ import {
 } from "../../shared/update-check.js";
 
 export interface UpdateNetworkPort {
-    fetch: typeof globalThis.fetch;
+    fetch: FetchRequest;
 }
 
 export interface InstallerProcessPort {
@@ -109,7 +110,7 @@ function packageManagedUpdateMessage(install: RunWieldPackageInstall, parsedArgs
 }
 
 /** */
-async function downloadInstaller(urls: string[], fetchImpl: typeof globalThis.fetch): Promise<string> {
+async function downloadInstaller(urls: string[], fetchImpl: FetchRequest): Promise<string> {
     let firstFailure = "";
     for (const url of urls) {
         const response = await fetchImpl(url);

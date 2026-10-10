@@ -1,12 +1,21 @@
+import { runtimeSourceArgs } from "../src/testing/runtime-source-args.ts";
+import { captureScriptProcess } from "./script-process.ts";
+import { test } from "node:test";
+import { mkdtemp as fsMkdtemp, readFile as fsReadFile, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import process from "node:process";
 import { assertEquals } from "@std/assert";
 import { fromFileUrl, join } from "@std/path";
 import { type CiTaskName, type CiTaskResult, PRE_TEST_TASKS, runCi } from "./run-ci.ts";
 
-Deno.test("CI collects all failures by default and supports explicit fail-fast", async () => {
-    const root = await Deno.makeTempDir({ prefix: "ci-command-fixture-" });
+test("CI collects all failures by default and supports explicit fail-fast", async () => {
+    const root = await fsMkdtemp(join(tmpdir(), "ci-command-fixture-"));
     try {
-        const tasks = Object.fromEntries(PRE_TEST_TASKS.map((name) => [name, "deno eval 'void 0'"]));
-        await Deno.writeTextFile(
+        const executable = `'${process.execPath.replaceAll("'", "'\\''")}'`;
+        const tasks = Object.fromEntries(
+            PRE_TEST_TASKS.map((name) => [name, `${executable} ${process.versions.deno ? "eval" : "--eval"} 'void 0'`]),
+        );
+        await fsWriteFile(
             join(root, "deno.json"),
             JSON.stringify({
                 tasks: {
@@ -16,25 +25,35 @@ Deno.test("CI collects all failures by default and supports explicit fail-fast",
                 },
             }),
         );
-        await Deno.writeTextFile(
+        await fsWriteFile(
             join(root, "check-args.ts"),
-            'await Deno.writeTextFile("args.json", JSON.stringify(Deno.args)); Deno.exit(7);\n',
+            'import { writeFile } from "node:fs/promises"; await writeFile("args.json", JSON.stringify(process.argv.slice(2))); process.exit(7);\n',
+        );
+        await fsWriteFile(
+            join(root, "package.json"),
+            JSON.stringify({
+                scripts: {
+                    ...tasks,
+                    "test:all:suite": `${executable} run check-args.ts`,
+                    "test:suite": `${executable} run check-args.ts`,
+                },
+            }),
         );
         for (const flags of [[], ["--fail-fast"], ["--source-only", "--fail-fast"]]) {
-            const output = await new Deno.Command(Deno.execPath(), {
-                args: ["run", "-A", fromFileUrl(new URL("./run-ci.ts", import.meta.url)), ...flags],
+            const output = await captureScriptProcess(process.execPath, {
+                args: runtimeSourceArgs(["run", "-A", fromFileUrl(new URL("./run-ci.ts", import.meta.url)), ...flags]),
                 cwd: root,
                 stdout: "piped",
                 stderr: "piped",
-            }).output();
+            });
             assertEquals(output.code, 7);
             assertEquals(
-                JSON.parse(await Deno.readTextFile(join(root, "args.json"))),
+                JSON.parse(await fsReadFile(join(root, "args.json"), "utf8")),
                 flags.includes("--fail-fast") ? ["--fail-fast"] : [],
             );
         }
     } finally {
-        await Deno.remove(root, { recursive: true });
+        await fsRm(root, { recursive: true });
     }
 });
 
@@ -56,7 +75,7 @@ async function flushPromises(): Promise<void> {
     await Promise.resolve();
 }
 
-Deno.test("runCi starts every pre-test task before waiting and keeps test behind the barrier", async () => {
+test("runCi starts every pre-test task before waiting and keeps test behind the barrier", async () => {
     const starts: CiTaskName[] = [];
     const tasks = new Map<CiTaskName, DeferredTask>();
     const resultPromise = runCi((taskName) => {
@@ -85,7 +104,7 @@ Deno.test("runCi starts every pre-test task before waiting and keeps test behind
     assertEquals(await resultPromise, { exitCode: 0, failures: [] });
 });
 
-Deno.test("runCi starts one test after a successful pre-test wave", async () => {
+test("runCi starts one test after a successful pre-test wave", async () => {
     const starts: CiTaskName[] = [];
     const result = await runCi((taskName) => {
         starts.push(taskName);
@@ -96,7 +115,7 @@ Deno.test("runCi starts one test after a successful pre-test wave", async () => 
     assertEquals(result, { exitCode: 0, failures: [] });
 });
 
-Deno.test("runCi reports all failed pre-test tasks and skips test", async () => {
+test("runCi reports all failed pre-test tasks and skips test", async () => {
     const starts: CiTaskName[] = [];
     const failed = new Map<CiTaskName, number>([
         ["lint", 2],
@@ -118,7 +137,7 @@ Deno.test("runCi reports all failed pre-test tasks and skips test", async () => 
     });
 });
 
-Deno.test("runCi converts a process-start error into a failed pre-test result and waits for siblings", async () => {
+test("runCi converts a process-start error into a failed pre-test result and waits for siblings", async () => {
     const starts: CiTaskName[] = [];
     const tasks = new Map<CiTaskName, DeferredTask>();
     const resultPromise = runCi((taskName) => {
@@ -148,7 +167,7 @@ Deno.test("runCi converts a process-start error into a failed pre-test result an
     assertEquals(starts.includes("test:all:suite"), false);
 });
 
-Deno.test("runCi preserves a failed test exit code", async () => {
+test("runCi preserves a failed test exit code", async () => {
     const result = await runCi((taskName) =>
         Promise.resolve({
             name: taskName,
@@ -162,7 +181,7 @@ Deno.test("runCi preserves a failed test exit code", async () => {
     });
 });
 
-Deno.test("source-only CI supports the independently required Golden job", async () => {
+test("source-only CI supports the independently required Golden job", async () => {
     const starts: CiTaskName[] = [];
     const result = await runCi((name) => {
         starts.push(name);

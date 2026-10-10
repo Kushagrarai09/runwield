@@ -46,11 +46,6 @@ async function runGitForMergeVerification(cwd: string, args: string[]) {
     };
 }
 
-interface MergeVerificationResult {
-    merged: boolean;
-    message: string;
-}
-
 export interface RecordedPublicationResult {
     published: boolean;
     targetBranch?: string;

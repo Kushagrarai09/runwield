@@ -1,15 +1,19 @@
+import { captureScriptProcess } from "./script-process.ts";
+import { test } from "node:test";
+import { mkdir as fsMkdir, mkdtemp as fsMkdtemp, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { join } from "@std/path";
 
 const repoRoot = new URL("..", import.meta.url).pathname;
 
 async function run(cwd: string, command: string, args: string[]) {
-    const result = await new Deno.Command(command, {
+    const result = await captureScriptProcess(command, {
         args,
         cwd,
         stdout: "piped",
         stderr: "piped",
-    }).output();
+    });
     const decoder = new TextDecoder();
     return {
         code: result.code,
@@ -18,13 +22,13 @@ async function run(cwd: string, command: string, args: string[]) {
     };
 }
 
-Deno.test("pre-commit re-stages an intentionally tracked file below an ignore rule", async () => {
-    const projectRoot = await Deno.makeTempDir({ prefix: "runwield-pre-commit-" });
+test("pre-commit re-stages an intentionally tracked file below an ignore rule", async () => {
+    const projectRoot = await fsMkdtemp(join(tmpdir(), "runwield-pre-commit-"));
     try {
         assertEquals((await run(projectRoot, "git", ["init", "--quiet"])).code, 0);
-        await Deno.mkdir(join(projectRoot, ".generated"));
-        await Deno.writeTextFile(join(projectRoot, ".gitignore"), ".generated/\n");
-        await Deno.writeTextFile(join(projectRoot, ".generated", "types.ts"), "export const value={ready:true}\n");
+        await fsMkdir(join(projectRoot, ".generated"));
+        await fsWriteFile(join(projectRoot, ".gitignore"), ".generated/\n");
+        await fsWriteFile(join(projectRoot, ".generated", "types.ts"), "export const value={ready:true}\n");
         assertEquals((await run(projectRoot, "git", ["add", ".gitignore"])).code, 0);
         assertEquals((await run(projectRoot, "git", ["add", "-f", ".generated/types.ts"])).code, 0);
 
@@ -36,6 +40,6 @@ Deno.test("pre-commit re-stages an intentionally tracked file below an ignore ru
         assertEquals(staged.code, 0);
         assertStringIncludes(staged.stdout, "export const value = { ready: true };");
     } finally {
-        await Deno.remove(projectRoot, { recursive: true });
+        await fsRm(projectRoot, { recursive: true });
     }
 });

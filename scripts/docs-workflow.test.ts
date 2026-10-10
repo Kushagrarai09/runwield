@@ -1,3 +1,16 @@
+import { captureScriptProcess } from "./script-process.ts";
+import { tmpdir } from "node:os";
+import { test } from "node:test";
+import { getCwd } from "../src/constants.js";
+import {
+    chmod as fsChmod,
+    mkdir as fsMkdir,
+    mkdtemp as fsMkdtemp,
+    readFile as fsReadFile,
+    rm as fsRm,
+    writeFile as fsWriteFile,
+} from "node:fs/promises";
+import process from "node:process";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { join } from "@std/path";
 
@@ -64,22 +77,22 @@ function evaluateReleaseCondition(condition: string, state: ReleaseState): boole
 }
 
 async function executable(path: string, content: string): Promise<void> {
-    await Deno.writeTextFile(path, content);
-    await Deno.chmod(path, 0o755);
+    await fsWriteFile(path, content);
+    await fsChmod(path, 0o755);
 }
 
 async function runShell(
     command: string,
     env: Record<string, string>,
-): Promise<Deno.CommandOutput> {
-    return await new Deno.Command("bash", {
+): Promise<import("./script-process.ts").ScriptProcessOutput> {
+    return await captureScriptProcess("bash", {
         args: ["-c", command],
-        cwd: Deno.cwd(),
+        cwd: getCwd(),
         env,
         clearEnv: false,
         stdout: "piped",
         stderr: "piped",
-    }).output();
+    });
 }
 
 const successfulRelease: ReleaseState = {
@@ -96,8 +109,8 @@ const successfulRelease: ReleaseState = {
     releaseResult: "success",
 };
 
-Deno.test("actual release event condition publishes only qualified Stable results", async () => {
-    const workflow = await Deno.readTextFile(".github/workflows/release.yml");
+test("actual release event condition publishes only qualified Stable results", async () => {
+    const workflow = await fsReadFile(".github/workflows/release.yml", "utf8");
     const job = jobBlock(workflow, "publish-docs");
     const condition = jobCondition(job);
     assertEquals(evaluateReleaseCondition(condition, successfulRelease), true);
@@ -109,8 +122,8 @@ Deno.test("actual release event condition publishes only qualified Stable result
     assertEquals(job.includes("github.sha"), false);
 });
 
-Deno.test("fresh and existing releases traverse the actual qualification conditions", async () => {
-    const workflow = await Deno.readTextFile(".github/workflows/release.yml");
+test("fresh and existing releases traverse the actual qualification conditions", async () => {
+    const workflow = await fsReadFile(".github/workflows/release.yml", "utf8");
     const build = jobBlock(workflow, "build");
     const assets = jobBlock(workflow, "assets");
     const release = jobBlock(workflow, "release");
@@ -163,13 +176,13 @@ Deno.test("fresh and existing releases traverse the actual qualification conditi
     assertEquals(evaluateReleaseCondition(jobCondition(release), { ...successfulRelease, cancelled: true }), false);
 });
 
-Deno.test("production release selection stops on API errors and old release retries", async () => {
-    const workflow = await Deno.readTextFile(".github/workflows/docs.yml");
+test("production release selection stops on API errors and old release retries", async () => {
+    const workflow = await fsReadFile(".github/workflows/docs.yml", "utf8");
     const command = stepRun(jobBlock(workflow, "sync"), "Select latest Stable release");
-    const root = await Deno.makeTempDir();
+    const root = await fsMkdtemp(join(tmpdir(), "runwield-fixture-"));
     try {
         const bin = join(root, "bin");
-        await Deno.mkdir(bin);
+        await fsMkdir(bin);
         await executable(
             join(bin, "gh"),
             `#!/usr/bin/env bash
@@ -181,7 +194,7 @@ if [[ "$1 $2" == "release view" && "$*" == *"tagName"* ]]; then echo "\${LATEST_
         await executable(join(bin, "git"), "#!/usr/bin/env bash\nexit 0\n");
         const output = join(root, "output");
         const base = {
-            PATH: `${bin}:${Deno.env.get("PATH") ?? ""}`,
+            PATH: `${bin}:${process.env["PATH"] ?? ""}`,
             GITHUB_OUTPUT: output,
             GITHUB_REPOSITORY: "owner/repository",
             LATEST_TAG: "v2.0.0",
@@ -196,19 +209,19 @@ if [[ "$1 $2" == "release view" && "$*" == *"tagName"* ]]; then echo "\${LATEST_
 
         const retry = await runShell(command, { ...base, GH_MODE: "ok", REQUESTED_TAG: "v2.0.0" });
         assert(retry.success, new TextDecoder().decode(retry.stderr));
-        assertStringIncludes(await Deno.readTextFile(output), "tag=v2.0.0");
+        assertStringIncludes(await fsReadFile(output, "utf8"), "tag=v2.0.0");
     } finally {
-        await Deno.remove(root, { recursive: true });
+        await fsRm(root, { recursive: true });
     }
 });
 
-Deno.test("production asset qualification rejects API errors and incomplete releases", async () => {
-    const workflow = await Deno.readTextFile(".github/workflows/docs.yml");
+test("production asset qualification rejects API errors and incomplete releases", async () => {
+    const workflow = await fsReadFile(".github/workflows/docs.yml", "utf8");
     const command = stepRun(jobBlock(workflow, "sync"), "Verify complete qualified release assets");
-    const root = await Deno.makeTempDir();
+    const root = await fsMkdtemp(join(tmpdir(), "runwield-fixture-"));
     try {
         const bin = join(root, "bin");
-        await Deno.mkdir(bin);
+        await fsMkdir(bin);
         await executable(
             join(bin, "gh"),
             `#!/usr/bin/env bash
@@ -222,7 +235,7 @@ exit 1
 `,
         );
         const base = {
-            PATH: `${bin}:${Deno.env.get("PATH") ?? ""}`,
+            PATH: `${bin}:${process.env["PATH"] ?? ""}`,
             GITHUB_REPOSITORY: "owner/repository",
             RELEASE_TAG: "v2.0.0",
             RUNNER_TEMP: root,
@@ -235,13 +248,13 @@ exit 1
         assertEquals(incomplete.success, false);
         assertStringIncludes(new TextDecoder().decode(incomplete.stderr), "Expected one");
     } finally {
-        await Deno.remove(root, { recursive: true });
+        await fsRm(root, { recursive: true });
     }
 });
 
-Deno.test("docs workflow validates release assets and exact source before deployment", async () => {
-    const workflow = await Deno.readTextFile(".github/workflows/docs.yml");
-    const reconciliation = await Deno.readTextFile("scripts/reconcile-docs-branch.sh");
+test("docs workflow validates release assets and exact source before deployment", async () => {
+    const workflow = await fsReadFile(".github/workflows/docs.yml", "utf8");
+    const reconciliation = await fsReadFile("scripts/reconcile-docs-branch.sh", "utf8");
     const deploy = jobBlock(workflow, "deploy");
     assertStringIncludes(workflow, "github.event_name != 'push' || github.ref != 'refs/heads/docs/stable'");
     assertStringIncludes(workflow, 'test "$tag" = "$latest"');

@@ -250,7 +250,7 @@ test("resolveVisionFallbackModel discovers configured provider models", async ()
                 },
             };
             const network = {
-                fetch: /** @type {typeof fetch} */ (() =>
+                fetch: /** @type {import("../fetch-request.ts").FetchRequest} */ (() =>
                     Promise.resolve(
                         /** @type {Response} */ ({
                             ok: true,

@@ -25,7 +25,7 @@ function fixedClock(value) {
     return { now: () => value };
 }
 
-/** @param {typeof globalThis.fetch} fetch */
+/** @param {import("./fetch-request.ts").FetchRequest} fetch */
 function updatePorts(fetch, now = 10) {
     return { network: { fetch }, clock: fixedClock(now) };
 }
@@ -108,7 +108,7 @@ test("refresh fetches GitHub latest and ignores cache write failures", async () 
     };
     const result = await refreshUpdateCheckCache(
         { currentVersion: "v2.0.0", cachePath: "/dev/null/update-check.json" },
-        updatePorts(/** @type {typeof globalThis.fetch} */ (fetchImpl)),
+        updatePorts(/** @type {import("./fetch-request.ts").FetchRequest} */ (fetchImpl)),
     );
     assertEquals(calls, [LATEST_RELEASE_API_URL]);
     assertEquals(result.available, true);
@@ -122,7 +122,7 @@ test("latest API rejects malformed release data", async () => {
         () =>
             refreshUpdateCheckCache(
                 { currentVersion: "v1.0.0" },
-                updatePorts(/** @type {typeof globalThis.fetch} */ (fetchImpl)),
+                updatePorts(/** @type {import("./fetch-request.ts").FetchRequest} */ (fetchImpl)),
             ),
         Error,
         "tag_name",
@@ -144,10 +144,15 @@ test("latest release lookup falls back to GitHub web redirect after API 403", as
         );
     };
 
-    assertEquals(await fetchLatestRunWieldRelease({ fetch: /** @type {typeof globalThis.fetch} */ (fetchImpl) }), {
-        tagName: "v4.5.6",
-        version: "v4.5.6",
-    });
+    assertEquals(
+        await fetchLatestRunWieldRelease({
+            fetch: /** @type {import("./fetch-request.ts").FetchRequest} */ (fetchImpl),
+        }),
+        {
+            tagName: "v4.5.6",
+            version: "v4.5.6",
+        },
+    );
     assertEquals(calls, [LATEST_RELEASE_API_URL, LATEST_RELEASE_WEB_URL]);
 });
 
@@ -170,10 +175,15 @@ test("latest RC lookup selects the highest published candidate", async () => {
         );
     };
 
-    assertEquals(await fetchLatestRunWieldRcRelease({ fetch: /** @type {typeof globalThis.fetch} */ (fetchImpl) }), {
-        tagName: "v1.2.4-rc.2",
-        version: "v1.2.4-rc.2",
-    });
+    assertEquals(
+        await fetchLatestRunWieldRcRelease({
+            fetch: /** @type {import("./fetch-request.ts").FetchRequest} */ (fetchImpl),
+        }),
+        {
+            tagName: "v1.2.4-rc.2",
+            version: "v1.2.4-rc.2",
+        },
+    );
     assertEquals(calls, [RELEASES_API_URL]);
 });
 
@@ -194,17 +204,25 @@ test("latest RC lookup falls back to the releases page when the API rate limit i
         );
     };
 
-    assertEquals(await fetchLatestRunWieldRcRelease({ fetch: /** @type {typeof globalThis.fetch} */ (fetchImpl) }), {
-        tagName: "v1.2.4-rc.2",
-        version: "v1.2.4-rc.2",
-    });
+    assertEquals(
+        await fetchLatestRunWieldRcRelease({
+            fetch: /** @type {import("./fetch-request.ts").FetchRequest} */ (fetchImpl),
+        }),
+        {
+            tagName: "v1.2.4-rc.2",
+            version: "v1.2.4-rc.2",
+        },
+    );
     assertEquals(calls, [RELEASES_API_URL, RELEASES_WEB_URL]);
 });
 
 test("latest RC lookup reports when no candidate is published", async () => {
     const fetchImpl = () => Promise.resolve(new Response(JSON.stringify([{ tag_name: "v1.2.3", prerelease: false }])));
     await assertRejects(
-        () => fetchLatestRunWieldRcRelease({ fetch: /** @type {typeof globalThis.fetch} */ (fetchImpl) }),
+        () =>
+            fetchLatestRunWieldRcRelease({
+                fetch: /** @type {import("./fetch-request.ts").FetchRequest} */ (fetchImpl),
+            }),
         Error,
         "No RunWield release candidate is published.",
     );

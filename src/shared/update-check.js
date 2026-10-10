@@ -20,7 +20,7 @@ export const TAG_PINNED_INSTALLER_URL_TEMPLATE =
 export const TAG_PINNED_INSTALLER_WEB_URL_TEMPLATE =
     "https://github.com/gandazgul/runwield/raw/refs/tags/{tag}/install.sh";
 
-/** @typedef {{ fetch: typeof globalThis.fetch }} UpdateCheckNetworkPort */
+/** @typedef {{ fetch: import("./fetch-request.ts").FetchRequest }} UpdateCheckNetworkPort */
 /** @typedef {{ now: () => number }} UpdateCheckClockPort */
 /** @typedef {{ network: UpdateCheckNetworkPort, clock: UpdateCheckClockPort }} UpdateCheckPorts */
 

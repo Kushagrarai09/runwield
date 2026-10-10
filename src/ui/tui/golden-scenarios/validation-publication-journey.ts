@@ -157,6 +157,10 @@ Replace the original feature with the implemented feature.
         { type: "waitForWorktreeRegistryStatus", planName, statuses: ["absent"], timeoutMs: 30000 },
         { type: "waitForIdle", timeoutMs: 30000 },
         { type: "capturePublicationState", planName, deliveredPath },
+        // The complete delivery report plus the Session menu exceeds 35 rows.
+        // Inspect the actual expanded terminal frame, independent of earlier redraws.
+        { type: "resize", columns: 120, rows: 60 },
+        { type: "waitForScreen", text: `Plan: ${planName}`, timeoutMs: 10000 },
     ],
     assertions: [
         (result: JourneyResult) => {

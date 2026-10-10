@@ -1,4 +1,4 @@
-import { Readable } from "node:stream";
+import { text as readStreamText } from "node:stream/consumers";
 import process from "node:process";
 import { readFile as fsReadFile, stat as fsStat, writeFile as fsWriteFile } from "node:fs/promises";
 /**
@@ -176,7 +176,7 @@ try {
 }
 
 async function main(): Promise<void> {
-    const stdin = await new Response(Readable.toWeb(process.stdin)).text();
+    const stdin = await readStreamText(process.stdin);
     const promptIndex = process.argv.slice(2).indexOf("--append-system-prompt-file");
     const promptPath = promptIndex >= 0 ? process.argv.slice(2)[promptIndex + 1] : "";
     const promptText = await readTextFile(promptPath);

@@ -1,4 +1,6 @@
 #!/usr/bin/env -S deno run --allow-read --allow-run --allow-write=scripts/injection-seam-baseline.json
+import { readdir as fsReaddir, readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promises";
+import process from "node:process";
 
 /**
  * Ratchet for test-injection seams.
@@ -936,9 +938,9 @@ export async function collectSeams(roots = PRODUCTION_ROOTS) {
 
     /** @param {URL} directoryUrl @param {string} relativeDirectory @param {string} pathPrefix */
     async function walk(directoryUrl, relativeDirectory, pathPrefix) {
-        for await (const entry of Deno.readDir(directoryUrl)) {
+        for await (const entry of await fsReaddir(directoryUrl, { withFileTypes: true })) {
             const relativePath = relativeDirectory ? `${relativeDirectory}/${entry.name}` : entry.name;
-            if (entry.isDirectory) {
+            if (entry.isDirectory()) {
                 if (SKIP_DIRS.has(entry.name)) continue;
                 await walk(new URL(`${entry.name}/`, directoryUrl), relativePath, pathPrefix);
                 continue;
@@ -947,7 +949,7 @@ export async function collectSeams(roots = PRODUCTION_ROOTS) {
             const productionPath = `${pathPrefix}/${relativePath}`;
             if (ciFiles && !ciFiles.has(productionPath)) continue;
             if (SCAN_EXCLUDED_PATHS.has(productionPath)) continue;
-            const text = await Deno.readTextFile(new URL(entry.name, directoryUrl));
+            const text = await fsReadFile(new URL(entry.name, directoryUrl), "utf8");
             // Scan every production source file. A known-spelling prefilter made the
             // detector self-defeating: files using `dependencies`, nested ports,
             // ordinary options, or individual test hooks never reached the structural
@@ -991,7 +993,7 @@ function multisetAdditions(current, baseline) {
 }
 
 async function readBaseline() {
-    const parsed = JSON.parse(await Deno.readTextFile(BASELINE_PATH));
+    const parsed = JSON.parse(await fsReadFile(BASELINE_PATH, "utf8"));
     if (!parsed || typeof parsed.files !== "object") {
         throw new Error(
             "injection-seam-baseline.json must contain a { files: { path: { seams, machinery, conditional } } } object",
@@ -1137,7 +1139,7 @@ function applyMoves(baseline, moves) {
         const source = moved[fromPath];
         if (!source || !source.seams.includes(name)) {
             console.error(`--move cannot carry "${name}": it is not recorded against ${fromPath}.`);
-            Deno.exit(1);
+            process.exit(1);
         }
         source.seams = source.seams.filter((seam) => seam !== name);
         source.machinery = source.machinery.filter((seam) => seam !== name);
@@ -1151,32 +1153,32 @@ function applyMoves(baseline, moves) {
 }
 
 if (import.meta.main) {
-    const update = Deno.args.includes("--update");
+    const update = process.argv.slice(2).includes("--update");
     // Only meaningful alongside a fix to the scan itself: it adopts modules and seams
     // the scan could not previously see. The resulting baseline remains shrink-only.
-    const adopt = Deno.args.includes("--adopt-newly-visible");
+    const adopt = process.argv.slice(2).includes("--adopt-newly-visible");
     /** @type {Array<[string, string, string]>} */
     const moves = [];
-    for (let index = 0; index < Deno.args.length; index++) {
-        if (Deno.args[index] !== "--move") continue;
-        const spec = Deno.args[index + 1] || "";
+    for (let index = 0; index < process.argv.slice(2).length; index++) {
+        if (process.argv.slice(2)[index] !== "--move") continue;
+        const spec = process.argv.slice(2)[index + 1] || "";
         const [source, toPath] = spec.split("=");
         const separator = source.lastIndexOf(":");
         if (!toPath || separator < 1) {
             console.error(`--move expects fromPath:name=toPath, received "${spec}".`);
-            Deno.exit(1);
+            process.exit(1);
         }
         moves.push([source.slice(0, separator), source.slice(separator + 1), toPath]);
     }
     /** @type {Array<[string, string]>} */
     const renames = [];
-    for (let index = 0; index < Deno.args.length; index++) {
-        if (Deno.args[index] !== "--rename") continue;
-        const pair = Deno.args[index + 1] || "";
+    for (let index = 0; index < process.argv.slice(2).length; index++) {
+        if (process.argv.slice(2)[index] !== "--rename") continue;
+        const pair = process.argv.slice(2)[index + 1] || "";
         const [from, to] = pair.split("=");
         if (!from || !to) {
             console.error(`--rename expects old=new, received "${pair}".`);
-            Deno.exit(1);
+            process.exit(1);
         }
         renames.push([from, to]);
     }
@@ -1195,9 +1197,9 @@ if (import.meta.main) {
                     "the seam instead. Inject only true ports (Git, filesystem, clock, network) as required\n" +
                     "arguments with no production fallback; import everything of ours directly.",
             );
-            Deno.exit(1);
+            process.exit(1);
         }
-        await Deno.writeTextFile(
+        await fsWriteFile(
             BASELINE_PATH,
             `${
                 JSON.stringify(
@@ -1212,7 +1214,7 @@ if (import.meta.main) {
             }\n`,
         );
         console.log("Updated scripts/injection-seam-baseline.json.");
-        Deno.exit(0);
+        process.exit(0);
     }
 
     const baseline = applyMoves(applyRenames(await readBaseline(), renames), moves);
@@ -1267,7 +1269,7 @@ if (import.meta.main) {
                 "code to satisfy a check that misread it is its own kind of damage.",
         );
         console.error(sections.join("\n\n"));
-        Deno.exit(1);
+        process.exit(1);
     }
 
     const total = Object.values(sortedSeams).reduce((sum, entry) => sum + entry.seams.length, 0);

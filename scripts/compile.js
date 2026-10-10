@@ -1,3 +1,6 @@
+import { captureScriptProcess } from "./script-process.ts";
+import { mkdir as fsMkdir, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
+import process from "node:process";
 /**
  * Build the standalone RunWield binary. Development builds are explicit; a
  * remote connection must never compile on demand. From the same unchanged
@@ -79,11 +82,11 @@ async function runCmd(cmd, args, extraEnv = {}) {
     // Preserve the build environment in a stable order and exclude `_`,
     // which shells change to the previous command path between builds.
     const env = Object.fromEntries(
-        Object.entries({ ...Deno.env.toObject(), ...extraEnv }).filter(([key]) => key !== "_")
+        Object.entries({ ...{ ...process.env }, ...extraEnv }).filter(([key]) => key !== "_")
             .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0),
     );
-    const command = new Deno.Command(cmd, { args, env, clearEnv: true, stdout: "piped", stderr: "piped" });
-    const { success, stdout, stderr } = await command.output();
+    const output = await captureScriptProcess(cmd, { args, env, clearEnv: true, stdout: "piped", stderr: "piped" });
+    const { success, stdout, stderr } = output;
     return {
         success,
         stdout: new TextDecoder().decode(stdout),
@@ -195,7 +198,7 @@ function isDenoVersionAtLeast(version, minimumVersion) {
  *
  * @param {string} [version]
  */
-export function assertCompileDenoVersion(version = Deno.version.deno) {
+export function assertCompileDenoVersion(version = (process.versions.deno ?? "")) {
     if (!isDenoVersionAtLeast(version, DENO_COMPILE_MINIMUM_VERSION)) {
         throw new Error(
             `RunWield binaries must be compiled with Deno ${DENO_COMPILE_MINIMUM_VERSION} or newer; current Deno is ${version}.`,
@@ -211,19 +214,19 @@ export function assertCompileDenoVersion(version = Deno.version.deno) {
  */
 export function canSmokeTestCompiledBinary(target) {
     if (!target) return true;
-    const osTarget = Deno.build.os === "darwin"
+    const osTarget = process.platform === "darwin"
         ? "apple-darwin"
-        : Deno.build.os === "windows"
+        : process.platform === "win32"
         ? "pc-windows-msvc"
         : "unknown-linux-gnu";
-    return target === `${Deno.build.arch}-${osTarget}`;
+    return target === `${process.arch === "arm64" ? "aarch64" : "x86_64"}-${osTarget}`;
 }
 
 /**
  * @param {string[]} [args]
  * @returns {Promise<void>}
  */
-export async function main(args = Deno.args) {
+export async function main(args = process.argv.slice(2)) {
     assertCompileDenoVersion();
     const options = parseCompileOptions(args);
     const output = options.output || "./bin/wld";
@@ -233,7 +236,7 @@ export async function main(args = Deno.args) {
         // Build identity is generated; the include flag itself is stable.
         !(arg === "--target" || args[index - 1] === "--target")
     );
-    const beforePreparation = await computeBuildIdentity(root, Deno.version.deno, commonOptions, false);
+    const beforePreparation = await computeBuildIdentity(root, process.versions.deno ?? "", commonOptions, false);
 
     const versionBuild = await runCmd("deno", ["run", "-A", "scripts/write-version.js"]);
     if (!versionBuild.success) throw new Error(versionBuild.stderr || "Version generation failed.");
@@ -272,17 +275,17 @@ export async function main(args = Deno.args) {
         throw new Error(workspaceReviewRuntimeCheck.stderr || "Workspace review runtime quality gate failed.");
     }
 
-    if (beforePreparation !== await computeBuildIdentity(root, Deno.version.deno, commonOptions, false)) {
+    if (beforePreparation !== await computeBuildIdentity(root, process.versions.deno ?? "", commonOptions, false)) {
         throw new Error("Build source drift during preparation; rebuild both artifacts from unchanged inputs.");
     }
-    const buildId = await computeBuildIdentity(root, Deno.version.deno, commonOptions);
+    const buildId = await computeBuildIdentity(root, process.versions.deno ?? "", commonOptions);
     if (options.expectBuildId && options.expectBuildId !== buildId) {
         throw new Error(`Build source drift: expected ${options.expectBuildId}, got ${buildId}.`);
     }
     await writeBuildIdentityFile(BUILD_IDENTITY_PATH, buildId);
-    await Deno.mkdir(dirname(output), { recursive: true });
-    await Deno.remove(`${output}.build.json`).catch((error) => {
-        if (!(error instanceof Deno.errors.NotFound)) throw error;
+    await fsMkdir(dirname(output), { recursive: true });
+    await fsRm(`${output}.build.json`).catch((error) => {
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     });
     const compile = await runCmd("deno", buildCompileArgs(options));
 
@@ -292,8 +295,8 @@ export async function main(args = Deno.args) {
         throw new Error(compile.stderr || "Deno compile failed.");
     }
 
-    if (buildId !== await computeBuildIdentity(root, Deno.version.deno, commonOptions)) {
-        await Deno.remove(output).catch(() => {});
+    if (buildId !== await computeBuildIdentity(root, process.versions.deno ?? "", commonOptions)) {
+        await fsRm(output).catch(() => {});
         throw new Error("Build source drift during compilation; discard the artifact.");
     }
 
@@ -310,14 +313,14 @@ export async function main(args = Deno.args) {
         }
     }
     const target = options.target ||
-        `${Deno.build.arch}-${
-            Deno.build.os === "darwin"
+        `${(process.arch === "arm64" ? "aarch64" : process.arch === "x64" ? "x86_64" : process.arch)}-${
+            process.platform === "darwin"
                 ? "apple-darwin"
-                : Deno.build.os === "windows"
+                : process.platform === "win32"
                 ? "pc-windows-msvc"
                 : "unknown-linux-gnu"
         }`;
-    await Deno.writeTextFile(
+    await fsWriteFile(
         `${output}.build.json`,
         JSON.stringify(
             {

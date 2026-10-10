@@ -17,6 +17,9 @@ During the Bun migration, run migrated tests with `bun run test:bun` (Bun 1.4.3)
 preload guard requires the isolated runner. The migrated file list is `scripts/bun-test-files.json`; the Deno suite
 remains the complete regression gate. Run `bun install --frozen-lockfile` before Bun checks. Deno keeps its automatic
 installation mode while existing CI and release jobs still use Deno; reinstall with Bun before switching back.
+Do not run the two package managers or their checks concurrently in the same checkout. Before switching from Bun to
+Deno, remove or move aside the generated `docs-site/node_modules` directory: Deno can otherwise retain Bun's workspace
+links alongside its own dependency graph. Separate checkouts avoid this collision.
 
 Two rules keep tests safe:
 

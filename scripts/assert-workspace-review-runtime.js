@@ -1,3 +1,6 @@
+import { getCwd } from "../src/constants.js";
+import { readFile as fsReadFile } from "node:fs/promises";
+import process from "node:process";
 /**
  * Assert that the built Workspace runtime renders the real Astro review pages.
  * This is a release quality gate: Plan/Code review must not silently degrade to
@@ -96,8 +99,8 @@ export async function assertReviewAssetsAvailableInRuntime(html, baseUrl, runtim
         seen.add(assetUrl);
 
         const assetPath = runtimeAssetPathForUrl(assetUrl, runtimeClientAssetDir);
-        const body = await Deno.readFile(assetPath).catch((error) => {
-            if (error instanceof Deno.errors.NotFound) {
+        const body = await fsReadFile(assetPath).catch((error) => {
+            if ((error instanceof Error && "code" in error && error.code === "ENOENT")) {
                 throw new Error(`Workspace review runtime asset is missing: ${assetPath}`);
             }
             throw error;
@@ -126,7 +129,7 @@ async function assertReviewRoute(runtimeEntry, route, payload) {
 
     const token = String(payload.token || "review-runtime-token");
     const headers = new Headers();
-    headers.set("x-runwield-workspace-cwd", Deno.cwd());
+    headers.set("x-runwield-workspace-cwd", getCwd());
     headers.set("x-runwield-review-payload", encodeURIComponent(JSON.stringify(payload)));
     const url = `http://localhost${route}?token=${encodeURIComponent(token)}`;
     const response = await entry.handle(new Request(url, { headers }));
@@ -138,7 +141,7 @@ async function assertReviewRoute(runtimeEntry, route, payload) {
 }
 
 /** @param {string[]} [args] */
-export async function main(args = Deno.args) {
+export async function main(args = process.argv.slice(2)) {
     const runtimeEntry = args[0] || DEFAULT_RUNTIME_ENTRY;
     await assertReviewRoute(runtimeEntry, "/review/plan", {
         plan: "# Release quality gate Plan\n\n`</script><div data-runwield-review-breakout>source</div>`\n",
@@ -150,14 +153,14 @@ export async function main(args = Deno.args) {
         rawPatch:
             'diff --git a/src/example.js b/src/example.js\n--- a/src/example.js\n+++ b/src/example.js\n@@ -1 +1,3 @@\n export const a = 1;\n+export const b = 2;\n+const closingTag = "</script><div data-runwield-review-breakout>source</div>";\n',
         gitRef: "release quality gate diff",
-        agentCwd: Deno.cwd(),
+        agentCwd: getCwd(),
         token: "code-review-runtime-token",
         mode: "workflow",
     });
-    console.log(`Workspace review runtime quality gate passed for ${join(Deno.cwd(), runtimeEntry)}.`);
+    console.log(`Workspace review runtime quality gate passed for ${join(getCwd(), runtimeEntry)}.`);
 }
 
 if (import.meta.main) {
     await main();
-    Deno.exit(0);
+    process.exit(0);
 }

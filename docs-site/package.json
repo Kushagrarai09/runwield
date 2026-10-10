@@ -9,5 +9,6 @@
         "clsx": "2.1.1",
         "pagefind": "1.5.2",
         "typescript": "5.9.3"
-    }
+    },
+    "name": "@runwield/docs"
 }

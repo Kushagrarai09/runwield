@@ -1,3 +1,13 @@
+import { captureScriptProcess } from "./script-process.ts";
+import {
+    copyFile as fsCopyFile,
+    mkdir as fsMkdir,
+    readdir as fsReaddir,
+    readFile as fsReadFile,
+    rm as fsRm,
+    stat as fsStat,
+    writeFile as fsWriteFile,
+} from "node:fs/promises";
 /**
  * Build opaque Workspace assets for the standalone RunWield executable.
  *
@@ -48,11 +58,11 @@ export function getOpaqueWorkspaceAssetName(name) {
  * @returns {Promise<void>}
  */
 async function runCommand(command, args) {
-    const result = await new Deno.Command(command, {
+    const result = await captureScriptProcess(command, {
         args,
         stdout: "piped",
         stderr: "piped",
-    }).output();
+    });
     if (result.success) return;
 
     const decoder = new TextDecoder();
@@ -80,18 +90,18 @@ function delay(ms) {
  * @returns {Promise<void>}
  */
 async function copyOpaqueAssets(sourceDir, destinationDir) {
-    await Deno.mkdir(destinationDir, { recursive: true });
-    for await (const entry of Deno.readDir(sourceDir)) {
+    await fsMkdir(destinationDir, { recursive: true });
+    for await (const entry of await fsReaddir(sourceDir, { withFileTypes: true })) {
         const sourcePath = join(sourceDir, entry.name);
         const destinationPath = join(destinationDir, getOpaqueWorkspaceAssetName(entry.name));
-        if (entry.isDirectory) {
+        if (entry.isDirectory()) {
             await copyOpaqueAssets(sourcePath, destinationPath);
             continue;
         }
-        if (!entry.isFile) {
+        if (!entry.isFile()) {
             throw new Error(`Unsupported Workspace asset entry: ${sourcePath}`);
         }
-        await Deno.copyFile(sourcePath, destinationPath);
+        await fsCopyFile(sourcePath, destinationPath);
     }
 }
 
@@ -102,17 +112,17 @@ async function copyOpaqueAssets(sourceDir, destinationDir) {
  */
 async function snapshotWorkspaceAssetDirectory(sourceDir, prefix = "") {
     const snapshot = [];
-    for await (const entry of Deno.readDir(sourceDir)) {
+    for await (const entry of await fsReaddir(sourceDir, { withFileTypes: true })) {
         const sourcePath = join(sourceDir, entry.name);
         const relativePath = prefix ? join(prefix, entry.name) : entry.name;
-        if (entry.isDirectory) {
+        if (entry.isDirectory()) {
             snapshot.push(...await snapshotWorkspaceAssetDirectory(sourcePath, relativePath));
             continue;
         }
-        if (!entry.isFile) {
+        if (!entry.isFile()) {
             throw new Error(`Unsupported Workspace asset entry: ${sourcePath}`);
         }
-        const stat = await Deno.stat(sourcePath);
+        const stat = await fsStat(sourcePath);
         snapshot.push(`${relativePath}:${stat.size}:${stat.mtime?.getTime() ?? 0}`);
     }
     return snapshot.sort();
@@ -138,7 +148,7 @@ export async function waitForStableWorkspaceClientAssets(clientDir, options = {}
     while (true) {
         const current = await snapshotWorkspaceAssetDirectory(clientDir).then((snapshot) => snapshot.join("\n")).catch(
             (error) => {
-                if (error instanceof Deno.errors.NotFound) return null;
+                if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return null;
                 throw error;
             },
         );
@@ -172,9 +182,9 @@ async function replaceDenoAdapterShim(serverEntry) {
     ];
     const replacement =
         'import { serveFile } from "jsr:@std/http@1.0/file-server";\nimport { fromFileUrl } from "jsr:@std/path@1.0";';
-    const source = await Deno.readTextFile(serverEntry);
+    const source = await fsReadFile(serverEntry, "utf8");
     const next = shimImports.reduce((text, shim) => text.replace(shim, replacement), source);
-    if (next !== source) await Deno.writeTextFile(serverEntry, next);
+    if (next !== source) await fsWriteFile(serverEntry, next);
 }
 
 /**
@@ -323,9 +333,9 @@ function sortBundledManifestAssets(source) {
  */
 /** @param {string} serverEntry */
 async function patchDenoAdapterShimImport(serverEntry) {
-    const source = await Deno.readTextFile(serverEntry);
+    const source = await fsReadFile(serverEntry, "utf8");
     const patched = normalizeDenoRuntimeSpecifiers(normalizeDenoAdapterShimImport(source));
-    if (patched !== source) await Deno.writeTextFile(serverEntry, patched);
+    if (patched !== source) await fsWriteFile(serverEntry, patched);
 }
 
 /**
@@ -336,15 +346,15 @@ async function waitForServerEntryImports(serverEntry) {
     const entryDir = dirname(serverEntry);
     const deadline = Date.now() + 5000;
     while (true) {
-        const source = normalizeDenoAdapterShimImport(await Deno.readTextFile(serverEntry));
-        await Deno.writeTextFile(serverEntry, source);
+        const source = normalizeDenoAdapterShimImport(await fsReadFile(serverEntry, "utf8"));
+        await fsWriteFile(serverEntry, source);
         const missing = [];
         for (const path of getServerEntryImportPaths(source, entryDir)) {
-            const stat = await Deno.stat(path).catch((error) => {
-                if (error instanceof Deno.errors.NotFound) return null;
+            const stat = await fsStat(path).catch((error) => {
+                if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return null;
                 throw error;
             });
-            if (!stat?.isFile) missing.push(path);
+            if (!stat?.isFile()) missing.push(path);
         }
         if (missing.length === 0) return;
         if (Date.now() >= deadline) {
@@ -356,16 +366,16 @@ async function waitForServerEntryImports(serverEntry) {
 
 /**
  * @param {string} path
- * @returns {Promise<Deno.FileInfo>}
+ * @returns {Promise<import("node:fs").Stats>}
  */
 async function waitForFile(path) {
     const deadline = Date.now() + 5000;
     while (true) {
-        const stat = await Deno.stat(path).catch((error) => {
-            if (error instanceof Deno.errors.NotFound) return null;
+        const stat = await fsStat(path).catch((error) => {
+            if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return null;
             throw error;
         });
-        if (stat?.isFile) return stat;
+        if (stat?.isFile()) return stat;
         if (Date.now() >= deadline) throw new Error(`Workspace runtime server was not created: ${path}`);
         await new Promise((resolve) => setTimeout(resolve, 100));
     }
@@ -382,10 +392,10 @@ export async function buildWorkspaceRuntime(options, port) {
     const runtimeDir = options.runtimeDir || DEFAULT_RUNTIME_DIR;
     const serverOutput = join(runtimeDir, "server.mjs");
 
-    await Deno.remove(runtimeDir, { recursive: true }).catch((error) => {
-        if (!(error instanceof Deno.errors.NotFound)) throw error;
+    await fsRm(runtimeDir, { recursive: true }).catch((error) => {
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     });
-    await Deno.mkdir(dirname(serverOutput), { recursive: true });
+    await fsMkdir(dirname(serverOutput), { recursive: true });
 
     await replaceDenoAdapterShim(serverEntry);
     await patchDenoAdapterShimImport(serverEntry);
@@ -402,10 +412,10 @@ export async function buildWorkspaceRuntime(options, port) {
         serverEntry,
     ]);
     await waitForFile(serverOutput);
-    await Deno.writeTextFile(
+    await fsWriteFile(
         serverOutput,
         sortBundledManifestAssets(removeBundledBuildEnvironment(unrefBundledMessageChannels(
-            normalizeCompiledNodeChildProcessImports(await Deno.readTextFile(serverOutput)),
+            normalizeCompiledNodeChildProcessImports(await fsReadFile(serverOutput, "utf8")),
         ))),
     );
     await waitForStableWorkspaceClientAssets(clientDir);

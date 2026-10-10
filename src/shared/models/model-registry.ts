@@ -1,3 +1,4 @@
+import type { FetchRequest } from "../fetch-request.ts";
 import { chmodSync, copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { readFileSync as fsReadFileSync, statSync as fsStatSync } from "node:fs";
 import { env } from "node:process";
@@ -102,7 +103,7 @@ interface DiscoverProviderModelOptions {
 }
 
 export interface ModelDiscoveryNetworkPort {
-    fetch: typeof fetch;
+    fetch: FetchRequest;
 }
 
 export const SYSTEM_MODEL_DISCOVERY_NETWORK: ModelDiscoveryNetworkPort = Object.freeze({

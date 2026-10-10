@@ -1,3 +1,5 @@
+import { captureScriptProcess } from "./script-process.ts";
+import process from "node:process";
 /**
  * Inspect a built Plan Server OCI image and assert the final filesystem does not
  * include repository source, Plans, local state, tests, VCS metadata, or SQLite
@@ -90,7 +92,7 @@ const IMAGE_DIRECTORY_DELIMITER = "__RUNWIELD_IMAGE_DIRECTORIES__";
  * @returns {Promise<ImageFilesystemListing>}
  */
 export async function listImageFilesystem(image) {
-    const command = new Deno.Command("podman", {
+    const result = await captureScriptProcess("podman", {
         args: [
             "run",
             "--rm",
@@ -103,7 +105,6 @@ export async function listImageFilesystem(image) {
         stdout: "piped",
         stderr: "piped",
     });
-    const result = await command.output();
     const decoder = new TextDecoder();
     if (!result.success) {
         throw new Error(decoder.decode(result.stderr).trim() || `podman run failed with exit code ${result.code}`);
@@ -128,7 +129,7 @@ export async function listImageFiles(image) {
 }
 
 if (import.meta.main) {
-    const image = Deno.args[0] || DEFAULT_IMAGE;
+    const image = process.argv.slice(2)[0] || DEFAULT_IMAGE;
     const listing = await listImageFilesystem(image);
     const result = assertPlanServerImageFileList(listing.files, listing.directories);
     if (
@@ -136,7 +137,7 @@ if (import.meta.main) {
         result.prohibited.length > 0
     ) {
         console.error(JSON.stringify(result, null, 2));
-        Deno.exit(1);
+        process.exit(1);
     }
     console.log(
         `Plan Server image ${image} contains required runtime files/directories and no prohibited repository artifacts.`,

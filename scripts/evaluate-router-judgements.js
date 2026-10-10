@@ -1,3 +1,5 @@
+import { mkdir as fsMkdir, readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promises";
+import process from "node:process";
 /**
  * @module scripts/evaluate-router-judgements
  *
@@ -115,7 +117,7 @@ export async function main(argv) {
     }
 
     const csvPath = args.csv || getDefaultRouterJudgementCsvPath();
-    const rows = parseCsv(await Deno.readTextFile(csvPath));
+    const rows = parseCsv(await fsReadFile(csvPath, "utf8"));
     const summary = summarizeJudgements(rows);
 
     /** @type {{ minRouterAgreementRate?: number, maxRouterMeanDistance?: number }} */
@@ -125,7 +127,7 @@ export async function main(argv) {
     };
 
     if (args.baseline) {
-        const baseline = JSON.parse(await Deno.readTextFile(args.baseline));
+        const baseline = JSON.parse(await fsReadFile(args.baseline, "utf8"));
         const baselineThresholds = baseline?.thresholds || {};
         thresholds.minRouterAgreementRate ??= parseNumber(baselineThresholds.minRouterAgreementRate);
         thresholds.maxRouterMeanDistance ??= parseNumber(baselineThresholds.maxRouterMeanDistance);
@@ -140,14 +142,14 @@ export async function main(argv) {
     };
 
     if (args["baseline-out"]) {
-        await Deno.mkdir(dirname(args["baseline-out"]), { recursive: true });
-        await Deno.writeTextFile(args["baseline-out"], `${JSON.stringify(buildBaseline(summary, csvPath), null, 2)}\n`);
+        await fsMkdir(dirname(args["baseline-out"]), { recursive: true });
+        await fsWriteFile(args["baseline-out"], `${JSON.stringify(buildBaseline(summary, csvPath), null, 2)}\n`);
     }
 
     console.log(JSON.stringify(report, null, 2));
-    if (failures.length > 0) Deno.exit(1);
+    if (failures.length > 0) process.exit(1);
 }
 
 if (import.meta.main) {
-    await main(Deno.args);
+    await main(process.argv.slice(2));
 }

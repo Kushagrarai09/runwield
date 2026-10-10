@@ -1,3 +1,12 @@
+import { captureScriptProcess } from "./script-process.ts";
+import {
+    copyFile as fsCopyFile,
+    mkdir as fsMkdir,
+    readdir as fsReaddir,
+    rm as fsRm,
+    stat as fsStat,
+    writeFile as fsWriteFile,
+} from "node:fs/promises";
 /**
  * Build the self-hosted Plan Server runtime root.
  *
@@ -62,11 +71,11 @@ export const DEFAULT_PLAN_SERVER_RUNTIME_ASSETS = [
  * @returns {Promise<void>}
  */
 async function assertFile(path) {
-    const info = await Deno.stat(path).catch((error) => {
-        if (error instanceof Deno.errors.NotFound) return null;
+    const info = await fsStat(path).catch((error) => {
+        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return null;
         throw error;
     });
-    if (!info?.isFile) throw new Error(`Required Plan Server runtime file is missing: ${path}`);
+    if (!info?.isFile()) throw new Error(`Required Plan Server runtime file is missing: ${path}`);
 }
 
 /**
@@ -74,11 +83,11 @@ async function assertFile(path) {
  * @returns {Promise<void>}
  */
 async function assertDirectory(path) {
-    const info = await Deno.stat(path).catch((error) => {
-        if (error instanceof Deno.errors.NotFound) return null;
+    const info = await fsStat(path).catch((error) => {
+        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return null;
         throw error;
     });
-    if (!info?.isDirectory) throw new Error(`Required Plan Server runtime directory is missing: ${path}`);
+    if (!info?.isDirectory()) throw new Error(`Required Plan Server runtime directory is missing: ${path}`);
 }
 
 /**
@@ -98,11 +107,11 @@ async function assertWorkspaceRuntimeFiles(workspaceRuntimeDir) {
  * @returns {Promise<void>}
  */
 async function runCommand(command, args) {
-    const result = await new Deno.Command(command, {
+    const result = await captureScriptProcess(command, {
         args,
         stdout: "piped",
         stderr: "piped",
-    }).output();
+    });
     if (result.success) return;
 
     const decoder = new TextDecoder();
@@ -119,16 +128,16 @@ const SYSTEM_PLAN_SERVER_RUNTIME_BUILD_PORT = Object.freeze({ run: runCommand })
  * @returns {Promise<void>}
  */
 async function copyDirectory(source, destination) {
-    await Deno.mkdir(destination, { recursive: true });
-    for await (const entry of Deno.readDir(source)) {
+    await fsMkdir(destination, { recursive: true });
+    for await (const entry of await fsReaddir(source, { withFileTypes: true })) {
         const sourcePath = join(source, entry.name);
         const destinationPath = join(destination, entry.name);
-        if (entry.isDirectory) {
+        if (entry.isDirectory()) {
             await copyDirectory(sourcePath, destinationPath);
             continue;
         }
-        if (!entry.isFile) throw new Error(`Unsupported Plan Server runtime entry: ${sourcePath}`);
-        await Deno.copyFile(sourcePath, destinationPath);
+        if (!entry.isFile()) throw new Error(`Unsupported Plan Server runtime entry: ${sourcePath}`);
+        await fsCopyFile(sourcePath, destinationPath);
     }
 }
 
@@ -153,11 +162,11 @@ export async function listRuntimeFiles(runtimeDir) {
      * @param {string} prefix
      */
     async function walk(root, prefix) {
-        for await (const entry of Deno.readDir(root)) {
+        for await (const entry of await fsReaddir(root, { withFileTypes: true })) {
             const childPrefix = prefix ? `${prefix}/${entry.name}` : entry.name;
             const childPath = join(root, entry.name);
-            if (entry.isDirectory) await walk(childPath, childPrefix);
-            else if (entry.isFile) files.push(childPrefix);
+            if (entry.isDirectory()) await walk(childPath, childPrefix);
+            else if (entry.isFile()) files.push(childPrefix);
         }
     }
 
@@ -198,10 +207,10 @@ export async function buildPlanServerRuntime(options, port) {
     await assertWorkspaceRuntimeFiles(workspaceRuntimeDir);
     for (const asset of assetCopies) await assertFile(asset.source);
 
-    await Deno.remove(runtimeDir, { recursive: true }).catch((error) => {
-        if (!(error instanceof Deno.errors.NotFound)) throw error;
+    await fsRm(runtimeDir, { recursive: true }).catch((error) => {
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     });
-    await Deno.mkdir(dirname(bundleOutput), { recursive: true });
+    await fsMkdir(dirname(bundleOutput), { recursive: true });
 
     await port.run("deno", [
         "bundle",
@@ -220,11 +229,11 @@ export async function buildPlanServerRuntime(options, port) {
     await assertWorkspaceRuntimeFiles(join(runtimeDir, "dist", "workspace-runtime"));
     for (const asset of assetCopies) {
         const destination = join(runtimeDir, asset.destination);
-        await Deno.mkdir(dirname(destination), { recursive: true });
+        await fsMkdir(dirname(destination), { recursive: true });
         if (asset.destination === "src/ui/workspace/static/workspace.css") {
-            await Deno.writeTextFile(destination, await readWorkspaceStyles(asset.source));
+            await fsWriteFile(destination, await readWorkspaceStyles(asset.source));
         } else {
-            await Deno.copyFile(asset.source, destination);
+            await fsCopyFile(asset.source, destination);
         }
     }
 

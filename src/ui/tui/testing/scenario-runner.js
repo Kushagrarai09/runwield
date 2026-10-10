@@ -1308,6 +1308,15 @@ async function runComposedTuiScenario(scenario, options) {
             for (const action of scenario.actions || []) {
                 if (!isObject(action)) continue;
                 const typed = /** @type {any} */ (action);
+                // Real terminals retain input while a command temporarily stops the TUI.
+                // Wait for its real restart before injecting the next scripted key.
+                if (["type", "clearEditor", "enter", "escape", "ctrlC"].includes(typed.type)) {
+                    const deadline = Date.now() + (scenario.timeoutMs || DEFAULT_WAIT_TIMEOUT_MS);
+                    while (!terminal.started || terminal.stopped) {
+                        if (Date.now() >= deadline) throw new Error("TUI did not restart before scripted input.");
+                        await new Promise((resolve) => setTimeout(resolve, 20));
+                    }
+                }
                 if (typed.type === "type") {
                     const text = String(typed.text || "");
                     terminal.typeText(text);

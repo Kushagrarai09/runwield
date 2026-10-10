@@ -713,3 +713,34 @@ This proves native installation rather than reuse of the macOS dependency graph.
 test dependency and final toolchain graph will be reinstalled before final native qualification. Standalone packages
 still require rebuilding after the application SQLite and shutdown changes. Bun-only development-check parity,
 remaining script tests, comparative application/install benchmarks, and final-head packages remain in progress.
+
+## Complete test inventory and portable development tooling (2026-10-10)
+
+The Bun registry now includes all 648 test files, adding the 42 script suites and two maintained regressions for native
+process completion and lint parity. The shared scheduler handles the normal Bun CI test task, preserving isolated HOME,
+fail-fast scheduling, timing history, shards, reports and retained golden failure evidence. The configured task's real
+fail-fast regression requires the first fixture to execute and the later fixture to remain unexecuted. Interactive
+installer tests use Bun's native PTY; docs tests build real frozen dependency copies inside their fixtures.
+
+The Bun development gate now includes the same eleven pre-test task categories as Deno. Its source type checker covers
+1,295 production/test entries; the separate Astro checks still cover Workspace and docs. ESLint/TypeScript-ESLint plus
+the existing owned-process-state plugin and explicit parity rules cover the 87 recommended Deno lint rules. Regression
+cases cover scoped ignores, unused arguments/catches, imports, deprecated APIs, JSX buttons and window globals. The final
+focused lint regression passes, and the full Bun lint reports zero diagnostics across 1,429 files. Deno's lint gate
+remains unchanged; explicit switch guards retain its conservative no-fallthrough behavior with narrow ESLint annotations.
+Independent Spec, Standards and Tests review approved after correcting findings T22–T26 and S12–S13.
+
+The first integrated 648-file Bun run passed 646 files. Both docs failures were traced to mixed package-manager links
+while Deno probes ran concurrently: restoring the frozen Bun graph makes both complete real-build suites pass
+(`.ci-cache/bun-docs-integrated-repro.log`). Deno can retain Bun workspace links when switching back; moving aside the
+generated docs dependency directory makes its 22-page build and route verification pass
+(`.ci-cache/deno-docs-clean-graph.log`). Runtime checks must use separate checkouts or serialized graph preparation.
+The earlier 646-file run exposed two timing-sensitive golden fixtures: input now waits for actual terminal restart,
+and the publication journey resizes before asserting the complete report. All original workflow/publication assertions
+remain. The subsequent integrated run passes both golden files.
+
+The current complete lockfile also installs natively on Linux ARM64 from empty cache and node_modules: 1,105 packages
+in 137.91 seconds, frozen and with lifecycle scripts disabled (`.ci-cache/toolchain-linux-clean-install.log`). This was
+concurrent with host CI, so it establishes clean-install correctness rather than comparative performance. Final integrated
+macOS/Deno/Linux runs, comparative benchmarks and rebuilt standalone packages are still being completed. Deno remains
+the release/default lane; Windows/x64 and genuine SSHFS/FUSE qualification remain required before distribution cutover.
