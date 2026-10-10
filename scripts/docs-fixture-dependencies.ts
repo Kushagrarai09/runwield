@@ -1,15 +1,16 @@
 /** Materialize the frozen docs dependency closure inside each real-build fixture. */
 import { constants } from "node:fs";
 import { cp, mkdir, readdir, realpath } from "node:fs/promises";
-import { join, relative, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { versions } from "node:process";
 
 export async function prepareDocsFixtureDependencies(root: string): Promise<void> {
     if (!versions.bun) return;
     const repository = fileURLToPath(new URL("../", import.meta.url));
-    const store = await realpath(join(repository, "node_modules", ".bun"));
-    const destination = join(root, "node_modules", ".bun");
+    const modules = join(repository, "docs-site", "node_modules");
+    const store = await realpath(join(modules, ".bun"));
+    const destination = join(root, "docs-site", "node_modules", ".bun");
     const visited = new Set<string>();
     await mkdir(destination, { recursive: true });
     async function visitModules(directory: string): Promise<void> {
@@ -36,9 +37,9 @@ export async function prepareDocsFixtureDependencies(root: string): Promise<void
             await visitModules(join(store, owner, "node_modules"));
         }
     }
-    const modules = join(repository, "docs-site", "node_modules");
     await visitModules(modules);
     await cp(modules, join(root, "docs-site", "node_modules"), {
+        filter: (source) => ![".bun", ".deno", ".astro", ".vite"].includes(relative(modules, source).split(sep)[0]),
         recursive: true,
         verbatimSymlinks: true,
         mode: constants.COPYFILE_FICLONE,

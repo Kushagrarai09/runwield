@@ -8,6 +8,9 @@
     },
     "trustedDependencies": [],
     "scripts": {
+        "install:locked": "node scripts/check-bun-runtime.ts && bun install --frozen-lockfile --ignore-scripts && cd docs-site && bun install --frozen-lockfile --ignore-scripts",
+        "fmt": "node node_modules/prettier/bin/prettier.cjs --tab-width 4 --print-width 120",
+        "fmt:check": "node node_modules/prettier/bin/prettier.cjs --tab-width 4 --print-width 120 --check",
         "check:bun": "node scripts/check-bun-types.ts",
         "test:bun": "node scripts/run-bun-tests.ts",
         "check:portable-json": "node scripts/check-portable-json.ts",
@@ -137,8 +140,5 @@
         "@earendil-works/chord": "1.0.0",
         "@earendil-works/pi-codemode": "1.0.0",
         "@earendil-works/pi-telemetry": "1.0.0"
-    },
-    "workspaces": [
-        "docs-site"
-    ]
+    }
 }

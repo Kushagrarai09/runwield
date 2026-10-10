@@ -730,8 +730,9 @@ focused lint regression passes, and the full Bun lint reports zero diagnostics a
 remains unchanged; explicit switch guards retain its conservative no-fallthrough behavior with narrow ESLint annotations.
 Independent Spec, Standards and Tests review approved after correcting findings T22–T26 and S12–S13.
 
-The first integrated 648-file Bun run passed 646 files. Both docs failures were traced to mixed package-manager links
-while Deno probes ran concurrently: restoring the frozen Bun graph makes both complete real-build suites pass
+The first integrated 648-file Bun run passed 646 files. Both docs failures involved mixed package-manager links during
+a run overlapping Deno lint probes; the exact operation that rewrote the links was not established. Restoring the
+frozen Bun graph makes both complete real-build suites pass
 (`.ci-cache/bun-docs-integrated-repro.log`). Deno can retain Bun workspace links when switching back; moving aside the
 generated docs dependency directory makes its 22-page build and route verification pass
 (`.ci-cache/deno-docs-clean-graph.log`). Runtime checks must use separate checkouts or serialized graph preparation.
@@ -744,3 +745,11 @@ in 137.91 seconds, frozen and with lifecycle scripts disabled (`.ci-cache/toolch
 concurrent with host CI, so it establishes clean-install correctness rather than comparative performance. Final integrated
 macOS/Deno/Linux runs, comparative benchmarks and rebuilt standalone packages are still being completed. Deno remains
 the release/default lane; Windows/x64 and genuine SSHFS/FUSE qualification remain required before distribution cutover.
+
+The integrated Deno check exposed shared-workspace link contention between docs Astro 7.3.3 and Workspace Astro 7.3.5.
+Docs therefore retains its original independent Deno root and now has its own Bun lock/config as well. The root Bun
+manifest does not declare a shared docs workspace. `bun run install:locked` installs both frozen graphs; all package
+versions in the separated Bun locks were already present in the prior lock. Fixture builds copy the docs-local frozen
+store. A fresh Deno dependency tree passes every pre-test gate after this correction; its full suite is in progress.
+Manager switching must replace both generated dependency directories or use separate checkouts, because cached install
+metadata can retain stale links. No formatter-wide rewrite or production distribution switch is included.
