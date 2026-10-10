@@ -1,4 +1,6 @@
 // @ts-nocheck: browser tests install happy-dom globals around React.
+import { test } from "node:test";
+import { importTestBundle } from "../../testing/import-test-bundle.ts";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { fromFileUrl } from "@std/path";
 import { build, stop } from "esbuild";
@@ -115,9 +117,7 @@ async function withReader(payload, check, exitStatus = 200) {
                     }),
                 );
             };
-            const { ArtifactReadSurface } = await import(
-                `data:text/javascript,${encodeURIComponent(bundle.outputFiles[0].text)}`
-            );
+            const { ArtifactReadSurface } = await importTestBundle(bundle.outputFiles[0].text);
             root = createRoot(container);
             await act(() => root.render(<ArtifactReadSurface payload={payload} contentsInitiallyOpen={false} />));
             await check({
@@ -159,7 +159,7 @@ const linkedDocument = {
     markdown: "# Reference\n\nA linked document.",
 };
 
-Deno.test("linked reader Close leaves the document host running", async () => {
+test("linked reader Close leaves the document host running", async () => {
     await withReader(linkedDocument, async (reader) => {
         await reader.clickClose();
         await reader.waitForBlockedClose();
@@ -168,7 +168,7 @@ Deno.test("linked reader Close leaves the document host running", async () => {
     });
 });
 
-Deno.test("blocked linked reader Close gives honest manual guidance and a Document label", async () => {
+test("blocked linked reader Close gives honest manual guidance and a Document label", async () => {
     await withReader(linkedDocument, async (reader) => {
         assertEquals(reader.container.querySelector("h1")?.textContent, "Untitled Document");
         await reader.clickClose();
@@ -183,7 +183,7 @@ Deno.test("blocked linked reader Close gives honest manual guidance and a Docume
     });
 });
 
-Deno.test("standalone reader Close still stops its read session", async () => {
+test("standalone reader Close still stops its read session", async () => {
     const { launch: _launch, ...standalone } = linkedDocument;
     await withReader(standalone, async (reader) => {
         await reader.clickClose();
@@ -199,7 +199,7 @@ Deno.test("standalone reader Close still stops its read session", async () => {
     });
 });
 
-Deno.test("standalone reader stays open when its read session cannot stop", async () => {
+test("standalone reader stays open when its read session cannot stop", async () => {
     const { launch: _launch, ...standalone } = linkedDocument;
     await withReader(standalone, async (reader) => {
         await reader.clickClose();

@@ -1,4 +1,5 @@
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import {
     chmod as fsChmod,
     mkdir as fsMkdir,
@@ -90,10 +91,12 @@ async function removeTempDir(path: string): Promise<void> {
 
 async function installClaudeFixture(binDir: string, logPath: string): Promise<void> {
     await fsMkdir(binDir, { recursive: true });
-    const fixturePath = new URL("./backends/claude-cli/testing/fake-claude-mcp-client.ts", import.meta.url).pathname;
+    const fixturePath = fileURLToPath(new URL("./backends/claude-cli/testing/fake-claude-mcp-client.ts", import.meta.url));
     // The fixture lives in the workspace so its npm imports (the real MCP SDK
-    // client) resolve through the repository deno.json/node_modules.
-    const script = `#!/bin/sh\nexec deno run -A ${JSON.stringify(fixturePath)} "$@"\n`;
+    // client) resolve through the repository configuration/node_modules.
+    const command = [process.execPath, "run", ...(process.versions.deno ? ["-A"] : []), fixturePath]
+        .map((argument) => `'${argument.replaceAll("'", "'\\''")}'`).join(" ");
+    const script = `#!/bin/sh\nexec ${command} "$@"\n`;
     const path = join(binDir, "claude");
     await fsWriteFile(path, script);
     await fsChmod(path, 0o755);

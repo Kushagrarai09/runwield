@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assertEquals, assertNotEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -7,7 +8,7 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 
-Deno.test("browser mascot preserves identity, static answer pose and accessible written labels", () => {
+test("browser mascot preserves identity, static answer pose and accessible written labels", () => {
     const html = renderToStaticMarkup(createElement(RunWieldMascot, {
         agentName: "delegated",
         parentAgentName: "ideator",
@@ -21,7 +22,7 @@ Deno.test("browser mascot preserves identity, static answer pose and accessible 
     assertEquals(renderToStaticMarkup(createElement(RunWieldMascot, { agentName: "tester" })), "");
 });
 
-Deno.test("browser mascot stops offscreen, hidden, reduced-motion and unmounted", async () => {
+test("browser mascot stops offscreen, hidden, reduced-motion and unmounted", async () => {
     const browser = new Window();
     let intersect = (_visible: boolean) => {};
     let motionChange = () => {};

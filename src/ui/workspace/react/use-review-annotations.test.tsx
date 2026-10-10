@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assertEquals } from "@std/assert";
 import { Window } from "happy-dom";
 import { act } from "react";
@@ -8,7 +9,7 @@ function Panel({ count }: { count: number }) {
     return <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}>Annotations</button>;
 }
 
-Deno.test("review annotations open once for the first note and respect subsequent manual choices", async () => {
+test("review annotations open once for the first note and respect subsequent manual choices", async () => {
     const browser = new Window({ url: "http://workspace.local" });
     const globals = ["window", "document", "IS_REACT_ACT_ENVIRONMENT"];
     const previous = new Map(globals.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));

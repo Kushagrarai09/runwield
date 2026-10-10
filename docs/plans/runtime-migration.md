@@ -628,3 +628,37 @@ Preliminary macOS CLI-only timing for the qualified application binary: seven wa
 / 72.0 MiB peak RSS and `--help` 385.8 ms / 105.9 MiB peak RSS; executable size is 147.4 MiB
 (`.ci-cache/application-bun-startup-benchmark.json`). These samples were collected while CI was active, with no OS cache
 flush or Deno comparison. They do not satisfy the full application or cold/warm worktree-install benchmark gate.
+
+## Browser test parity (2026-10-10)
+
+The next slice ports 13 UI regression files, preserving every browser interaction and assertion, and takes the Bun
+registry from 431 to 444 files without removals. Two tests import real esbuild output from a unique temporary `.mjs`
+file via `src/testing/import-test-bundle.ts`; Bun lost the component exports when the same bundles were imported through
+data URLs. Explicit ESM loading preserves resolved shared React imports and removes its temporary directory in
+`finally`. No production components or runtime behavior change in this slice.
+
+All 13 pass under both runtimes in the disposable proposal, and Deno passes all 13 again in the actual checkout in 6.4
+seconds (`.ci-cache/ui-final-deno.log`). Full source types, lint and the zero-seam check pass
+(`.ci-cache/ui-final-{types,lint,seams}.log`). All three reviewers approve the final applied files and exact 431→444
+registry expansion. The complete macOS Bun gate passes: Workspace build, production types and all 444 files
+(`.ci-cache/expanded-444-macos-ci.log`). Linux browser tests use the lockfile-pinned
+`@esbuild/linux-arm64@0.28.2` from the existing Deno cache (binary SHA-256
+`90bd269553d258e80b19e3ccab4f98f0831f87442a2f056510ce24fd1b425fc2`) and a disposable writable copy of build assets. This
+exercises Linux runtime behavior but does not claim a clean native Linux Bun install.
+
+
+The first Linux 444-file run passed 415 files, then exposed exhausted temporary-memory storage and two Claude test
+launchers still hardcoding Deno. Both launchers now use the active executable, runtime-specific flags, decoded file
+URLs and literal POSIX argument quoting. The shared fake Claude client was already portable. Both corrected files pass
+under macOS Bun and Deno (`.ci-cache/claude-active-runtime-{bun,deno}.log`; Deno 5.9 seconds). Linux passes both files
+plus the two background-operation cases that failed after storage exhaustion
+(`.ci-cache/linux-capacity-claude-targeted.log`, 4/4). No assertions were removed or weakened. All three reviewers
+approve the launcher correction; full source types and lint pass again. The complete Linux rerun passes all 444 files
+(`.ci-cache/expanded-444-linux-final.log`, report `.ci-cache/linux-bun-runner/bun-report-Rj50LX`) using a task-specific,
+disk-backed volume with disposable per-file homes. That volume is removed after verification. The last full Deno CI
+checkpoint passed 643/643 files before this browser slice; the 13 browser files and final two fixture corrections pass
+separately under Deno afterward. No full-suite Deno rerun after those test-only edits is claimed. MacOS passed the full
+444-file gate before the final two fixture corrections, then both corrected files passed separately. The final Linux
+444-file run includes those corrections. Standalone application packages remain the qualified `4131b046a` builds;
+subsequent changes affect tests, fixtures and this plan. The original main checkout remains clean at `58b6ba176`;
+all implementation is on the isolated local migration branch. No push, PR, merge or release occurred.

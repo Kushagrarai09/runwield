@@ -1,4 +1,5 @@
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import { chmod as fsChmod, mkdir as fsMkdir, readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promises";
 import { test } from "node:test";
 import { assert, assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
@@ -130,8 +131,10 @@ test("bundled release from Router exposes an interactive interview before releas
 
 async function installClaudeCliFixture(binDir: string, logPath: string): Promise<void> {
     await fsMkdir(binDir, { recursive: true });
-    const fixturePath = new URL("./backends/claude-cli/testing/fake-claude-mcp-client.ts", import.meta.url).pathname;
-    const script = `#!/bin/sh\nexec deno run -A ${JSON.stringify(fixturePath)} "$@"\n`;
+    const fixturePath = fileURLToPath(new URL("./backends/claude-cli/testing/fake-claude-mcp-client.ts", import.meta.url));
+    const command = [process.execPath, "run", ...(process.versions.deno ? ["-A"] : []), fixturePath]
+        .map((argument) => `'${argument.replaceAll("'", "'\\''")}'`).join(" ");
+    const script = `#!/bin/sh\nexec ${command} "$@"\n`;
     const path = join(binDir, "claude");
     await fsWriteFile(path, script);
     await fsChmod(path, 0o755);
