@@ -1,3 +1,4 @@
+import { realpath as fsRealpath } from "node:fs/promises";
 /**
  * @module shared/package-resources
  * Helpers for consuming Pi package resources through RunWield policy.
@@ -65,9 +66,9 @@ export async function resolveInstalledPackagePromptResources(
     const resolved = await packageManager.resolve(() => Promise.resolve("skip"));
     const prompts = filterEnabledPackagePrompts(resolved);
     if (remote) {
-        const project = await Deno.realPath(options.cwd || getCwd());
+        const project = await fsRealpath(options.cwd || getCwd());
         for (const resource of prompts) {
-            const path = await Deno.realPath(resource.path);
+            const path = await fsRealpath(resource.path);
             const rest = relative(project, path);
             if (rest !== "" && rest !== ".." && !rest.startsWith("../") && !isAbsolute(rest)) continue;
             await assertPersonalResourcePath(resource.path, `package prompt "${resource.metadata.source}"`, {

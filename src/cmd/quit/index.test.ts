@@ -1,3 +1,9 @@
+import { test } from "node:test";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { execPath, versions } from "node:process";
+import { type CapturedProcessOutput, captureForegroundProcess } from "../../shared/captured-process.ts";
+import { mkdir as fsMkdir, rm as fsRm } from "node:fs/promises";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { fromFileUrl, join } from "@std/path";
 import { runQuitCommand } from "./index.ts";
@@ -10,13 +16,13 @@ function removeDenoLockNotice(stderr: string): string {
         .join("\n");
 }
 
-async function runQuitChild(): Promise<Deno.CommandOutput> {
-    const fixtureRoot = await Deno.makeTempDir({ prefix: "runwield-quit-command-" });
+async function runQuitChild(): Promise<CapturedProcessOutput> {
+    const fixtureRoot = await mkdtemp(join(tmpdir(), "runwield-quit-command-"));
     const homeDir = join(fixtureRoot, "home");
     const projectRoot = join(fixtureRoot, "project");
     await Promise.all([
-        Deno.mkdir(homeDir, { recursive: true }),
-        Deno.mkdir(projectRoot, { recursive: true }),
+        fsMkdir(homeDir, { recursive: true }),
+        fsMkdir(projectRoot, { recursive: true }),
     ]);
     const moduleUrl = import.meta.resolve("./index.ts");
     const configPath = fromFileUrl(new URL("../../../deno.json", import.meta.url));
@@ -28,26 +34,24 @@ async function runQuitChild(): Promise<Deno.CommandOutput> {
         "});",
     ].join("\n");
     try {
-        return await new Deno.Command(Deno.execPath(), {
-            args: ["eval", "--config", configPath, source],
+        return await captureForegroundProcess(execPath, {
+            args: versions.deno ? ["eval", "--config", configPath, source] : ["--eval", source],
             cwd: projectRoot,
             env: {
                 HOME: homeDir,
                 WLD_TEST_SANDBOX_HOME: homeDir,
             },
-            stdout: "piped",
-            stderr: "piped",
-        }).output();
+        });
     } finally {
-        await Deno.remove(fixtureRoot, { recursive: true }).catch(() => {});
+        await fsRm(fixtureRoot, { recursive: true }).catch(() => {});
     }
 }
 
-Deno.test("quit command no-ops without interactive surfaces", async () => {
+test("quit command no-ops without interactive surfaces", async () => {
     await runQuitCommand([], {});
 });
 
-Deno.test("quit command clears external UI surfaces and performs real delayed TUI shutdown", async () => {
+test("quit command clears external UI surfaces and performs real delayed TUI shutdown", async () => {
     const result = await runQuitChild();
     const stdout = decoder.decode(result.stdout);
 

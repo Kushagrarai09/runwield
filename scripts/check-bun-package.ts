@@ -1,7 +1,7 @@
 /** Qualify a relocated development executable without touching the user's home. */
-import { deepEqual, equal, match, ok } from "node:assert/strict";
+import { deepEqual, doesNotMatch, equal, match, ok } from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -27,6 +27,7 @@ async function unusedPort(): Promise<number> {
 export async function checkBunPackage(
     path: string,
     assetsDirectory = join(ROOT, "dist/workspace-bun/client"),
+    helperFixturePath = join(ROOT, "src/testing/workflow-binary-fixture.sh"),
 ): Promise<void> {
     const executable = resolve(path);
     const metadata = await verifyBuildArtifact(executable);
@@ -58,7 +59,7 @@ export async function checkBunPackage(
             const sandbox = `(version 1)(allow default)(deny file-read* (subpath ${JSON.stringify(ROOT)}))`;
             const command = platform === "darwin" ? "/usr/bin/sandbox-exec" : relocated;
             const commandArgs = platform === "darwin" ? ["-p", sandbox, relocated, ...args] : args;
-            const child = spawn(command, commandArgs, { cwd: home, env: childEnv, stdio: ["ignore", "pipe", "pipe"] });
+            const child = spawn(command, commandArgs, { cwd: home, env: childEnv, stdio: ["pipe", "pipe", "pipe"] });
             let output = "";
             child.stdout.setEncoding("utf8").on("data", (chunk: string) => output += chunk);
             child.stderr.setEncoding("utf8").on("data", (chunk: string) => output += chunk);
@@ -80,6 +81,44 @@ export async function checkBunPackage(
             } finally {
                 clearTimeout(timeout);
             }
+        }
+        const fixture = await readFile(helperFixturePath, "utf8");
+        const bin = join(home, "bin");
+        await mkdir(bin);
+        for (const name of ["mnemoteca", "cymbal", "ketch", "osascript"]) {
+            await writeFile(join(bin, name), fixture, { mode: 0o755 });
+        }
+        childEnv.PATH = `${bin}:${childEnv.PATH}`;
+        const onboarding = start(["Runtime migration startup qualification"]);
+        let reachedPicker = false;
+        const cancelAtPicker = () => {
+            if (!reachedPicker && onboarding.output().includes("Use an API key")) {
+                reachedPicker = true;
+                onboarding.child.stdin.write("\x1b");
+            }
+        };
+        onboarding.child.stdout.on("data", cancelAtPicker);
+        onboarding.child.stderr.on("data", cancelAtPicker);
+        const onboardingTimeout = setTimeout(() => onboarding.child.kill("SIGKILL"), 30_000);
+        try {
+            equal(await onboarding.finished, 0, onboarding.output());
+            ok(reachedPicker, onboarding.output());
+            doesNotMatch(onboarding.output(), /Deno is not defined|Fatal error|ReferenceError/);
+            ok(onboarding.output().includes("\x1b[?1049l"), "onboarding leaves the alternate screen");
+            ok(onboarding.output().includes("\x1b[?25h"), "onboarding restores the cursor");
+            let unexpected = "";
+            try {
+                unexpected = await readFile(join(bin, "unexpected.log"), "utf8");
+            } catch (error) {
+                if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+            }
+            equal(unexpected, "");
+        } finally {
+            clearTimeout(onboardingTimeout);
+            if (onboarding.child.exitCode === null && onboarding.child.signalCode === null) {
+                onboarding.child.kill("SIGKILL");
+            }
+            await onboarding.finished;
         }
         const port = await unusedPort();
         const running = start(["workspace", "serve", "--port", String(port), "--no-open"]);
@@ -130,7 +169,7 @@ export async function checkBunPackage(
             await running.finished;
         }
         console.log(
-            `Relocated Bun package passed: CLI and Plan entry, worker/WASM, image conversion, Workspace assets/auth, shutdown (${metadata.target}).`,
+            `Relocated Bun package passed: CLI onboarding/cancel and Plan entry, worker/WASM, image conversion, Workspace assets/auth, shutdown (${metadata.target}).`,
         );
     } finally {
         await rm(home, { recursive: true, force: true });
@@ -138,8 +177,8 @@ export async function checkBunPackage(
 }
 
 if (import.meta.main) {
-    if (argv.length < 3 || argv.length > 4) {
-        throw new Error("Usage: check-bun-package.ts <executable> [expected-assets-directory]");
+    if (argv.length < 3 || argv.length > 5) {
+        throw new Error("Usage: check-bun-package.ts <executable> [expected-assets-directory] [helper-fixture-path]");
     }
-    await checkBunPackage(argv[2], argv[3]);
+    await checkBunPackage(argv[2], argv[3], argv[4]);
 }

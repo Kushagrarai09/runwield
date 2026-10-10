@@ -447,3 +447,27 @@ passed in a minimal container without the checkout (`.ci-cache/plan-package-chec
 
 The next slice targets interactive onboarding, Session activation, provider turns and durable resume. Remote transport,
 supervisor and broader workflow paths, full Bun type coverage, Windows and x64 remain unqualified.
+
+## Bun Session activation, durable resume and onboarding (2026-10-10)
+
+Session activation, prompt/skill resources, model configuration, mounted personal resources, transcript projection, MCP
+configuration and CLI shutdown now use portable runtime APIs. Credential-file modes, resource root identity and symlink
+guards, transcript prefix validation/fsync, and Unix socket permissions retain their contracts. No real user credentials
+were read or changed by qualification; every provider fixture has a disposable HOME.
+
+The managed Session test completes a scripted provider turn, closes the Session, reopens from disk and completes a
+continuation. Review T15 strengthened it to verify saved user and assistant content at the resumed provider boundary.
+The actual source CLI opens setup, accepts cancellation and restores the terminal. All three review axes approved.
+
+Integrated Bun checks pass 30 files on macOS (160 tests, five skips); Linux passes 163 tests with two skips
+(`.ci-cache/startup-ci-bun.log`, `.ci-cache/linux-startup-suite.log`). Both relocated development executables pass the
+previous qualification plus actual onboarding/cancellation, with checkout access denied or absent
+(`.ci-cache/startup-package-check.log`, `.ci-cache/startup-linux-package-check.log`). The full Deno gate passed all 637
+files in 605.8 seconds (`.ci-cache/startup-full-ci.log`), including types, lint, formatting and zero seams.
+
+A separate macOS compiled-CLI probe completed a real HTTP-provider turn against a local scripted endpoint and exited
+zero through `/quit`. It also exposed three helper-extension Deno references hidden inside terminal-formatted warning
+output. Those warnings are assigned to the next Agent-tool/extension slice; this checkpoint does not claim clean
+complete interactive coverage. The probe is `.ci-cache/probe-compiled-provider.py`, with output in
+`.ci-cache/compiled-provider-probe.log`. Remote/SFTP/supervisor paths, remaining workflow APIs, full Bun type coverage
+and Windows/x64 qualification remain.

@@ -22,5 +22,11 @@
     "src/shared/primary-checkout.test.ts",
     "src/shared/git-evidence-cache.test.ts",
     "src/shared/project-runtime-entry.integration.test.ts",
-    "src/shared/project-runtime-portable.test.ts"
+    "src/shared/project-runtime-portable.test.ts",
+    "src/shared/runtime-preflight.test.ts",
+    "src/shared/models/model-registry.test.js",
+    "src/shared/remote/personal-resources.test.ts",
+    "src/cmd/quit/index.test.ts",
+    "src/shared/session/runtime-portable-turn.test.ts",
+    "src/cli-onboarding.test.ts"
 ]

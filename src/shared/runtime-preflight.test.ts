@@ -1,3 +1,8 @@
+import { test } from "node:test";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { chmod as fsChmod, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
+import { env } from "node:process";
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { join } from "@std/path";
 import { withProcessGlobalTestLock } from "../testing/process-global-lock.ts";
@@ -5,23 +10,23 @@ import { ensureCymbalBinary, ensureKetchBinary, ensureMnemotecaBinary, hasSnipBi
 
 async function writeAvailableBinary(directory: string, name: string): Promise<string> {
     const path = join(directory, name);
-    await Deno.writeTextFile(path, "#!/bin/sh\nexit 0\n");
-    await Deno.chmod(path, 0o755);
+    await fsWriteFile(path, "#!/bin/sh\nexit 0\n");
+    await fsChmod(path, 0o755);
     return path;
 }
 
 function runtimePreflightTest(name: string, run: (binaryDirectory: string) => Promise<void>): void {
-    Deno.test(name, () =>
+    test(name, () =>
         withProcessGlobalTestLock(async () => {
-            const previousPath = Deno.env.get("PATH");
-            const binaryDirectory = await Deno.makeTempDir({ prefix: "runwield-runtime-binaries-" });
-            Deno.env.set("PATH", binaryDirectory);
+            const previousPath = env.PATH;
+            const binaryDirectory = await mkdtemp(join(tmpdir(), "runwield-runtime-binaries-"));
+            env.PATH = binaryDirectory;
             try {
                 await run(binaryDirectory);
             } finally {
-                if (previousPath === undefined) Deno.env.delete("PATH");
-                else Deno.env.set("PATH", previousPath);
-                await Deno.remove(binaryDirectory, { recursive: true }).catch(() => {});
+                if (previousPath === undefined) delete env.PATH;
+                else env.PATH = previousPath;
+                await fsRm(binaryDirectory, { recursive: true }).catch(() => {});
             }
         }));
 }
@@ -39,10 +44,10 @@ runtimePreflightTest(
         await ensureKetchBinary();
         assertEquals(await hasSnipBinary(), true);
 
-        await Deno.remove(mnemoteca);
-        await Deno.remove(cymbal);
-        await Deno.remove(ketch);
-        await Deno.remove(snip);
+        await fsRm(mnemoteca);
+        await fsRm(cymbal);
+        await fsRm(ketch);
+        await fsRm(snip);
 
         await ensureMnemotecaBinary();
         await ensureCymbalBinary();

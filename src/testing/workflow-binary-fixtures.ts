@@ -1,3 +1,6 @@
+import { symlink } from "node:fs/promises";
+import { chmod as fsChmod, mkdir as fsMkdir, readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promises";
+import { platform } from "node:process";
 import { fromFileUrl, join } from "@std/path";
 
 // Only the executable contents are shared. Every fixture has its own command
@@ -15,24 +18,24 @@ export async function writeWorkflowBinaryFixtures(
     options: WorkflowBinaryFixtureOptions = {},
 ): Promise<string> {
     const binDir = join(root, "bin");
-    await Deno.mkdir(binDir, { recursive: true });
+    await fsMkdir(binDir, { recursive: true });
     const names = options.githubUnavailable ? [...BINARIES, "gh"] : BINARIES;
-    const script = Deno.build.os === "windows" ? await Deno.readTextFile(EXECUTABLE) : "";
+    const script = platform === "win32" ? await fsReadFile(EXECUTABLE, "utf8") : "";
     await Promise.all(names.map(async (name) => {
         const path = join(binDir, name);
         // Windows symlink creation can require privileges. Preserve the previous
         // independent-file behavior there without requiring Developer Mode.
-        if (Deno.build.os === "windows") {
+        if (platform === "win32") {
             const quotedBinDir = "'" + binDir.replaceAll("'", "'\\''") + "'";
-            await Deno.writeTextFile(
+            await fsWriteFile(
                 path,
                 script
                     .replace("fixture_bin_dir=${0%/*}", `fixture_bin_dir=${quotedBinDir}`)
                     .replace("fixture_name=${0##*/}", `fixture_name='${name}'`),
             );
-            await Deno.chmod(path, 0o755);
+            await fsChmod(path, 0o755);
         } else {
-            await Deno.symlink(EXECUTABLE, path);
+            await symlink(EXECUTABLE, path);
         }
     }));
     return binDir;
@@ -42,9 +45,9 @@ export async function writeWorkflowBinaryFixtures(
 export async function assertWorkflowBinaryCallsSupported(root: string): Promise<void> {
     let unexpected = "";
     try {
-        unexpected = await Deno.readTextFile(join(root, "bin", "unexpected.log"));
+        unexpected = await fsReadFile(join(root, "bin", "unexpected.log"), "utf8");
     } catch (error) {
-        if (!(error instanceof Deno.errors.NotFound)) throw error;
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     }
     if (unexpected) throw new Error(unexpected.trim());
 }

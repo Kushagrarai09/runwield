@@ -1,3 +1,4 @@
+import { mkdir as fsMkdir, writeFile as fsWriteFile } from "node:fs/promises";
 /**
  * @module shared/workflow/metrics
  * Local-only workflow metrics recording helpers.
@@ -782,8 +783,8 @@ export async function recordWorkflowMetric(metric, cwd) {
         const serialized = `${JSON.stringify(record)}\n`;
         metricsWriteQueue = metricsWriteQueue.then(async () => {
             try {
-                await Deno.mkdir(dirname(filePath), { recursive: true });
-                await Deno.writeTextFile(filePath, serialized, { append: true });
+                await fsMkdir(dirname(filePath), { recursive: true });
+                await fsWriteFile(filePath, serialized, { flag: "a" });
             } catch {
                 // Fail-open: metric writes must never disrupt execution.
             }

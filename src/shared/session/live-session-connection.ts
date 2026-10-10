@@ -1,3 +1,5 @@
+import { platform } from "node:process";
+import { chmod } from "node:fs/promises";
 /** Temporary access to the running agent from another surface on the same machine. */
 import { createHash } from "node:crypto";
 import { createServer, request as httpRequest, type ServerResponse } from "node:http";
@@ -67,7 +69,7 @@ type LiveSessionSnapshot = {
 
 function socketPath(sessionId: string, operationId: string) {
     const key = createHash("sha256").update(`${getHomeDir()}:${sessionId}:${operationId}`).digest("hex").slice(0, 40);
-    return Deno.build.os === "windows" ? `\\\\.\\pipe\\runwield-${key}` : `/tmp/runwield-${key}.sock`;
+    return platform === "win32" ? `\\\\.\\pipe\\runwield-${key}` : `/tmp/runwield-${key}.sock`;
 }
 
 export interface LiveSessionRuntime {
@@ -178,7 +180,7 @@ export async function openLiveSessionConnection(
             server.once("error", reject);
             server.listen(path, () => resolve(undefined));
         });
-        if (Deno.build.os !== "windows") await Deno.chmod(path, 0o600);
+        if (platform !== "win32") await chmod(path, 0o600);
     } catch (error) {
         server.close();
         throw error;
