@@ -8,6 +8,12 @@
         "src/shared/private-json-file.ts",
         "src/shared/private-json-file.test.ts",
         "src/shared/testing/private-json-file-cases.ts",
-        "scripts/run-bun-tests.test.ts"
+        "scripts/run-bun-tests.test.ts",
+        "src/shared/process-liveness.ts",
+        "src/shared/process-liveness.test.ts",
+        "src/testing/process-global-lock.ts",
+        "src/testing/process-global-lock.test.ts",
+        "src/constants.js",
+        "src/constants-portable.test.ts"
     ]
 }

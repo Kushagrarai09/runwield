@@ -180,3 +180,27 @@ reading retained failure evidence, and the migrated TypeScript gate passed. Inde
 reviews approved with zero open issues after restoring Deno automatic installation and strengthening the failure
 retention assertion. The full source suite is being exercised separately; the first sandboxed attempt could not bind
 localhost HTTP fixtures, so the retry uses approved localhost access with the repository's isolated per-file runner.
+
+## Process and environment utility migration
+
+The next slice replaces the external `kill -0` subprocess and Deno hostname call with `node:process` signal-zero and
+`node:os` hostname. Invalid or unqueryable PIDs retain the previous false result; foreign-host and unattributable locks
+remain conservative. Real child-process tests follow a holder from live to exited without modifying owned lock
+machinery.
+
+`getHomeDir()` and `getCwd()` now use lazy Node-compatible environment/cwd access. Source resource paths use `node:path`
+and `node:fs`; the existing Deno per-realm test detection remains during transition, with Bun/Node entrypoint detection
+and Bun's preload guard providing the new runtime coverage. The process-global test lock retains its process identity,
+filesystem exclusion, heartbeat, stale cleanup and synchronous exit cleanup using Node-compatible APIs. Existing lock
+concurrency and heartbeat tests now run under both test runners. New environment tests verify post-import HOME/cwd
+changes, source resource readability and rejection before an unsandboxed test entrypoint's body runs.
+
+Foreground command spawning, remote Linux process-group termination and runtime packaging still require separate
+migration. In particular, Node's asynchronous spawn-error delivery differs from current synchronous `Deno.Command`
+callers; this cannot be changed by a mechanical rename without adjusting the callers and failure tests.
+
+Process utility verification: five Bun test files and the migrated TypeScript gate passed. Deno passed the new liveness,
+portable constants and lock tests plus existing constants, Plan doctor and worktree-registry tests. Full Deno type
+checking, targeted lint, formatting and the zero-seam check passed. Independent Standards/Spec/Tests reviews approved
+with zero open issues after making the HOME/cwd regression test use distinct directories. These utilities are verified
+on macOS ARM64; Windows and Linux runtime execution remain qualification work.
