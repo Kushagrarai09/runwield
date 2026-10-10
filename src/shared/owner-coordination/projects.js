@@ -82,7 +82,7 @@ function canonicalizeExistingDirectory(path) {
 }
 
 /**
- * @param {import('node:sqlite').DatabaseSync} db
+ * @param {import('../sqlite.ts').DatabaseSync} db
  * @param {string} enteredRoot
  * @param {string} canonicalRoot
  * @param {string} [allowedProjectId]
@@ -102,7 +102,7 @@ function assertNoEnteredRootRetarget(db, enteredRoot, canonicalRoot, allowedProj
 }
 
 /**
- * @param {import('node:sqlite').DatabaseSync} db
+ * @param {import('../sqlite.ts').DatabaseSync} db
  * @param {{ projectId: string, enteredRoot: string, canonicalRoot: string, rootState: 'current' | 'historical', now: string, idFactory?: () => string }} options
  */
 function ensureProjectRootEvidence(db, options) {

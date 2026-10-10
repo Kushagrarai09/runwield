@@ -10,7 +10,7 @@ import { test } from "node:test";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync } from "../sqlite.ts";
 import { getRunWieldSessionDir } from "../session/root-session.js";
 import { captureTranscriptEvidence } from "../session/session-transcript-projection.js";
 import { openOwnerCoordinationDatabase } from "./database.js";

@@ -38,8 +38,8 @@
     "jsr:@std/yaml@^1.0.5": "1.1.2",
     "npm:@agentclientprotocol/sdk@1.4.0": "1.4.0_zod@4.4.3",
     "npm:@agentclientprotocol/sdk@^1.4.0": "1.4.0_zod@4.4.3",
-    "npm:@astrojs/check@0.9.10": "0.9.10_typescript@5.9.3",
-    "npm:@astrojs/check@~0.9.10": "0.9.10_typescript@5.9.3",
+    "npm:@astrojs/check@0.9.10": "0.9.10_typescript@5.9.3_prettier@3.9.9",
+    "npm:@astrojs/check@~0.9.10": "0.9.10_typescript@5.9.3_prettier@3.9.9",
     "npm:@astrojs/react@6.0.1": "6.0.1_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0_@types+node@26.6.4",
     "npm:@astrojs/react@^6.0.1": "6.0.1_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0_@types+node@26.6.4",
     "npm:@base-ui/react@1.7.0": "1.7.0_@types+react@19.2.18_react@19.3.0_react-dom@19.3.0",
@@ -179,6 +179,7 @@
     "npm:perfect-freehand@^1.2.3": "1.2.3",
     "npm:preact@10.29.8": "10.29.8",
     "npm:preact@^10.29.8": "10.29.8",
+    "npm:prettier@3.9.9": "3.9.9",
     "npm:proper-lockfile@4.1.2": "4.1.2",
     "npm:proper-lockfile@^4.1.2": "4.1.2",
     "npm:quikdown@1.2.21": "1.2.21",
@@ -341,7 +342,7 @@
       ],
       "bin": true
     },
-    "@astrojs/check@0.9.10_typescript@5.9.3": {
+    "@astrojs/check@0.9.10_typescript@5.9.3_prettier@3.9.9": {
       "integrity": "sha512-zgx/UQMozdjOa3bOxjgeCFdtpE3c9rRX6xHwa+2QXvy8z8Akifu2AtubHyv/zzC2znO8dl8fFWL4K+Ba9kS8HQ==",
       "dependencies": [
         "@astrojs/language-server",
@@ -456,7 +457,7 @@
         "unified"
       ]
     },
-    "@astrojs/language-server@2.16.16_typescript@5.9.3": {
+    "@astrojs/language-server@2.16.16_prettier@3.9.9": {
       "integrity": "sha512-KuS17AOOqH/M5mHXPmKvtp8L+NNteARC7Xjf395+9R9dtJOBndqdStwU4V+OKzYZpgZ+hliV13knzx/oMtFl7Q==",
       "dependencies": [
         "@astrojs/compiler",
@@ -467,6 +468,7 @@
         "@volar/language-server",
         "@volar/language-service",
         "muggle-string",
+        "prettier",
         "tinyglobby",
         "volar-service-css",
         "volar-service-emmet",
@@ -477,6 +479,9 @@
         "volar-service-yaml",
         "vscode-html-languageservice",
         "vscode-uri"
+      ],
+      "optionalPeers": [
+        "prettier"
       ],
       "bin": true
     },
@@ -5651,8 +5656,8 @@
     "preact@10.29.8": {
       "integrity": "sha512-ej2aVZ+vZ8WO7tvlQWRM9N63A0KzF9q4mWJfDUHgYaIofWY9hu74QdnQrjoPMmZi2/nZ5gN0bJCQF49xQqx09Q=="
     },
-    "prettier@3.9.6": {
-      "integrity": "sha512-OpN0zzVdiaiAhxpuuj5efpIS4sY9j7bY6uR5mnj5yPzGkdkjNKSJeUThPb60Jw29QuAZgA4o+/iB49kFiaBX6g==",
+    "prettier@3.9.9": {
+      "integrity": "sha512-Z/CJHIkdujO/OtN7nXUii0Rf3VT5SRuhjBA82Xvu2XhBUgX3nhP67T0LHceBdQLex7OOFGTox+Q5Yg8Jk2Qivg==",
       "bin": true
     },
     "prismjs@1.30.0": {
@@ -6426,14 +6431,16 @@
         "@volar/language-service"
       ]
     },
-    "volar-service-prettier@0.0.71_@volar+language-service@2.4.28": {
+    "volar-service-prettier@0.0.71_@volar+language-service@2.4.28_prettier@3.9.9": {
       "integrity": "sha512-Rz7JVH3qD108UCdmIEiZvOBNljMt2nLFdbN8AXcDfn7xD9F5I2aCIsDVqBbXw21PsnxG0b7MfwtNF+zPS/NKUg==",
       "dependencies": [
         "@volar/language-service",
+        "prettier",
         "vscode-uri"
       ],
       "optionalPeers": [
-        "@volar/language-service"
+        "@volar/language-service",
+        "prettier"
       ]
     },
     "volar-service-typescript-twoslash-queries@0.0.71_@volar+language-service@2.4.28": {
@@ -6857,6 +6864,7 @@
         "npm:motion@13.2.0",
         "npm:perfect-freehand@1.2.3",
         "npm:preact@10.29.8",
+        "npm:prettier@3.9.9",
         "npm:proper-lockfile@4.1.2",
         "npm:quikdown@1.2.21",
         "npm:react-dom@19.3.0",

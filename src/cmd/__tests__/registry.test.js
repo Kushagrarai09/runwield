@@ -1,3 +1,9 @@
+import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
+import { captureForegroundProcess } from "../../shared/captured-process.ts";
+import { test } from "node:test";
+import { mkdtemp as fsMkdtemp, writeFile as fsWriteFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import process from "node:process";
 import { assertEquals } from "@std/assert";
 import { join } from "@std/path";
 import {
@@ -9,12 +15,12 @@ import {
     hasCommandSurface,
 } from "../registry.js";
 
-Deno.test("importing the registry does not initialize the TUI", async () => {
-    const home = await Deno.makeTempDir({ prefix: "runwield-registry-import-home-" });
+test("importing the registry does not initialize the TUI", async () => {
+    const home = await fsMkdtemp(join(tmpdir(), "runwield-registry-import-home-"));
     const script = join(home, "import-registry.ts");
     const registryUrl = new URL("../registry.js", import.meta.url).href;
     const tuiUrl = new URL("../../ui/tui/tui.ts", import.meta.url).href;
-    await Deno.writeTextFile(
+    await fsWriteFile(
         script,
         [
             `import "${registryUrl}";`,
@@ -27,18 +33,16 @@ Deno.test("importing the registry does not initialize the TUI", async () => {
             "}",
         ].join("\n"),
     );
-    const result = await new Deno.Command(Deno.execPath(), {
-        args: ["run", "-A", "--config", "deno.json", script],
+    const result = await captureForegroundProcess(process.execPath, {
+        args: runtimeSourceArgs(["run", "-A", "--config", "deno.json", script]),
         cwd: new URL("../../..", import.meta.url).pathname,
         env: { HOME: home, WLD_TEST_SANDBOX_HOME: home, MNEMOTECA_DB_PATH: join(home, "mnemoteca.sqlite") },
-        stdout: "piped",
-        stderr: "piped",
-    }).output();
+    });
     assertEquals(result.code, 0, new TextDecoder().decode(result.stderr));
     assertEquals(new TextDecoder().decode(result.stdout), "");
 });
 
-Deno.test("plan-review help explains Session restart and saved content", () => {
+test("plan-review help explains Session restart and saved content", () => {
     const command = getSlashCommandDefinition("plan-review");
     assertEquals(command?.notes?.some((note) => note.includes("current Session") && note.includes("restart")), true);
     assertEquals(
@@ -47,12 +51,12 @@ Deno.test("plan-review help explains Session restart and saved content", () => {
     );
 });
 
-Deno.test("getCommandDefinition resolves alias", () => {
+test("getCommandDefinition resolves alias", () => {
     const command = getCommandDefinition("agents");
     assertEquals(command?.name, "agent");
 });
 
-Deno.test("getCliCommandDefinitions excludes slash-only commands", () => {
+test("getCliCommandDefinitions excludes slash-only commands", () => {
     const commands = getCliCommandDefinitions();
     assertEquals(commands.some((command) => command.name === "export"), false);
     assertEquals(commands.some((command) => command.name === "settings"), false);
@@ -62,7 +66,7 @@ Deno.test("getCliCommandDefinitions excludes slash-only commands", () => {
     assertEquals(commands.some((command) => command.name === "login"), true);
 });
 
-Deno.test("getSlashCommandDefinitions excludes cli-only commands", () => {
+test("getSlashCommandDefinitions excludes cli-only commands", () => {
     const commands = getSlashCommandDefinitions();
     assertEquals(commands.some((command) => command.name === "plans"), false);
     assertEquals(commands.some((command) => command.name === "acp"), false);
@@ -71,7 +75,7 @@ Deno.test("getSlashCommandDefinitions excludes cli-only commands", () => {
     assertEquals(commands.some((command) => command.name === "login"), true);
 });
 
-Deno.test("registry surfaces capture theme, model, and login CLI support", () => {
+test("registry surfaces capture theme, model, and login CLI support", () => {
     const theme = getCommandDefinition("theme");
     const model = getCommandDefinition("model");
     const login = getCommandDefinition("login");
@@ -83,12 +87,12 @@ Deno.test("registry surfaces capture theme, model, and login CLI support", () =>
     assertEquals(login ? hasCommandSurface(login, "slash") : false, true);
 });
 
-Deno.test("getSlashCommandDefinition resolves slash aliases", () => {
+test("getSlashCommandDefinition resolves slash aliases", () => {
     const command = getSlashCommandDefinition("models");
     assertEquals(command?.name, "model");
 });
 
-Deno.test("update command is CLI-only and upgrade resolves to update", () => {
+test("update command is CLI-only and upgrade resolves to update", () => {
     const command = getCommandDefinition("update");
     assertEquals(command?.name, "update");
     assertEquals(getCommandDefinition("upgrade")?.name, "update");
@@ -99,7 +103,7 @@ Deno.test("update command is CLI-only and upgrade resolves to update", () => {
     assertEquals(getSlashCommandDefinitions().some((definition) => definition.name === "update"), false);
 });
 
-Deno.test("onboard is a CLI command and a TUI-only slash command", () => {
+test("onboard is a CLI command and a TUI-only slash command", () => {
     const command = getCommandDefinition("onboard");
     assertEquals(command?.name, "onboard");
     assertEquals(command ? hasCommandSurface(command, "cli") : false, true);
@@ -108,7 +112,7 @@ Deno.test("onboard is a CLI command and a TUI-only slash command", () => {
     assertEquals(getSlashCommandDefinition("onboard", "workspace"), undefined);
 });
 
-Deno.test("workspace command is CLI-only", () => {
+test("workspace command is CLI-only", () => {
     const command = getCommandDefinition("workspace");
     assertEquals(command?.name, "workspace");
     assertEquals(command ? hasCommandSurface(command, "cli") : false, true);
@@ -116,7 +120,7 @@ Deno.test("workspace command is CLI-only", () => {
     assertEquals(getSlashCommandDefinition("workspace"), undefined);
 });
 
-Deno.test("context command is a slash-only built-in", () => {
+test("context command is a slash-only built-in", () => {
     const command = getCommandDefinition("context");
     assertEquals(command?.name, "context");
     assertEquals(command ? hasCommandSurface(command, "cli") : true, false);
@@ -126,7 +130,7 @@ Deno.test("context command is a slash-only built-in", () => {
     assertEquals(getSlashCommandDefinitions().some((definition) => definition.name === "context"), true);
 });
 
-Deno.test("ACP slash surface exposes TUI built-ins except approved exclusions", () => {
+test("ACP slash surface exposes TUI built-ins except approved exclusions", () => {
     const names = getSlashCommandDefinitions("acp").map((command) => command.name).sort();
     assertEquals(names.includes("agent"), true);
     assertEquals(names.includes("model"), true);
@@ -141,7 +145,7 @@ Deno.test("ACP slash surface exposes TUI built-ins except approved exclusions", 
     assertEquals(getSlashCommandDefinition("models", "acp")?.name, "model");
 });
 
-Deno.test("Workspace slash surface comes from the registry and keeps current coverage", () => {
+test("Workspace slash surface comes from the registry and keeps current coverage", () => {
     assertEquals(getSlashCommandDefinitions("workspace").map((command) => command.name), [
         "agent",
         "model",
@@ -159,7 +163,7 @@ Deno.test("Workspace slash surface comes from the registry and keeps current cov
     }
 });
 
-Deno.test("disabled built-ins and aliases are still reserved names on other slash surfaces", () => {
+test("disabled built-ins and aliases are still reserved names on other slash surfaces", () => {
     assertEquals(getCommandDefinition("login")?.name, "login");
     assertEquals(getSlashCommandDefinition("login", "acp"), undefined);
     assertEquals(getSlashCommandDefinition("resume", "acp"), undefined);

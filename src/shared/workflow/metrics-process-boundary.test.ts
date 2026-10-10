@@ -1,7 +1,13 @@
+import { collectProcessOutput } from "../../testing/subprocess-output.ts";
+import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
+import { spawnNativeProcess } from "../foreground-process.ts";
+import { getCwd } from "../../constants.js";
+import { test } from "node:test";
+import process from "node:process";
 import { assertEquals } from "@std/assert";
 import { withWorkflowMetricsFixture } from "../../testing/workflow-metrics-fixture.ts";
 
-Deno.test("a producer lost after a flushed call start leaves no fabricated terminal row", async () => {
+test("a producer lost after a flushed call start leaves no fabricated terminal row", async () => {
     await withWorkflowMetricsFixture(async ({ projectRoot, readMetrics }) => {
         const metricsModule = new URL("./metrics.js", import.meta.url).href;
         const script = `const { recordWorkflowMetric, drainWorkflowMetrics } = await import(${
@@ -9,26 +15,27 @@ Deno.test("a producer lost after a flushed call start leaves no fabricated termi
         });
             await recordWorkflowMetric({ v: 2, category: "tool_usage", event: "tool_call_started",
                 recorderId: "crashed_execution", seq: 0, executionId: "crashed_execution",
-                callId: "lost_call", toolName: "read" }, Deno.args[0]);
+                callId: "lost_call", toolName: "read" }, (await import("node:process")).argv.slice(2)[0]);
             await drainWorkflowMetrics();
-            Deno.exit(0);`;
-        const child = new Deno.Command(Deno.execPath(), {
-            args: ["run", "-A", "--no-check", "-", projectRoot],
+            (await import("node:process")).exit(0);`;
+        const child = spawnNativeProcess(process.execPath, {
+            args: runtimeSourceArgs(["run", "-A", "--no-check", "-", projectRoot]),
             stdin: "piped",
             stdout: "piped",
             stderr: "piped",
-        }).spawn();
+            cwd: getCwd(),
+        });
         const writer = child.stdin.getWriter();
         await writer.write(new TextEncoder().encode(script));
         await writer.close();
-        const status = await child.output();
+        const status = await collectProcessOutput(child);
         assertEquals(status.success, true, new TextDecoder().decode(status.stderr));
         const rows = await readMetrics();
         assertEquals(rows.map((row) => [row.event, row.callId]), [["tool_call_started", "lost_call"]]);
     });
 });
 
-Deno.test("two local producers leave complete JSONL and unique observation IDs", async () => {
+test("two local producers leave complete JSONL and unique observation IDs", async () => {
     await withWorkflowMetricsFixture(async ({ projectRoot, readMetrics }) => {
         const metricsModule = new URL("./metrics.js", import.meta.url).href;
         const script = `const { recordWorkflowMetric, drainWorkflowMetrics } = await import(${
@@ -36,23 +43,24 @@ Deno.test("two local producers leave complete JSONL and unique observation IDs",
         });
             for (let seq = 0; seq < 15; seq++) {
                 await recordWorkflowMetric({ v: 2, category: "command", event: "command_started",
-                    recorderId: Deno.args[1], commandId: Deno.args[1], seq, command: "help",
-                    kind: "builtin", sourceSurface: "tui" }, Deno.args[0]);
+                    recorderId: (await import("node:process")).argv.slice(2)[1], commandId: (await import("node:process")).argv.slice(2)[1], seq, command: "help",
+                    kind: "builtin", sourceSurface: "tui" }, (await import("node:process")).argv.slice(2)[0]);
             }
             await drainWorkflowMetrics();`;
         const run = (id: string) =>
-            new Deno.Command(Deno.execPath(), {
-                args: ["run", "-A", "--no-check", "-", projectRoot, id],
+            spawnNativeProcess(process.execPath, {
+                args: runtimeSourceArgs(["run", "-A", "--no-check", "-", projectRoot, id]),
                 stdin: "piped",
                 stdout: "piped",
                 stderr: "piped",
-            }).spawn();
+                cwd: getCwd(),
+            });
         const children = [run("producer_one"), run("producer_two")];
         const results = await Promise.all(children.map(async (child) => {
             const input = child.stdin.getWriter();
             await input.write(new TextEncoder().encode(script));
             await input.close();
-            return child.output();
+            return collectProcessOutput(child);
         }));
         for (const result of results) assertEquals(result.success, true, new TextDecoder().decode(result.stderr));
         const rows = await readMetrics();

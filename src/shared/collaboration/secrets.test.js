@@ -1,3 +1,17 @@
+import { test } from "node:test";
+import {
+    chmod as fsChmod,
+    mkdir as fsMkdir,
+    mkdtemp as fsMkdtemp,
+    readdir as fsReaddir,
+    readFile as fsReadFile,
+    realpath as fsRealpath,
+    rm as fsRm,
+    stat as fsStat,
+    writeFile as fsWriteFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import process from "node:process";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { join } from "@std/path";
 import { PROJECT_SECRET_STORE_RELATIVE_PATH } from "../../constants.js";
@@ -50,14 +64,14 @@ function secretRecord() {
     };
 }
 
-Deno.test("secret store paths keep global home storage and route project storage through primary runtime layout", async () => {
+test("secret store paths keep global home storage and route project storage through primary runtime layout", async () => {
     assertEquals(getGlobalSecretStorePath("/home/user"), "/home/user/.wld/collaboration-secrets.json");
     await withProcessGlobalTestLock(async () => {
-        const originalSandboxHome = Deno.env.get("WLD_TEST_SANDBOX_HOME");
+        const originalSandboxHome = process.env["WLD_TEST_SANDBOX_HOME"];
         const primaryCheckout = await gitFixture.checkout({ prefix: "runwield-secrets-primary-" });
-        const selectedCheckout = await Deno.makeTempDir({ prefix: "runwield-secrets-linked-" });
+        const selectedCheckout = await fsMkdtemp(join(tmpdir(), "runwield-secrets-linked-"));
         try {
-            Deno.env.delete("WLD_TEST_SANDBOX_HOME");
+            delete process.env["WLD_TEST_SANDBOX_HOME"];
             await git(primaryCheckout, [
                 "worktree",
                 "add",
@@ -68,20 +82,20 @@ Deno.test("secret store paths keep global home storage and route project storage
             const layout = resolveProjectRuntimeLayout(selectedCheckout);
             assertEquals(getProjectSecretStorePath(selectedCheckout), layout.primary.projectSecretStorePath);
             assertEquals(
-                getProjectSecretStorePath(selectedCheckout).startsWith(await Deno.realPath(primaryCheckout)),
+                getProjectSecretStorePath(selectedCheckout).startsWith(await fsRealpath(primaryCheckout)),
                 true,
             );
         } finally {
-            if (originalSandboxHome === undefined) Deno.env.delete("WLD_TEST_SANDBOX_HOME");
-            else Deno.env.set("WLD_TEST_SANDBOX_HOME", originalSandboxHome);
-            await Deno.remove(selectedCheckout, { recursive: true }).catch(() => {});
-            await Deno.remove(primaryCheckout, { recursive: true }).catch(() => {});
+            if (originalSandboxHome === undefined) delete process.env["WLD_TEST_SANDBOX_HOME"];
+            else process.env["WLD_TEST_SANDBOX_HOME"] = originalSandboxHome;
+            await fsRm(selectedCheckout, { recursive: true }).catch(() => {});
+            await fsRm(primaryCheckout, { recursive: true }).catch(() => {});
         }
     });
 });
 
-Deno.test("secret stores read missing files as empty documents and write atomically", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-secrets-" });
+test("secret stores read missing files as empty documents and write atomically", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-secrets-"));
     try {
         const path = join(dir, ".wld", "collaboration-secrets.json");
         assertEquals(await readSecretStore(testSecretStore(path)), {
@@ -90,24 +104,24 @@ Deno.test("secret stores read missing files as empty documents and write atomica
         });
         await putSecretRecord(testSecretStore(path), "plan-1", secretRecord());
         assertEquals(await getSecretRecord(testSecretStore(path), "plan-1"), secretRecord());
-        assertEquals(((await Deno.stat(path)).mode ?? 0) & 0o777, 0o600);
+        assertEquals(((await fsStat(path)).mode ?? 0) & 0o777, 0o600);
         const siblingTemps = [];
-        for await (const entry of Deno.readDir(join(dir, ".wld"))) {
+        for await (const entry of await fsReaddir(join(dir, ".wld"), { withFileTypes: true })) {
             if (entry.name.includes(".tmp")) siblingTemps.push(entry.name);
         }
         assertEquals(siblingTemps, []);
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("project secret writes from linked checkouts populate only the primary internal store", async () => {
+test("project secret writes from linked checkouts populate only the primary internal store", async () => {
     await withProcessGlobalTestLock(async () => {
-        const originalSandboxHome = Deno.env.get("WLD_TEST_SANDBOX_HOME");
+        const originalSandboxHome = process.env["WLD_TEST_SANDBOX_HOME"];
         const primaryCheckout = await gitFixture.checkout({ prefix: "runwield-secrets-write-primary-" });
-        const selectedCheckout = await Deno.makeTempDir({ prefix: "runwield-secrets-write-linked-" });
+        const selectedCheckout = await fsMkdtemp(join(tmpdir(), "runwield-secrets-write-linked-"));
         try {
-            Deno.env.delete("WLD_TEST_SANDBOX_HOME");
+            delete process.env["WLD_TEST_SANDBOX_HOME"];
             await git(primaryCheckout, [
                 "worktree",
                 "add",
@@ -126,50 +140,53 @@ Deno.test("project secret writes from linked checkouts populate only the primary
                 secretRecord(),
             );
             await assertRejects(
-                () => Deno.stat(join(primaryCheckout, PROJECT_SECRET_STORE_RELATIVE_PATH)),
-                Deno.errors.NotFound,
+                () => fsStat(join(primaryCheckout, PROJECT_SECRET_STORE_RELATIVE_PATH)),
+                Error,
+                "ENOENT",
             );
             await assertRejects(
-                () => Deno.stat(join(selectedCheckout, PROJECT_SECRET_STORE_RELATIVE_PATH)),
-                Deno.errors.NotFound,
+                () => fsStat(join(selectedCheckout, PROJECT_SECRET_STORE_RELATIVE_PATH)),
+                Error,
+                "ENOENT",
             );
             await assertRejects(
-                () => Deno.stat(join(selectedCheckout, ".wld", "internal", "collaboration-secrets.json")),
-                Deno.errors.NotFound,
+                () => fsStat(join(selectedCheckout, ".wld", "internal", "collaboration-secrets.json")),
+                Error,
+                "ENOENT",
             );
         } finally {
-            if (originalSandboxHome === undefined) Deno.env.delete("WLD_TEST_SANDBOX_HOME");
-            else Deno.env.set("WLD_TEST_SANDBOX_HOME", originalSandboxHome);
-            await Deno.remove(selectedCheckout, { recursive: true }).catch(() => {});
-            await Deno.remove(primaryCheckout, { recursive: true }).catch(() => {});
+            if (originalSandboxHome === undefined) delete process.env["WLD_TEST_SANDBOX_HOME"];
+            else process.env["WLD_TEST_SANDBOX_HOME"] = originalSandboxHome;
+            await fsRm(selectedCheckout, { recursive: true }).catch(() => {});
+            await fsRm(primaryCheckout, { recursive: true }).catch(() => {});
         }
     });
 });
 
-Deno.test("project secret path honors sandbox routing", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-secrets-sandbox-" });
-    const sandboxHome = await Deno.makeTempDir({ prefix: "runwield-secrets-sandbox-home-" });
-    const originalSandboxHome = Deno.env.get("WLD_TEST_SANDBOX_HOME");
+test("project secret path honors sandbox routing", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-secrets-sandbox-"));
+    const sandboxHome = await fsMkdtemp(join(tmpdir(), "runwield-secrets-sandbox-home-"));
+    const originalSandboxHome = process.env["WLD_TEST_SANDBOX_HOME"];
     try {
-        Deno.env.set("WLD_TEST_SANDBOX_HOME", sandboxHome);
+        process.env["WLD_TEST_SANDBOX_HOME"] = sandboxHome;
         assertEquals(
             getProjectSecretStorePath(dir),
             resolveProjectRuntimeLayout(dir).primary.projectSecretStorePath,
         );
         assert(getProjectSecretStorePath(dir).startsWith(sandboxHome));
     } finally {
-        if (originalSandboxHome === undefined) Deno.env.delete("WLD_TEST_SANDBOX_HOME");
-        else Deno.env.set("WLD_TEST_SANDBOX_HOME", originalSandboxHome);
-        await Deno.remove(dir, { recursive: true }).catch(() => {});
-        await Deno.remove(sandboxHome, { recursive: true }).catch(() => {});
+        if (originalSandboxHome === undefined) delete process.env["WLD_TEST_SANDBOX_HOME"];
+        else process.env["WLD_TEST_SANDBOX_HOME"] = originalSandboxHome;
+        await fsRm(dir, { recursive: true }).catch(() => {});
+        await fsRm(sandboxHome, { recursive: true }).catch(() => {});
     }
 });
 
-Deno.test("secret store write cleans up temporary files when atomic rename fails", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-secrets-rename-fail-" });
+test("secret store write cleans up temporary files when atomic rename fails", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-secrets-rename-fail-"));
     try {
         const path = join(dir, "store.json");
-        await Deno.mkdir(path);
+        await fsMkdir(path);
 
         await assertRejects(
             () => writeSecretStore(testSecretStore(path), { schemaVersion: SECRET_STORE_SCHEMA_VERSION, records: {} }),
@@ -178,28 +195,24 @@ Deno.test("secret store write cleans up temporary files when atomic rename fails
         );
 
         const siblingTemps = [];
-        for await (const entry of Deno.readDir(dir)) {
+        for await (const entry of await fsReaddir(dir, { withFileTypes: true })) {
             if (entry.name.includes(".tmp")) siblingTemps.push(entry.name);
         }
         assertEquals(siblingTemps, []);
-        assert((await Deno.stat(path)).isDirectory);
+        assert((await fsStat(path)).isDirectory());
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("secret store replacement leaves the file readable only by its owner", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-secrets-replace-" });
+test("secret store replacement leaves the file readable only by its owner", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-secrets-replace-"));
     try {
         const path = join(dir, "store.json");
-        await Deno.writeTextFile(
-            path,
-            `${JSON.stringify({ schemaVersion: SECRET_STORE_SCHEMA_VERSION, records: {} })}\n`,
-            {
-                mode: 0o644,
-            },
-        );
-        await Deno.chmod(path, 0o644);
+        await fsWriteFile(path, `${JSON.stringify({ schemaVersion: SECRET_STORE_SCHEMA_VERSION, records: {} })}\n`, {
+            mode: 0o644,
+        });
+        await fsChmod(path, 0o644);
 
         await writeSecretStore(testSecretStore(path), {
             schemaVersion: SECRET_STORE_SCHEMA_VERSION,
@@ -207,14 +220,14 @@ Deno.test("secret store replacement leaves the file readable only by its owner",
         });
 
         assertEquals((await readSecretStore(testSecretStore(path))).records["plan-1:space-1"], secretRecord());
-        assertEquals(((await Deno.stat(path)).mode ?? 0) & 0o777, 0o600);
+        assertEquals(((await fsStat(path)).mode ?? 0) & 0o777, 0o600);
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("secret stores delete records idempotently", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-secrets-delete-" });
+test("secret stores delete records idempotently", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-secrets-delete-"));
     try {
         const path = join(dir, ".wld", "collaboration-secrets.json");
         await putSecretRecord(testSecretStore(path), "plan-1:space-1", secretRecord());
@@ -222,12 +235,12 @@ Deno.test("secret stores delete records idempotently", async () => {
         await deleteSecretRecord(testSecretStore(path), "plan-1:space-1");
         assertEquals(await getSecretRecord(testSecretStore(path), "plan-1:space-1"), undefined);
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("deleteCompatibleSecretRecords clears pair and legacy records across stores", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-secrets-unshare-" });
+test("deleteCompatibleSecretRecords clears pair and legacy records across stores", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-secrets-unshare-"));
     try {
         const globalPath = join(dir, "global.json");
         const projectPath = join(dir, "project.json");
@@ -264,24 +277,24 @@ Deno.test("deleteCompatibleSecretRecords clears pair and legacy records across s
             "other-space",
         );
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("deleteCompatibleSecretRecords tolerates missing stores", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-secrets-unshare-missing-" });
+test("deleteCompatibleSecretRecords tolerates missing stores", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-secrets-unshare-missing-"));
     try {
         assertEquals(
             await deleteCompatibleSecretRecords([testSecretStore(join(dir, "missing.json"))], "plan-1", "space-1"),
             [],
         );
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("deleteCompatibleSecretRecords preserves unrelated legacy space records", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-secrets-unshare-preserve-" });
+test("deleteCompatibleSecretRecords preserves unrelated legacy space records", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-secrets-unshare-preserve-"));
     try {
         const path = join(dir, "store.json");
         await putSecretRecord(testSecretStore(path), "plan-1", { ...secretRecord(), spaceId: "other-space" });
@@ -289,12 +302,12 @@ Deno.test("deleteCompatibleSecretRecords preserves unrelated legacy space record
         assertEquals(await deleteCompatibleSecretRecords([testSecretStore(path)], "plan-1", "space-1"), []);
         assertEquals((await getSecretRecord(testSecretStore(path), "plan-1"))?.spaceId, "other-space");
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("pull secret resolution prefers planId-space records across stores", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-secrets-resolve-" });
+test("pull secret resolution prefers planId-space records across stores", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-secrets-resolve-"));
     try {
         const globalPath = join(dir, "global.json");
         const projectPath = join(dir, "project.json");
@@ -309,12 +322,12 @@ Deno.test("pull secret resolution prefers planId-space records across stores", a
         assertEquals(resolved?.key, "plan-1:space-1");
         assertEquals(resolved?.record.maintainerCapability, "maintainer-cap");
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("compatible secret resolution ignores records bound to other Shared Spaces", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-secrets-compatible-" });
+test("compatible secret resolution ignores records bound to other Shared Spaces", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-secrets-compatible-"));
     try {
         const globalPath = join(dir, "global.json");
         const projectPath = join(dir, "project.json");
@@ -330,24 +343,24 @@ Deno.test("compatible secret resolution ignores records bound to other Shared Sp
         assertEquals(resolved?.path, projectPath);
         assertEquals(resolved?.key, "plan-1:space-1");
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("compatible secret resolution returns null for only unrelated space records", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-secrets-compatible-null-" });
+test("compatible secret resolution returns null for only unrelated space records", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-secrets-compatible-null-"));
     try {
         const path = join(dir, "store.json");
         await putSecretRecord(testSecretStore(path), "plan-1", { ...secretRecord(), spaceId: "other-space" });
 
         assertEquals(await resolveCompatibleSecretRecord([testSecretStore(path)], "plan-1", "space-1"), null);
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("pull secret resolution refuses conflicts across stores and legacy records", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-secrets-resolve-conflict-" });
+test("pull secret resolution refuses conflicts across stores and legacy records", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-secrets-resolve-conflict-"));
     try {
         const globalPath = join(dir, "global.json");
         const projectPath = join(dir, "project.json");
@@ -368,12 +381,12 @@ Deno.test("pull secret resolution refuses conflicts across stores and legacy rec
             "Conflicting collaboration secret record for maintainerCapability",
         );
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("URL import compatibility checks all stores before writing target record", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-secrets-import-conflict-" });
+test("URL import compatibility checks all stores before writing target record", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-secrets-import-conflict-"));
     try {
         const globalPath = join(dir, "global.json");
         const projectPath = join(dir, "project.json");
@@ -395,12 +408,12 @@ Deno.test("URL import compatibility checks all stores before writing target reco
         );
         assertEquals(await getSecretRecord(testSecretStore(projectPath), "plan-1:space-1"), undefined);
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("putCompatibleSecretRecord refuses conflicting imported maintainer secrets", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-secrets-conflict-" });
+test("putCompatibleSecretRecord refuses conflicting imported maintainer secrets", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-secrets-conflict-"));
     try {
         const path = join(dir, "store.json");
         await putCompatibleSecretRecord(testSecretStore(path), "plan-1:space-1", secretRecord());
@@ -414,33 +427,33 @@ Deno.test("putCompatibleSecretRecord refuses conflicting imported maintainer sec
             "Conflicting collaboration secret record",
         );
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("secret store rejects corrupt schema with redacted actionable errors", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-secrets-corrupt-" });
+test("secret store rejects corrupt schema with redacted actionable errors", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-secrets-corrupt-"));
     try {
         const path = join(dir, "collaboration-secrets.json");
-        await Deno.writeTextFile(path, JSON.stringify({ schemaVersion: 999, records: {} }));
+        await fsWriteFile(path, JSON.stringify({ schemaVersion: 999, records: {} }));
         await assertRejects(
             () => readSecretStore(testSecretStore(path)),
             Error,
             "Unable to read collaboration secret store",
         );
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("ensureProjectSecretStoreIgnored protects the primary managed runtime block from linked checkouts", async () => {
+test("ensureProjectSecretStoreIgnored protects the primary managed runtime block from linked checkouts", async () => {
     await withProcessGlobalTestLock(async () => {
-        const originalSandboxHome = Deno.env.get("WLD_TEST_SANDBOX_HOME");
+        const originalSandboxHome = process.env["WLD_TEST_SANDBOX_HOME"];
         const primaryCheckout = await gitFixture.checkout({ prefix: "runwield-gitignore-primary-" });
-        const selectedCheckout = await Deno.makeTempDir({ prefix: "runwield-gitignore-linked-" });
+        const selectedCheckout = await fsMkdtemp(join(tmpdir(), "runwield-gitignore-linked-"));
         try {
-            Deno.env.delete("WLD_TEST_SANDBOX_HOME");
-            await Deno.writeTextFile(join(primaryCheckout, ".gitignore"), "node_modules/\n");
+            delete process.env["WLD_TEST_SANDBOX_HOME"];
+            await fsWriteFile(join(primaryCheckout, ".gitignore"), "node_modules/\n");
             await git(primaryCheckout, [
                 "worktree",
                 "add",
@@ -448,21 +461,21 @@ Deno.test("ensureProjectSecretStoreIgnored protects the primary managed runtime 
                 `secrets-ignore-test-${crypto.randomUUID()}`,
                 selectedCheckout,
             ]);
-            await Deno.writeTextFile(join(selectedCheckout, ".gitignore"), "selected-only\n");
+            await fsWriteFile(join(selectedCheckout, ".gitignore"), "selected-only\n");
 
             await ensureProjectSecretStoreIgnored(selectedCheckout);
-            const first = await Deno.readTextFile(join(primaryCheckout, ".gitignore"));
+            const first = await fsReadFile(join(primaryCheckout, ".gitignore"), "utf8");
             await ensureProjectSecretStoreIgnored(selectedCheckout);
 
-            assertEquals(await Deno.readTextFile(join(primaryCheckout, ".gitignore")), first);
+            assertEquals(await fsReadFile(join(primaryCheckout, ".gitignore"), "utf8"), first);
             assert(first.startsWith("node_modules/\n"));
             assert(first.includes("# BEGIN RunWield owned runtime state\n"));
             assertEquals(
                 first.includes(`\n${PROJECT_SECRET_STORE_RELATIVE_PATH}\n${PROJECT_SECRET_STORE_RELATIVE_PATH}\n`),
                 false,
             );
-            assertEquals(await Deno.readTextFile(join(selectedCheckout, ".gitignore")), "selected-only\n");
-            assert((await Deno.stat(resolveProjectRuntimeLayout(selectedCheckout).primary.internalRoot)).isDirectory);
+            assertEquals(await fsReadFile(join(selectedCheckout, ".gitignore"), "utf8"), "selected-only\n");
+            assert((await fsStat(resolveProjectRuntimeLayout(selectedCheckout).primary.internalRoot)).isDirectory());
             assertEquals(
                 await git(primaryCheckout, ["check-ignore", ".wld/internal/collaboration-secrets.json"]),
                 ".wld/internal/collaboration-secrets.json",
@@ -477,15 +490,15 @@ Deno.test("ensureProjectSecretStoreIgnored protects the primary managed runtime 
                 await assertRejects(() => git(primaryCheckout, ["check-ignore", path]));
             }
         } finally {
-            if (originalSandboxHome === undefined) Deno.env.delete("WLD_TEST_SANDBOX_HOME");
-            else Deno.env.set("WLD_TEST_SANDBOX_HOME", originalSandboxHome);
-            await Deno.remove(selectedCheckout, { recursive: true }).catch(() => {});
-            await Deno.remove(primaryCheckout, { recursive: true }).catch(() => {});
+            if (originalSandboxHome === undefined) delete process.env["WLD_TEST_SANDBOX_HOME"];
+            else process.env["WLD_TEST_SANDBOX_HOME"] = originalSandboxHome;
+            await fsRm(selectedCheckout, { recursive: true }).catch(() => {});
+            await fsRm(primaryCheckout, { recursive: true }).catch(() => {});
         }
     });
 });
 
-Deno.test("redactSecretStoreValue redacts local secret fields", () => {
+test("redactSecretStoreValue redacts local secret fields", () => {
     const redacted = redactSecretStoreValue({ records: { "plan-1": secretRecord() } });
     assert(!redacted.includes("content-key"));
     assert(!redacted.includes("reviewer-cap"));
@@ -493,8 +506,8 @@ Deno.test("redactSecretStoreValue redacts local secret fields", () => {
     assert(redacted.includes("[redacted-capability]"));
 });
 
-Deno.test("writeSecretStore validates records before persisting", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-secrets-invalid-" });
+test("writeSecretStore validates records before persisting", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-secrets-invalid-"));
     try {
         const document = /** @type {import("./secrets.js").SecretStoreDocument} */ ({
             schemaVersion: 1,
@@ -502,6 +515,6 @@ Deno.test("writeSecretStore validates records before persisting", async () => {
         });
         await assertRejects(() => writeSecretStore(testSecretStore(join(dir, "store.json")), document));
     } finally {
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });

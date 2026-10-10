@@ -1,3 +1,7 @@
+import { isStandaloneExecutable } from "../src/shared/runtime-identity.ts";
+import { serveHttp } from "../src/shared/http-server.ts";
+import { mkdir as fsMkdir, writeFile as fsWriteFile } from "node:fs/promises";
+import process from "node:process";
 // Disposable real Workspace page and saved-operation handlers. This file is
 // also the entry point of the standalone diagnostic executable. Do not import application modules until
 // HOME and MNEMOTECA_DB_PATH have been set by the parent process.
@@ -15,8 +19,8 @@ const started = performance.now();
 let responses = 0;
 
 function guard(): void {
-    if (Deno.memoryUsage().rss >= rssLimit) throw new Error("INCOMPLETE: 1 GiB RSS guard reached");
-    if (!Deno.args.includes("--serve") && performance.now() - started > 180_000) {
+    if (process.memoryUsage().rss >= rssLimit) throw new Error("INCOMPLETE: 1 GiB RSS guard reached");
+    if (!process.argv.slice(2).includes("--serve") && performance.now() - started > 180_000) {
         throw new Error("INCOMPLETE: fixture timeout (180 seconds)");
     }
 }
@@ -31,8 +35,8 @@ export async function createRendererFixture(root: string, origin: string): Promi
     );
     const projects = [join(root, "project-a"), join(root, "project-b")];
     for (const [index, project] of projects.entries()) {
-        await Deno.mkdir(project, { recursive: true });
-        if (index === 0) await Deno.writeTextFile(join(project, "a"), "Memory code review marker\n");
+        await fsMkdir(project, { recursive: true });
+        if (index === 0) await fsWriteFile(join(project, "a"), "Memory code review marker\n");
         await savePlan(
             project,
             `fixture-${index}`,
@@ -51,7 +55,7 @@ export async function createRendererFixture(root: string, origin: string): Promi
         status: "draft",
         summary: "Memory plan body 1",
     });
-    const sessionBaseDir = join(Deno.env.get("HOME")!, ".wld", "sessions");
+    const sessionBaseDir = join(process.env["HOME"]!, ".wld", "sessions");
     const store = openOwnerCoordinationStore({
         dbPath: join(root, "owner.sqlite3"),
         sessionBaseDir,
@@ -88,7 +92,7 @@ export async function createRendererFixture(root: string, origin: string): Promi
     }
     const { makeManagedSessionFixture } = await import("../src/testing/managed-session-fixture.ts");
     const managed = await makeManagedSessionFixture({
-        home: Deno.env.get("HOME")!,
+        home: process.env["HOME"]!,
         projectRoot: projects[0],
         dbPath: join(root, "owner.sqlite3"),
     });
@@ -201,11 +205,11 @@ export async function createRendererFixture(root: string, origin: string): Promi
 async function configureModelFixture(home: string) {
     const { registerFauxProvider } = await import("@earendil-works/pi-ai/compat");
     const config = join(home, ".wld");
-    await Deno.mkdir(config, { recursive: true });
+    await fsMkdir(config, { recursive: true });
     const provider = "memory-fixture-provider";
     const api = "memory-fixture-api";
     const model = "memory-fixture-model";
-    await Deno.writeTextFile(
+    await fsWriteFile(
         join(config, "models.json"),
         JSON.stringify({
             providers: {
@@ -226,13 +230,13 @@ async function configureModelFixture(home: string) {
             },
         }),
     );
-    await Deno.writeTextFile(
+    await fsWriteFile(
         join(config, "auth.json"),
         JSON.stringify({
             [provider]: { type: "api_key", key: "fixture-key" },
         }),
     );
-    await Deno.writeTextFile(
+    await fsWriteFile(
         join(config, "settings.json"),
         JSON.stringify({
             defaultProvider: provider,
@@ -261,9 +265,9 @@ async function runOperationWorkload(root: string, combined: boolean, forceGc: bo
         "../src/ui/workspace/routes/owner-session-api.js"
     );
     const { createOwnerConnectionRegistry } = await import("../src/ui/workspace/server/owner-connections.ts");
-    const home = Deno.env.get("HOME")!;
+    const home = process.env["HOME"]!;
     const projectRoot = join(root, "operation-project");
-    await Deno.mkdir(projectRoot, { recursive: true });
+    await fsMkdir(projectRoot, { recursive: true });
     const modelBoundary = await configureModelFixture(home);
     try {
         const saved = await makeManagedSessionFixture({ home, projectRoot });
@@ -378,11 +382,11 @@ async function sample(
         JSON.stringify({
             type: "sample",
             label,
-            ...Deno.memoryUsage(),
+            ...process.memoryUsage(),
             responses,
             ...counts,
             elapsedMs: Math.round(performance.now() - started),
-            standalone: Deno.build.standalone,
+            standalone: isStandaloneExecutable(),
         }),
     );
 }
@@ -401,16 +405,16 @@ async function checkedRequest(f: Fixture, route: { path: string; marker: string 
 }
 
 async function main(): Promise<void> {
-    const root = Deno.env.get("WLD_MEMORY_FIXTURE_ROOT");
-    if (!root || !Deno.env.get("HOME")?.startsWith(root) || !Deno.env.get("MNEMOTECA_DB_PATH")?.startsWith(root)) {
+    const root = process.env["WLD_MEMORY_FIXTURE_ROOT"];
+    if (!root || !process.env["HOME"]?.startsWith(root) || !process.env["MNEMOTECA_DB_PATH"]?.startsWith(root)) {
         throw new Error("Fixture requires isolated HOME, MNEMOTECA_DB_PATH, and root");
     }
     let f: Fixture | undefined;
     try {
-        if (Deno.args.includes("--serve")) {
+        if (process.argv.slice(2).includes("--serve")) {
             let origin = "";
             const ready = Promise.withResolvers<Fixture>();
-            const server = Deno.serve({
+            const server = serveHttp({
                 hostname: "127.0.0.1",
                 port: 0,
                 onListen({ port }) {
@@ -421,7 +425,7 @@ async function main(): Promise<void> {
                 const url = new URL(req.url);
                 if (url.pathname === "/__memory") {
                     return Response.json({
-                        ...Deno.memoryUsage(),
+                        ...process.memoryUsage(),
                         responses,
                         elapsedMs: Math.round(performance.now() - started),
                     });
@@ -434,7 +438,7 @@ async function main(): Promise<void> {
             });
             let modelBoundary: Awaited<ReturnType<typeof configureModelFixture>> | undefined;
             try {
-                modelBoundary = await configureModelFixture(Deno.env.get("HOME")!);
+                modelBoundary = await configureModelFixture(process.env["HOME"]!);
                 const { fauxAssistantMessage, fauxText } = await import("@earendil-works/pi-ai");
                 modelBoundary.setResponses(
                     Array.from(
@@ -453,11 +457,15 @@ async function main(): Promise<void> {
             } finally {
                 modelBoundary?.unregister?.();
             }
-        } else if (Deno.args.includes("--operations") || Deno.args.includes("--combined")) {
-            await runOperationWorkload(root, Deno.args.includes("--combined"), Deno.args.includes("--gc"));
+        } else if (process.argv.slice(2).includes("--operations") || process.argv.slice(2).includes("--combined")) {
+            await runOperationWorkload(
+                root,
+                process.argv.slice(2).includes("--combined"),
+                process.argv.slice(2).includes("--gc"),
+            );
         } else {
             f = await createRendererFixture(root, "http://127.0.0.1");
-            const forceGc = Deno.args.includes("--gc");
+            const forceGc = process.argv.slice(2).includes("--gc");
             for (const route of f.routes) await checkedRequest(f, route);
             await sample("baseline", forceGc);
             for (let batch = 1; batch <= 2; batch++) {
@@ -473,8 +481,8 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-    main().then(() => Deno.exit(0)).catch((error) => {
+    main().then(() => process.exit(0)).catch((error) => {
         console.error(error);
-        Deno.exit(1);
+        process.exit(1);
     });
 }

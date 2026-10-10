@@ -1,3 +1,10 @@
+import { collectProcessOutput } from "../../testing/subprocess-output.ts";
+import { spawnNativeProcess } from "../foreground-process.ts";
+import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
+import { test } from "node:test";
+import { chmod as fsChmod, mkdtemp as fsMkdtemp, rm as fsRm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import nodeProcess from "node:process";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { fromFileUrl, join } from "@std/path";
 import {
@@ -24,7 +31,7 @@ const fixture = defineCommittedGitFixture({ ".gitignore": ".wld/\n" });
 
 async function withDocument(run: (root: string, tree: string) => Promise<void>) {
     const root = await fixture.checkout();
-    const container = await Deno.makeTempDir({ prefix: "rw-document-authority-" });
+    const container = await fsMkdtemp(join(tmpdir(), "rw-document-authority-"));
     const tree = join(container, "execution");
     try {
         await savePlan(root, "demo", "# Demo\n\n## Context\n\nOriginal.\n", {
@@ -56,29 +63,32 @@ async function withDocument(run: (root: string, tree: string) => Promise<void>) 
         await run(root, tree);
     } finally {
         await git(root, ["worktree", "remove", "--force", tree]);
-        await Deno.remove(container, { recursive: true });
-        await Deno.remove(root, { recursive: true });
+        await fsRm(container, { recursive: true });
+        await fsRm(root, { recursive: true });
     }
 }
 
-Deno.test("Workspace body save waits for the execution document lock in another process", async () => {
+test("Workspace body save waits for the execution document lock in another process", async () => {
     await withDocument(async (root, tree) => {
         const before = await loadPlan(root, "demo");
         assert(before);
-        const child = new Deno.Command(Deno.execPath(), {
-            args: [
-                "run",
-                "-A",
-                fromFileUrl(new URL("./testing/plan-document-writer.ts", import.meta.url)),
-                root,
-                "document-plan",
-            ],
-            stdout: "piped",
-            stderr: "piped",
-        });
+        const startChild = () =>
+            spawnNativeProcess(nodeProcess.execPath, {
+                cwd: getCwd(),
+                stdin: "null",
+                args: runtimeSourceArgs([
+                    "run",
+                    "-A",
+                    fromFileUrl(new URL("./testing/plan-document-writer.ts", import.meta.url)),
+                    root,
+                    "document-plan",
+                ]),
+                stdout: "piped",
+                stderr: "piped",
+            });
         let finishedWhileLocked = false;
         const process = await withPlanLock(tree, "demo", async () => {
-            const process = child.spawn();
+            const process = startChild();
             const reader = process.stdout.getReader();
             try {
                 const ready = await reader.read();
@@ -96,7 +106,7 @@ Deno.test("Workspace body save waits for the execution document lock in another 
             clearTimeout(timer);
             return process;
         });
-        const result = await process.output();
+        const result = await collectProcessOutput(process);
         assert(result.success, new TextDecoder().decode(result.stderr));
         assertEquals(finishedWhileLocked, false, "writer bypassed the selected document lock");
         assert((await loadPlan(tree, "demo"))?.body.includes("Workspace edit."));
@@ -105,7 +115,7 @@ Deno.test("Workspace body save waits for the execution document lock in another 
 });
 
 for (const target of ["demo", "document-plan"]) {
-    Deno.test(`archive and restore ${target} use the listed execution document without changing primary`, async () => {
+    test(`archive and restore ${target} use the listed execution document without changing primary`, async () => {
         await withDocument(async (root, tree) => {
             const primary = await loadPlan(root, "demo");
             assert(primary);
@@ -126,14 +136,14 @@ for (const target of ["demo", "document-plan"]) {
 }
 
 for (const mode of ["single", "bulk"]) {
-    Deno.test(`archive CLI ${mode} resolves execution evidence and restores from the primary checkout`, async () => {
+    test(`archive CLI ${mode} resolves execution evidence and restores from the primary checkout`, async () => {
         await withProcessGlobalTestLock(async () => {
             await withDocument(async (root, tree) => {
                 const previousCwd = getCwd();
                 const primary = await loadPlan(root, "demo");
                 assert(primary);
                 try {
-                    Deno.chdir(root);
+                    process.chdir(root);
                     await runPlansArchiveCommand(
                         mode === "single" ? ["document-plan"] : ["--all", "--status", "verified"],
                     );
@@ -143,15 +153,15 @@ for (const mode of ["single", "bulk"]) {
                     assertEquals((await resolveWorkflowPlanLocation(root, "demo")).plan?.attrs.status, "verified");
                     assertEquals((await loadPlan(root, "demo"))?.markdown, primary.markdown);
                 } finally {
-                    Deno.chdir(previousCwd);
+                    process.chdir(previousCwd);
                 }
             });
         });
     });
 }
 
-Deno.test("failed collaboration document write rolls back controller revision and hash, then retries", async () => {
-    const root = await Deno.makeTempDir({ prefix: "rw-collaboration-rollback-" });
+test("failed collaboration document write rolls back controller revision and hash, then retries", async () => {
+    const root = await fsMkdtemp(join(tmpdir(), "rw-collaboration-rollback-"));
     const plansDir = join(root, "docs/plans");
     const original = "# Demo\n\n## Context\n\nOriginal.\n";
     const revised = "# Demo\n\n## Context\n\nRevised.\n";
@@ -171,7 +181,7 @@ Deno.test("failed collaboration document write rolls back controller revision an
         );
         const before = await loadPlan(root, "demo");
         assert(before);
-        await Deno.chmod(plansDir, 0o555);
+        await fsChmod(plansDir, 0o555);
         await assertRejects(() =>
             updatePlanCollaborationMetadata(
                 root,
@@ -187,7 +197,7 @@ Deno.test("failed collaboration document write rolls back controller revision an
         assertEquals(after?.body, before.body);
         assertEquals(after?.attrs.collaborationRevision, 1);
         assertEquals(after?.attrs.collaborationBodyHash, await hashPlanBody(original));
-        await Deno.chmod(plansDir, 0o755);
+        await fsChmod(plansDir, 0o755);
         await updatePlanCollaborationMetadata(
             root,
             "demo",
@@ -200,7 +210,7 @@ Deno.test("failed collaboration document write rolls back controller revision an
         assertEquals((await loadPlan(root, "demo"))?.body, revised);
         assertEquals((await loadPlan(root, "demo"))?.attrs.collaborationBodyHash, await hashPlanBody(revised));
     } finally {
-        await Deno.chmod(plansDir, 0o755);
-        await Deno.remove(root, { recursive: true });
+        await fsChmod(plansDir, 0o755);
+        await fsRm(root, { recursive: true });
     }
 });

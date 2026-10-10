@@ -1,5 +1,6 @@
+import fsPromises from "node:fs/promises";
 import { type NativeFileLock, type NativeLockSnapshot, openNativeFileLock } from "./native-file-lock.ts";
-import { readFile as fsReadFile, rm as fsRm, stat as fsStat } from "node:fs/promises";
+import { readFile as fsReadFile, stat as fsStat } from "node:fs/promises";
 import { platform } from "node:process";
 export type LockFileSnapshot = {
     text: string;
@@ -60,7 +61,7 @@ export async function removeLockFileIfSnapshotMatches(
             file.close();
             closed = true;
         }
-        await fsRm(lockPath).catch((error) => {
+        await fsPromises.rm(lockPath).catch((error) => {
             if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
         });
         return true;

@@ -1,3 +1,19 @@
+import { runtimeSourceArgs } from "../testing/runtime-source-args.ts";
+import { serveHttp } from "../shared/http-server.ts";
+import { writeFileSync as fsWriteFileSync } from "node:fs";
+import { test } from "node:test";
+import {
+    mkdir as fsMkdir,
+    mkdtemp as fsMkdtemp,
+    readFile as fsReadFile,
+    rename as fsRename,
+    rm as fsRm,
+    stat as fsStat,
+    symlink as fsSymlink,
+    writeFile as fsWriteFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import process from "node:process";
 import { assert, assertEquals, assertRejects, assertStringIncludes, assertThrows } from "@std/assert";
 import { dirname, fromFileUrl, join } from "@std/path";
 import { PhotonImage } from "@silvia-odwyer/photon-node";
@@ -50,8 +66,8 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>) {
     await withProcessGlobalTestLock(async () => {
         const home = getHomeDir();
         const cwd = getCwd();
-        const path = Deno.env.get("PATH");
-        const temp = await Deno.makeTempDir({ prefix: "runwield-create-image-test-" });
+        const path = process.env["PATH"];
+        const temp = await fsMkdtemp(join(tmpdir(), "runwield-create-image-test-"));
         const envNames = [
             "RUNWIELD_IMAGE_FIXTURE_MODE",
             "RUNWIELD_IMAGE_FIXTURE_ARGS",
@@ -60,21 +76,21 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>) {
             "RUNWIELD_CODEX_IMAGE_LOG",
             "RUNWIELD_CODEX_IMAGE_OUTSIDE",
         ];
-        const prior = envNames.map((key) => Deno.env.get(key));
+        const prior = envNames.map((key) => process.env[key]);
         const fixture: Fixture = {
             cwd: join(temp, "project"),
             home: join(temp, "home"),
             requests: [],
             response: "image",
             async settings(value) {
-                await Deno.writeTextFile(
+                await fsWriteFile(
                     join(fixture.cwd, ".wld", "settings.json"),
                     JSON.stringify({ imageGeneration: value }),
                 );
                 __resetSettingsForTests();
             },
         };
-        const server = Deno.serve({ hostname: "127.0.0.1", port: 0, onListen() {} }, async (request) => {
+        const server = serveHttp({ hostname: "127.0.0.1", port: 0, onListen() {} }, async (request) => {
             fixture.requests.push(await request.json());
             fixture.onRequest?.();
             if (fixture.response === "wait") {
@@ -116,11 +132,11 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>) {
             return Response.json({ id: "fixture-image", choices: [{ message: { content: "fixture", images } }] });
         });
         try {
-            await Deno.mkdir(join(fixture.home, ".wld"), { recursive: true });
-            await Deno.mkdir(join(fixture.cwd, ".wld"), { recursive: true });
-            Deno.env.set("HOME", fixture.home);
-            Deno.chdir(fixture.cwd);
-            await Deno.writeTextFile(
+            await fsMkdir(join(fixture.home, ".wld"), { recursive: true });
+            await fsMkdir(join(fixture.cwd, ".wld"), { recursive: true });
+            process.env["HOME"] = fixture.home;
+            process.chdir(fixture.cwd);
+            await fsWriteFile(
                 join(fixture.home, ".wld", "models.json"),
                 JSON.stringify({
                     providers: {
@@ -146,38 +162,42 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>) {
             );
             await fixture.settings({ model: MODEL });
             const bin = join(temp, "bin");
-            await Deno.mkdir(bin);
-            await Deno.writeTextFile(
+            await fsMkdir(bin);
+            await fsWriteFile(
                 join(bin, "agy"),
-                `#!/bin/sh\nexec "${Deno.execPath()}" run -A "${CLI_FIXTURE}" "$@"\n`,
+                `#!/bin/sh\nexec ${
+                    [process.execPath, ...runtimeSourceArgs(["run", "-A", CLI_FIXTURE])].map(shellQuote).join(" ")
+                } "$@"\n`,
                 { mode: 0o700 },
             );
-            await Deno.writeTextFile(
+            await fsWriteFile(
                 join(bin, "codex"),
-                `#!/bin/sh\nexec "${Deno.execPath()}" run -A "${CODEX_FIXTURE}" "$@"\n`,
+                `#!/bin/sh\nexec ${
+                    [process.execPath, ...runtimeSourceArgs(["run", "-A", CODEX_FIXTURE])].map(shellQuote).join(" ")
+                } "$@"\n`,
                 { mode: 0o700 },
             );
-            Deno.env.set("PATH", `${bin}:${path || ""}`);
+            process.env["PATH"] = `${bin}:${path || ""}`;
             await run(fixture);
         } finally {
             await server.shutdown();
-            Deno.chdir(cwd);
-            Deno.env.set("HOME", home);
-            if (path === undefined) Deno.env.delete("PATH");
-            else Deno.env.set("PATH", path);
+            process.chdir(cwd);
+            process.env["HOME"] = home;
+            if (path === undefined) delete process.env["PATH"];
+            else process.env["PATH"] = path;
             envNames.forEach((key, index) =>
-                prior[index] === undefined ? Deno.env.delete(key) : Deno.env.set(key, prior[index]!)
+                prior[index] === undefined ? (delete process.env[key]) : (process.env[key] = prior[index]!)
             );
             __resetSettingsForTests();
-            await Deno.remove(temp, { recursive: true });
+            await fsRm(temp, { recursive: true });
         }
     });
 }
 
-Deno.test("create_image uses the real Pi adapter, mapped options, reference input and exact output path", () =>
+test("create_image uses the real Pi adapter, mapped options, reference input and exact output path", () =>
     withFixture(async (f) => {
         await f.settings({ model: MODEL, thinkingLevel: "high", temperature: 0 });
-        await Deno.writeFile(join(f.cwd, "source.png"), Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)));
+        await fsWriteFile(join(f.cwd, "source.png"), Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)));
         const result = await createImage({
             cwd: f.cwd,
             prompt: "Make it blue",
@@ -191,16 +211,16 @@ Deno.test("create_image uses the real Pi adapter, mapped options, reference inpu
         assertEquals(f.requests[0].reasoning, { effort: "high" });
         assertEquals(f.requests[0].provider, { require_parameters: true });
         assertEquals(f.requests[0].messages[0].content[1].image_url?.url, `data:image/png;base64,${PNG}`);
-        const decoded = PhotonImage.new_from_byteslice(await Deno.readFile(join(f.cwd, result.path)));
+        const decoded = PhotonImage.new_from_byteslice(await fsReadFile(join(f.cwd, result.path)));
         assertEquals(decoded.get_width(), 4);
         decoded.free();
     }));
 
-Deno.test("create_image converts PNG bytes to the requested JPEG or WebP instead of relabeling", () =>
+test("create_image converts PNG bytes to the requested JPEG or WebP instead of relabeling", () =>
     withFixture(async (f) => {
         for (const extension of ["jpg", "webp"]) {
             const result = await createImage({ cwd: f.cwd, prompt: "red mug", outputPath: `image.${extension}` });
-            const bytes = await Deno.readFile(join(f.cwd, result.path));
+            const bytes = await fsReadFile(join(f.cwd, result.path));
             if (extension === "jpg") assertEquals([...bytes.slice(0, 2)], [255, 216]);
             else assertEquals(new TextDecoder().decode(bytes.slice(8, 12)), "WEBP");
             const decoded = PhotonImage.new_from_byteslice(bytes);
@@ -209,23 +229,23 @@ Deno.test("create_image converts PNG bytes to the requested JPEG or WebP instead
         }
     }));
 
-Deno.test("create_image rejects existing, escaping and symlink paths before calling Pi", () =>
+test("create_image rejects existing, escaping and symlink paths before calling Pi", () =>
     withFixture(async (f) => {
-        await Deno.writeTextFile(join(f.cwd, "existing.png"), "user data");
-        await Deno.symlink(f.home, join(f.cwd, "outside"));
+        await fsWriteFile(join(f.cwd, "existing.png"), "user data");
+        await fsSymlink(f.home, join(f.cwd, "outside"));
         for (const outputPath of ["existing.png", "../escape.png", "outside/image.png", "file.txt"]) {
             await assertRejects(() => createImage({ cwd: f.cwd, prompt: "red", outputPath }));
         }
-        assertEquals(await Deno.readTextFile(join(f.cwd, "existing.png")), "user data");
+        assertEquals(await fsReadFile(join(f.cwd, "existing.png"), "utf8"), "user data");
         assertEquals(f.requests.length, 0);
     }));
 
-Deno.test("create_image refuses no-image, invalid bytes, multiple images and provider errors without retrying", () =>
+test("create_image refuses no-image, invalid bytes, multiple images and provider errors without retrying", () =>
     withFixture(async (f) => {
         for (const mode of ["text", "invalid", "multiple", "unauthorized", "server-error"] as const) {
             f.response = mode;
             await assertRejects(() => createImage({ cwd: f.cwd, prompt: "red", outputPath: `${mode}.png` }));
-            await assertRejects(() => Deno.stat(join(f.cwd, `${mode}.png`)), Deno.errors.NotFound);
+            await assertRejects(() => fsStat(join(f.cwd, `${mode}.png`)), Error, "ENOENT");
         }
         f.response = "model-denied";
         await assertRejects(
@@ -233,11 +253,11 @@ Deno.test("create_image refuses no-image, invalid bytes, multiple images and pro
             Error,
             "Model access is disabled",
         );
-        await assertRejects(() => Deno.stat(join(f.cwd, "denied.png")), Deno.errors.NotFound);
+        await assertRejects(() => fsStat(join(f.cwd, "denied.png")), Error, "ENOENT");
         assertEquals(f.requests.length, 6);
     }));
 
-Deno.test("create_image rejects unsupported options and vision-only models", () =>
+test("create_image rejects unsupported options and vision-only models", () =>
     withFixture(async (f) => {
         for (
             const settings of [
@@ -255,7 +275,7 @@ Deno.test("create_image rejects unsupported options and vision-only models", () 
         assertEquals(f.requests.length, 0);
     }));
 
-Deno.test("imageGeneration preserves settings and resets inherited options when the model changes", () =>
+test("imageGeneration preserves settings and resets inherited options when the model changes", () =>
     withFixture(async (f) => {
         assertEquals(
             JSON.parse(
@@ -263,13 +283,13 @@ Deno.test("imageGeneration preserves settings and resets inherited options when 
             ),
             { imageGeneration: { model: MODEL } },
         );
-        await Deno.writeTextFile(
+        await fsWriteFile(
             join(f.home, ".wld", "settings.json"),
             JSON.stringify({ imageGeneration: { model: MODEL, temperature: 0.5, thinkingLevel: "high" } }),
         );
         await f.settings({ model: "agy-cli/gemini-3.8-flash" });
         assertEquals(resolveImageGenerationSettings(f.cwd), { model: "agy-cli/gemini-3.8-flash" });
-        await Deno.writeTextFile(
+        await fsWriteFile(
             join(f.cwd, ".wld", "settings.json"),
             JSON.stringify({
                 imageGeneration: { model: MODEL },
@@ -283,7 +303,7 @@ Deno.test("imageGeneration preserves settings and resets inherited options when 
         assertEquals(resolveImageGenerationSettings(f.cwd), { model: "agy-cli/gemini-3.1-pro", thinkingLevel: "low" });
         await f.settings({ model: MODEL, enabled: false });
         assertEquals(resolveImageGenerationSettings(f.cwd), undefined);
-        await Deno.writeTextFile(
+        await fsWriteFile(
             join(f.cwd, ".wld", "settings.json"),
             JSON.stringify({ imageGeneration: { model: MODEL, thinkingLvel: "high" } }),
         );
@@ -291,13 +311,13 @@ Deno.test("imageGeneration preserves settings and resets inherited options when 
         assertThrows(() => resolveImageGenerationSettings(f.cwd), Error, "thinkingLvel");
     }));
 
-Deno.test("create_image routes agy-cli to a real subprocess with matching model/effort and saves PNG", () =>
+test("create_image routes agy-cli to a real subprocess with matching model/effort and saves PNG", () =>
     withFixture(async (f) => {
         await f.settings({ model: "agy-cli/gemini-3.8-flash", thinkingLevel: "medium" });
         const argsPath = join(f.cwd, "args.json");
-        Deno.env.set("RUNWIELD_IMAGE_FIXTURE_ARGS", argsPath);
+        process.env["RUNWIELD_IMAGE_FIXTURE_ARGS"] = argsPath;
         const result = await createImage({ cwd: f.cwd, prompt: "red mug", outputPath: "agy.png" });
-        const args: string[] = JSON.parse(await Deno.readTextFile(argsPath));
+        const args: string[] = JSON.parse(await fsReadFile(argsPath, "utf8"));
         assertEquals(args[args.indexOf("--model") + 1], "gemini-3.8-flash-medium");
         assertEquals(args[args.indexOf("--effort") + 1], "medium");
         assert(!args.includes("--dangerously-skip-permissions"));
@@ -307,19 +327,19 @@ Deno.test("create_image routes agy-cli to a real subprocess with matching model/
         assertEquals(f.requests.length, 0);
     }));
 
-Deno.test("create_image does not trust Agy final SUCCESS or paths from other runs", () =>
+test("create_image does not trust Agy final SUCCESS or paths from other runs", () =>
     withFixture(async (f) => {
         await f.settings({ model: "agy-cli/gemini-3.8-flash" });
-        Deno.env.set("RUNWIELD_IMAGE_FIXTURE_OUTSIDE", join(f.cwd, "existing.png"));
-        await Deno.writeFile(join(f.cwd, "existing.png"), Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)));
+        process.env["RUNWIELD_IMAGE_FIXTURE_OUTSIDE"] = join(f.cwd, "existing.png");
+        await fsWriteFile(join(f.cwd, "existing.png"), Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)));
         for (const mode of ["false-success", "outside"]) {
-            Deno.env.set("RUNWIELD_IMAGE_FIXTURE_MODE", mode);
+            process.env["RUNWIELD_IMAGE_FIXTURE_MODE"] = mode;
             await assertRejects(() => createImage({ cwd: f.cwd, prompt: "red", outputPath: `${mode}.png` }));
-            await assertRejects(() => Deno.stat(join(f.cwd, `${mode}.png`)), Deno.errors.NotFound);
+            await assertRejects(() => fsStat(join(f.cwd, `${mode}.png`)), Error, "ENOENT");
         }
     }));
 
-Deno.test("create_image tool returns text-only metadata when the primary model cannot view images", () =>
+test("create_image tool returns text-only metadata when the primary model cannot view images", () =>
     withFixture(async (f) => {
         const tool = createImageTool({ cwd: f.cwd, includeImage: false });
         const result = await tool.execute(
@@ -334,20 +354,20 @@ Deno.test("create_image tool returns text-only metadata when the primary model c
         assertStringIncludes(result.content[0].type === "text" ? result.content[0].text : "", "result.png");
     }));
 
-Deno.test("create_image honors pre-cancellation without generating or saving", () =>
+test("create_image honors pre-cancellation without generating or saving", () =>
     withFixture(async (f) => {
         await assertRejects(() =>
             createImage({ cwd: f.cwd, prompt: "red", outputPath: "cancelled.png", signal: AbortSignal.abort() })
         );
         assertEquals(f.requests.length, 0);
-        await assertRejects(() => Deno.stat(join(f.cwd, "cancelled.png")), Deno.errors.NotFound);
+        await assertRejects(() => fsStat(join(f.cwd, "cancelled.png")), Error, "ENOENT");
     }));
 
-Deno.test("create_image rejects mismatched raster MIME and symlinked reference escapes", () =>
+test("create_image rejects mismatched raster MIME and symlinked reference escapes", () =>
     withFixture(async (f) => {
         assertThrows(() => encodeCreatedImage({ type: "image", data: PNG, mimeType: "image/jpeg" }, "image/jpeg"));
-        await Deno.writeFile(join(f.home, "private.png"), Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)));
-        await Deno.symlink(join(f.home, "private.png"), join(f.cwd, "source.png"));
+        await fsWriteFile(join(f.home, "private.png"), Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)));
+        await fsSymlink(join(f.home, "private.png"), join(f.cwd, "source.png"));
         await assertRejects(
             () =>
                 createImage({
@@ -362,7 +382,7 @@ Deno.test("create_image rejects mismatched raster MIME and symlinked reference e
         assertEquals(f.requests.length, 0);
     }));
 
-Deno.test("create_image cancels an in-flight Pi request without saving or retrying", () =>
+test("create_image cancels an in-flight Pi request without saving or retrying", () =>
     withFixture(async (f) => {
         const abort = new AbortController();
         f.response = "wait";
@@ -376,15 +396,15 @@ Deno.test("create_image cancels an in-flight Pi request without saving or retryi
             })
         );
         assertEquals(f.requests.length, 1);
-        await assertRejects(() => Deno.stat(join(f.cwd, "cancelled.png")), Deno.errors.NotFound);
+        await assertRejects(() => fsStat(join(f.cwd, "cancelled.png")), Error, "ENOENT");
     }));
 
-Deno.test("create_image cancels a running Agy subprocess without saving", () =>
+test("create_image cancels a running Agy subprocess without saving", () =>
     withFixture(async (f) => {
         await f.settings({ model: "agy-cli/gemini-3.8-flash" });
         const argsPath = join(f.cwd, "args.json");
-        Deno.env.set("RUNWIELD_IMAGE_FIXTURE_ARGS", argsPath);
-        Deno.env.set("RUNWIELD_IMAGE_FIXTURE_MODE", "wait");
+        process.env["RUNWIELD_IMAGE_FIXTURE_ARGS"] = argsPath;
+        process.env["RUNWIELD_IMAGE_FIXTURE_MODE"] = "wait";
         const abort = new AbortController();
         const pending = assertRejects(() =>
             createImage({
@@ -396,7 +416,7 @@ Deno.test("create_image cancels a running Agy subprocess without saving", () =>
         );
         try {
             const deadline = Date.now() + 5000;
-            while (!(await Deno.stat(argsPath).catch(() => null))) {
+            while (!(await fsStat(argsPath).catch(() => null))) {
                 if (Date.now() > deadline) throw new Error("Agy fixture did not start");
                 await new Promise((resolve) => setTimeout(resolve, 10));
             }
@@ -404,17 +424,17 @@ Deno.test("create_image cancels a running Agy subprocess without saving", () =>
             abort.abort();
             await pending;
         }
-        await assertRejects(() => Deno.stat(join(f.cwd, "cancelled.png")), Deno.errors.NotFound);
+        await assertRejects(() => fsStat(join(f.cwd, "cancelled.png")), Error, "ENOENT");
     }));
 
-Deno.test("create_image refuses a destination created while generation was in flight", () =>
+test("create_image refuses a destination created while generation was in flight", () =>
     withFixture(async (f) => {
-        f.onRequest = () => Deno.writeTextFileSync(join(f.cwd, "result.png"), "user data");
+        f.onRequest = () => fsWriteFileSync(join(f.cwd, "result.png"), "user data");
         await assertRejects(() => createImage({ cwd: f.cwd, prompt: "red", outputPath: "result.png" }));
-        assertEquals(await Deno.readTextFile(join(f.cwd, "result.png")), "user data");
+        assertEquals(await fsReadFile(join(f.cwd, "result.png"), "utf8"), "user data");
     }));
 
-Deno.test("Claude receives create_image through the real MCP bridge with Session references and image results", () =>
+test("Claude receives create_image through the real MCP bridge with Session references and image results", () =>
     withFixture(async (f) => {
         const sessionManager = SessionManager.inMemory(f.cwd);
         const attachment = await persistImageAttachment({ base64: PNG, mimeType: "image/png" }, sessionManager, f.cwd);
@@ -447,7 +467,7 @@ Deno.test("Claude receives create_image through the real MCP bridge with Session
             });
             assert(!result.isError);
             assert(Array.isArray(result.content) && result.content.some((block) => block.type === "image"));
-            assert((await Deno.stat(join(f.cwd, "mcp.png"))).isFile);
+            assert((await fsStat(join(f.cwd, "mcp.png"))).isFile());
             assertEquals(f.requests[0].messages[0].content[1].image_url?.url, `data:image/png;base64,${PNG}`);
         } finally {
             await client.close();
@@ -456,7 +476,7 @@ Deno.test("Claude receives create_image through the real MCP bridge with Session
         }
     }));
 
-Deno.test("create_image is available only to configured image or file-writing agents", () =>
+test("create_image is available only to configured image or file-writing agents", () =>
     withFixture(async (f) => {
         for (const names of [["read"], ["write"], ["multi_file_edit"], ["create_image"]]) {
             const tools = await composeClaudeCliBridgedTools({
@@ -481,7 +501,7 @@ Deno.test("create_image is available only to configured image or file-writing ag
         assert(!tools.some((tool) => tool.name === "create_image"));
     }));
 
-Deno.test("Pi Sessions inject create_image for writers and respect the primary model's image capability", () =>
+test("Pi Sessions inject create_image for writers and respect the primary model's image capability", () =>
     withFixture(async (f) => {
         for (const model of ["text", "vision"]) {
             const built = await buildAgentSession({
@@ -502,7 +522,7 @@ Deno.test("Pi Sessions inject create_image for writers and respect the primary m
                     {} as never,
                 );
                 assertEquals(result.content.some((block) => block.type === "image"), model === "vision");
-                assert((await Deno.stat(join(f.cwd, `${model}.png`))).isFile);
+                assert((await fsStat(join(f.cwd, `${model}.png`))).isFile());
             } finally {
                 built.session.dispose();
             }
@@ -521,7 +541,7 @@ Deno.test("Pi Sessions inject create_image for writers and respect the primary m
         }
     }));
 
-Deno.test("Guide and write delegates get configured image tools in Pi and MCP; read delegates never inherit them", () =>
+test("Guide and write delegates get configured image tools in Pi and MCP; read delegates never inherit them", () =>
     withFixture(async (f) => {
         const guide = await loadAgentDef("guide", f.cwd);
         assert(guide.tools.includes("create_image"));
@@ -578,10 +598,10 @@ Deno.test("Guide and write delegates get configured image tools in Pi and MCP; r
         }
     }));
 
-Deno.test("OpenCode adapter uses existing provider config with the hosted image tool and reference bytes", () =>
+test("OpenCode adapter uses existing provider config with the hosted image tool and reference bytes", () =>
     withFixture(async (f) => {
         await f.settings({ model: "opencode/image-supervisor", thinkingLevel: "low" });
-        await Deno.writeFile(join(f.cwd, "source.png"), Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)));
+        await fsWriteFile(join(f.cwd, "source.png"), Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)));
         const image = await createImage({
             cwd: f.cwd,
             prompt: "make blue",
@@ -596,18 +616,18 @@ Deno.test("OpenCode adapter uses existing provider config with the hosted image 
         assertEquals(f.requests[0].input?.[0].content[1].image_url, `data:image/png;base64,${PNG}`);
     }));
 
-Deno.test("OpenCode adapter rejects denied, image-free and malformed responses without fallback or retries", () =>
+test("OpenCode adapter rejects denied, image-free and malformed responses without fallback or retries", () =>
     withFixture(async (f) => {
         await f.settings({ model: "opencode/image-supervisor" });
         for (const response of ["unauthorized", "text", "multiple", "invalid", "server-error"] as const) {
             f.response = response;
             await assertRejects(() => createImage({ cwd: f.cwd, prompt: "red", outputPath: `${response}.png` }));
-            await assertRejects(() => Deno.stat(join(f.cwd, `${response}.png`)), Deno.errors.NotFound);
+            await assertRejects(() => fsStat(join(f.cwd, `${response}.png`)), Error, "ENOENT");
         }
         assertEquals(f.requests.length, 5);
     }));
 
-Deno.test("OpenCode adapter preserves cancellation and rejects unsupported controls before requesting", () =>
+test("OpenCode adapter preserves cancellation and rejects unsupported controls before requesting", () =>
     withFixture(async (f) => {
         for (const options of [{ temperature: 1 }, { thinkingLevel: "ultra" }]) {
             await f.settings({ model: "opencode/image-supervisor", ...options });
@@ -621,7 +641,7 @@ Deno.test("OpenCode adapter preserves cancellation and rejects unsupported contr
         await assertRejects(() =>
             createImage({ cwd: f.cwd, prompt: "red", outputPath: "cancelled.png", signal: abort.signal })
         );
-        await assertRejects(() => Deno.stat(join(f.cwd, "cancelled.png")), Deno.errors.NotFound);
+        await assertRejects(() => fsStat(join(f.cwd, "cancelled.png")), Error, "ENOENT");
     }));
 
 interface RecordedCodexRequest {
@@ -636,11 +656,11 @@ interface RecordedCodexRequest {
     };
 }
 
-Deno.test("Codex adapter uses official RPC, configured model/effort and exact reference paths", () =>
+test("Codex adapter uses official RPC, configured model/effort and exact reference paths", () =>
     withFixture(async (f) => {
         const log = join(f.cwd, "rpc.jsonl");
-        Deno.env.set("RUNWIELD_CODEX_IMAGE_LOG", log);
-        await Deno.writeFile(join(f.cwd, "source.png"), Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)));
+        process.env["RUNWIELD_CODEX_IMAGE_LOG"] = log;
+        await fsWriteFile(join(f.cwd, "source.png"), Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)));
         for (const provider of ["codex-cli", "openai-codex"]) {
             await f.settings({ model: `${provider}/fixture-model`, thinkingLevel: "low" });
             const image = await createImage({
@@ -651,7 +671,7 @@ Deno.test("Codex adapter uses official RPC, configured model/effort and exact re
             });
             assertEquals(image.width, 4);
         }
-        const calls: RecordedCodexRequest[] = (await Deno.readTextFile(log)).trim().split("\n").map((line) =>
+        const calls: RecordedCodexRequest[] = (await fsReadFile(log, "utf8")).trim().split("\n").map((line) =>
             JSON.parse(line)
         );
         const thread = calls.find((call) => call.method === "thread/start");
@@ -665,11 +685,11 @@ Deno.test("Codex adapter uses official RPC, configured model/effort and exact re
         assertEquals(f.requests.length, 0);
     }));
 
-Deno.test("Codex adapter refuses unavailable capability, API-key billing, invalid output and mismatched turns", () =>
+test("Codex adapter refuses unavailable capability, API-key billing, invalid output and mismatched turns", () =>
     withFixture(async (f) => {
         await f.settings({ model: "codex-cli/fixture-model" });
-        Deno.env.set("RUNWIELD_CODEX_IMAGE_OUTSIDE", join(f.cwd, "source.png"));
-        await Deno.writeFile(join(f.cwd, "source.png"), Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)));
+        process.env["RUNWIELD_CODEX_IMAGE_OUTSIDE"] = join(f.cwd, "source.png");
+        await fsWriteFile(join(f.cwd, "source.png"), Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)));
         for (
             const mode of [
                 "api-key",
@@ -686,11 +706,11 @@ Deno.test("Codex adapter refuses unavailable capability, API-key billing, invali
                 "exit",
             ]
         ) {
-            Deno.env.set("RUNWIELD_CODEX_IMAGE_MODE", mode);
+            process.env["RUNWIELD_CODEX_IMAGE_MODE"] = mode;
             await assertRejects(() => createImage({ cwd: f.cwd, prompt: "red", outputPath: `${mode}.png` }));
-            await assertRejects(() => Deno.stat(join(f.cwd, `${mode}.png`)), Deno.errors.NotFound);
+            await assertRejects(() => fsStat(join(f.cwd, `${mode}.png`)), Error, "ENOENT");
         }
-        Deno.env.delete("RUNWIELD_CODEX_IMAGE_MODE");
+        delete process.env["RUNWIELD_CODEX_IMAGE_MODE"];
         for (
             const settings of [{ model: "codex-cli/missing" }, {
                 model: "codex-cli/fixture-model",
@@ -702,48 +722,46 @@ Deno.test("Codex adapter refuses unavailable capability, API-key billing, invali
         }
     }));
 
-Deno.test({
-    name: "Codex adapter discovers the app-bundled CLI when codex is absent from PATH",
-    ignore: Deno.build.os !== "darwin",
-    fn: () =>
-        withFixture(async (f) => {
-            const executable = join(
-                f.home,
-                "Applications",
-                "ChatGPT.app",
-                "Contents",
-                "Resources",
-                "codex-cli",
-                "CodexCLI.app",
-                "Contents",
-                "MacOS",
-                "codex",
-            );
-            await Deno.mkdir(dirname(executable), { recursive: true });
-            await Deno.rename(join(dirname(f.home), "bin", "codex"), executable);
-            // Exclude the calling app's injected PATH as well as the removed fixture command.
-            Deno.env.set("PATH", join(dirname(f.home), "bin"));
-            await f.settings({ model: "codex-cli/fixture-model" });
-            const image = await createImage({ cwd: f.cwd, prompt: "red", outputPath: "bundled.png" });
-            assertEquals(image.width, 4);
-            assert((await Deno.stat(join(f.cwd, "bundled.png"))).isFile);
-            assertEquals(f.requests.length, 0);
-        }),
-});
+test("Codex adapter discovers the app-bundled CLI when codex is absent from PATH", {
+    skip: process.platform !== "darwin",
+}, () =>
+    withFixture(async (f) => {
+        const executable = join(
+            f.home,
+            "Applications",
+            "ChatGPT.app",
+            "Contents",
+            "Resources",
+            "codex-cli",
+            "CodexCLI.app",
+            "Contents",
+            "MacOS",
+            "codex",
+        );
+        await fsMkdir(dirname(executable), { recursive: true });
+        await fsRename(join(dirname(f.home), "bin", "codex"), executable);
+        // Exclude the calling app's injected PATH as well as the removed fixture command.
+        process.env["PATH"] = join(dirname(f.home), "bin");
+        await f.settings({ model: "codex-cli/fixture-model" });
+        const image = await createImage({ cwd: f.cwd, prompt: "red", outputPath: "bundled.png" });
+        assertEquals(image.width, 4);
+        assert((await fsStat(join(f.cwd, "bundled.png"))).isFile());
+        assertEquals(f.requests.length, 0);
+    }));
 
-Deno.test("Codex adapter interrupts and terminates an in-flight owned helper on cancellation", () =>
+test("Codex adapter interrupts and terminates an in-flight owned helper on cancellation", () =>
     withFixture(async (f) => {
         await f.settings({ model: "codex-cli/fixture-model" });
         const log = join(f.cwd, "rpc.jsonl");
-        Deno.env.set("RUNWIELD_CODEX_IMAGE_LOG", log);
-        Deno.env.set("RUNWIELD_CODEX_IMAGE_MODE", "wait");
+        process.env["RUNWIELD_CODEX_IMAGE_LOG"] = log;
+        process.env["RUNWIELD_CODEX_IMAGE_MODE"] = "wait";
         const abort = new AbortController();
         const pending = assertRejects(() =>
             createImage({ cwd: f.cwd, prompt: "red", outputPath: "cancelled.png", signal: abort.signal })
         );
         try {
             const deadline = Date.now() + 5000;
-            while (!(await Deno.readTextFile(log).catch(() => "")).includes("turn/start")) {
+            while (!(await fsReadFile(log, "utf8").catch(() => "")).includes("turn/start")) {
                 if (Date.now() > deadline) throw new Error("Codex fixture did not start its turn");
                 await new Promise((resolve) => setTimeout(resolve, 10));
             }
@@ -751,6 +769,10 @@ Deno.test("Codex adapter interrupts and terminates an in-flight owned helper on 
             abort.abort();
             await pending;
         }
-        assertStringIncludes(await Deno.readTextFile(log), "turn/interrupt");
-        await assertRejects(() => Deno.stat(join(f.cwd, "cancelled.png")), Deno.errors.NotFound);
+        assertStringIncludes(await fsReadFile(log, "utf8"), "turn/interrupt");
+        await assertRejects(() => fsStat(join(f.cwd, "cancelled.png")), Error, "ENOENT");
     }));
+
+function shellQuote(value: string): string {
+    return "'" + value.replaceAll("'", "'\"'\"'") + "'";
+}

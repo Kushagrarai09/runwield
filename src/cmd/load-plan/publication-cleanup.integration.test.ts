@@ -1,3 +1,17 @@
+import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
+import { captureForegroundProcess } from "../../shared/captured-process.ts";
+import { getCwd } from "../../constants.js";
+import { test } from "node:test";
+import {
+    mkdir as fsMkdir,
+    mkdtemp as fsMkdtemp,
+    readFile as fsReadFile,
+    rm as fsRm,
+    stat as fsStat,
+    writeFile as fsWriteFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import process from "node:process";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { fromFileUrl, join } from "@std/path";
 import { savePlan } from "../../plan-store.js";
@@ -30,7 +44,7 @@ async function checkCleanupRestart(
 ) {
     await withRuntimeCommandFixture("runwield-cleanup-command-", async () => {
         const root = await seed.checkout();
-        const directory = await Deno.makeTempDir({ prefix: "runwield-cleanup-git-" });
+        const directory = await fsMkdtemp(join(tmpdir(), "runwield-cleanup-git-"));
         const tree = join(directory, "execution");
         const remote = join(directory, "remote.git");
         const runtime = createSessionRuntime();
@@ -43,12 +57,12 @@ async function checkCleanupRestart(
             await git(root, ["add", "docs"]);
             await git(root, ["commit", "-m", "Save Plan"]);
             const targetBefore = await git(root, ["rev-parse", "HEAD"]);
-            await Deno.mkdir(remote);
+            await fsMkdir(remote);
             await git(remote, ["init", "--bare"]);
             await git(root, ["remote", "add", "origin", remote]);
             await git(root, ["push", "-u", "origin", "main"]);
             await git(root, ["worktree", "add", "-b", "worktree/demo", tree]);
-            await Deno.writeTextFile(join(tree, "implementation.txt"), "implementation\n");
+            await fsWriteFile(join(tree, "implementation.txt"), "implementation\n");
             await addEntry(root, {
                 id: "attempt-1",
                 planId: "plan-1",
@@ -64,7 +78,7 @@ async function checkCleanupRestart(
                 updatedAt: new Date().toISOString(),
             });
             const configPath = join(directory, "driver.json");
-            await Deno.writeTextFile(
+            await fsWriteFile(
                 configPath,
                 JSON.stringify({
                     projectRoot: root,
@@ -76,11 +90,10 @@ async function checkCleanupRestart(
                     crashAfter: boundary,
                 }),
             );
-            const crashed = await new Deno.Command(Deno.execPath(), {
-                args: ["run", "-A", driver, configPath],
-                stdout: "piped",
-                stderr: "piped",
-            }).output();
+            const crashed = await captureForegroundProcess(process.execPath, {
+                args: runtimeSourceArgs(["run", "-A", driver, configPath]),
+                cwd: getCwd(),
+            });
             assertEquals(crashed.code, 86, new TextDecoder().decode(crashed.stderr));
             const before = await findById(root, "attempt-1", { migrate: false });
             assert(before?.publication);
@@ -91,23 +104,20 @@ async function checkCleanupRestart(
             const lostRegistration = ["lost_registration", "lost_registration_branch_gone", "saved_copy_exists"]
                 .includes(targetChange);
             if (lostRegistration) {
-                const marker = await Deno.readTextFile(join(tree, ".git"));
-                await Deno.remove(marker.trim().slice("gitdir: ".length), { recursive: true });
-                await Deno.writeTextFile(join(tree, "implementation.txt"), "Uncommitted work to keep\n");
-                await Deno.writeTextFile(join(tree, "personal-note.txt"), "Untracked work to keep\n");
+                const marker = await fsReadFile(join(tree, ".git"), "utf8");
+                await fsRm(marker.trim().slice("gitdir: ".length), { recursive: true });
+                await fsWriteFile(join(tree, "implementation.txt"), "Uncommitted work to keep\n");
+                await fsWriteFile(join(tree, "personal-note.txt"), "Untracked work to keep\n");
                 if (targetChange === "lost_registration_branch_gone") {
                     await git(root, ["branch", "-D", "worktree/demo"]);
                 }
                 if (targetChange === "saved_copy_exists") {
-                    await Deno.mkdir(join(`${tree}.saved`, "files"), { recursive: true });
-                    await Deno.writeTextFile(
-                        join(`${tree}.saved`, "files", "previous.txt"),
-                        "Keep previous saved files\n",
-                    );
+                    await fsMkdir(join(`${tree}.saved`, "files"), { recursive: true });
+                    await fsWriteFile(join(`${tree}.saved`, "files", "previous.txt"), "Keep previous saved files\n");
                 }
             } else {
                 assertEquals(
-                    await Deno.stat(tree).then(() => true).catch(() => false),
+                    await fsStat(tree).then(() => true).catch(() => false),
                     boundary === "verification_receipt",
                 );
             }
@@ -119,7 +129,7 @@ async function checkCleanupRestart(
                 await git(root, ["clone", "--branch", "main", remote, other]);
                 await git(other, ["config", "user.name", "Another developer"]);
                 await git(other, ["config", "user.email", "other@example.com"]);
-                await Deno.writeTextFile(join(other, "later.txt"), "Later independent change\n");
+                await fsWriteFile(join(other, "later.txt"), "Later independent change\n");
                 await git(other, ["add", "later.txt"]);
                 await git(other, ["commit", "-m", "Later independent change"]);
                 await git(other, ["push", "origin", "main"]);
@@ -139,8 +149,8 @@ async function checkCleanupRestart(
             const primaryPath = join(root, "docs/plans/demo.md");
             const primaryBytes =
                 `---\nplanId: plan-1\nclassification: PLANNED_CHANGE\nstatus: validated\ntargetBranch: main\nvalidatedCommit: ${before.publication.validatedCommit}\n---\n# Keep my primary Plan\n\nUnsaved Plan notes.\n`;
-            await Deno.writeTextFile(primaryPath, primaryBytes);
-            await Deno.writeTextFile(join(root, "README.md"), "Unsaved user changes\n");
+            await fsWriteFile(primaryPath, primaryBytes);
+            await fsWriteFile(join(root, "README.md"), "Unsaved user changes\n");
             const primaryStatus = await git(root, ["status", "--porcelain", "--untracked-files=all"]);
             const sourceBranch = await git(root, ["branch", "--list", "worktree/demo"]);
             const worktreeList = await git(root, ["worktree", "list", "--porcelain"]);
@@ -205,29 +215,29 @@ async function checkCleanupRestart(
                 assertEquals(await git(root, ["worktree", "list", "--porcelain"]), worktreeList);
                 assertEquals(messages.some((message) => /Cleanup|restored|leftover/i.test(message)), false);
                 assertEquals(
-                    await Deno.stat(tree).then(() => true).catch(() => false),
+                    await fsStat(tree).then(() => true).catch(() => false),
                     boundary === "verification_receipt",
                 );
                 if (lostRegistration) {
                     assertEquals(
-                        await Deno.readTextFile(join(tree, "implementation.txt")),
+                        await fsReadFile(join(tree, "implementation.txt"), "utf8"),
                         "Uncommitted work to keep\n",
                     );
-                    assertEquals(await Deno.readTextFile(join(tree, "personal-note.txt")), "Untracked work to keep\n");
+                    assertEquals(await fsReadFile(join(tree, "personal-note.txt"), "utf8"), "Untracked work to keep\n");
                 }
                 if (targetChange !== "saved_copy_exists") {
-                    assertEquals(await Deno.stat(`${tree}.saved`).then(() => true).catch(() => false), false);
+                    assertEquals(await fsStat(`${tree}.saved`).then(() => true).catch(() => false), false);
                 } else {
                     assertEquals(
-                        await Deno.readTextFile(join(`${tree}.saved`, "files", "previous.txt")),
+                        await fsReadFile(join(`${tree}.saved`, "files", "previous.txt"), "utf8"),
                         "Keep previous saved files\n",
                     );
                 }
             } else if (targetChange === "saved_copy_exists") {
                 assertEquals(await findById(root, "attempt-1", { migrate: false }), before);
-                assertEquals(await Deno.readTextFile(join(tree, "personal-note.txt")), "Untracked work to keep\n");
+                assertEquals(await fsReadFile(join(tree, "personal-note.txt"), "utf8"), "Untracked work to keep\n");
                 assertEquals(
-                    await Deno.readTextFile(join(`${tree}.saved`, "files", "previous.txt")),
+                    await fsReadFile(join(`${tree}.saved`, "files", "previous.txt"), "utf8"),
                     "Keep previous saved files\n",
                 );
                 assertStringIncludes(messages.join("\n"), "Both copies were kept");
@@ -248,36 +258,39 @@ async function checkCleanupRestart(
                     const saved = join(`${tree}.saved`, "files");
                     assertStringIncludes(messages.join("\n"), saved);
                     assertEquals(
-                        await Deno.readTextFile(join(saved, "implementation.txt")),
+                        await fsReadFile(join(saved, "implementation.txt"), "utf8"),
                         "Uncommitted work to keep\n",
                     );
-                    assertEquals(await Deno.readTextFile(join(saved, "personal-note.txt")), "Untracked work to keep\n");
-                    assertEquals(await Deno.stat(tree).then(() => true).catch(() => false), false);
+                    assertEquals(
+                        await fsReadFile(join(saved, "personal-note.txt"), "utf8"),
+                        "Untracked work to keep\n",
+                    );
+                    assertEquals(await fsStat(tree).then(() => true).catch(() => false), false);
                     assertEquals(await git(root, ["branch", "--list", "worktree/demo"]), "");
                 }
             }
-            assertEquals(await Deno.readTextFile(primaryPath), primaryBytes);
-            assertEquals(await Deno.readTextFile(join(root, "README.md")), "Unsaved user changes\n");
+            assertEquals(await fsReadFile(primaryPath, "utf8"), primaryBytes);
+            assertEquals(await fsReadFile(join(root, "README.md"), "utf8"), "Unsaved user changes\n");
             assertEquals(await git(root, ["rev-parse", "HEAD"]), primaryHead);
             assertEquals(await git(root, ["status", "--porcelain", "--untracked-files=all"]), primaryStatus);
             assertEquals(await git(remote, ["rev-parse", "refs/heads/main"]), expectedTarget);
         } finally {
             runtime.closeAllSessions();
             await git(root, ["worktree", "remove", "--force", tree]).catch(() => {});
-            await Deno.remove(root, { recursive: true });
-            await Deno.remove(directory, { recursive: true });
+            await fsRm(root, { recursive: true });
+            await fsRm(directory, { recursive: true });
         }
     });
 }
 
 for (const invocation of ["named", "picker"] as const) {
     for (const boundary of ["verification_receipt", "cleanup_effect", "cleanup_receipt"] as const) {
-        Deno.test(`load-plan ${invocation} views a published Plan without cleanup after ${boundary}`, async () => {
+        test(`load-plan ${invocation} views a published Plan without cleanup after ${boundary}`, async () => {
             await checkCleanupRestart(boundary, invocation, "unchanged", false);
         });
     }
     for (const target of ["lost_registration", "saved_copy_exists", "rewritten", "remote_removed"] as const) {
-        Deno.test(`load-plan ${invocation} opens the menu without cleanup or file movement: ${target}`, async () => {
+        test(`load-plan ${invocation} opens the menu without cleanup or file movement: ${target}`, async () => {
             await checkCleanupRestart(
                 target.startsWith("lost") || target === "saved_copy_exists" ? "verification_receipt" : "cleanup_effect",
                 invocation,
@@ -286,30 +299,30 @@ for (const invocation of ["named", "picker"] as const) {
             );
         });
     }
-    Deno.test(`load-plan ${invocation} explicitly requested cleanup preserves leftover files with a missing Git registration`, async () => {
+    test(`load-plan ${invocation} explicitly requested cleanup preserves leftover files with a missing Git registration`, async () => {
         await checkCleanupRestart("verification_receipt", invocation, "lost_registration");
     });
-    Deno.test(`load-plan ${invocation} requested cleanup preserves files when registration and branch are gone`, async () => {
+    test(`load-plan ${invocation} requested cleanup preserves files when registration and branch are gone`, async () => {
         await checkCleanupRestart("verification_receipt", invocation, "lost_registration_branch_gone");
     });
-    Deno.test(`load-plan ${invocation} requested cleanup never overwrites a saved copy`, async () => {
+    test(`load-plan ${invocation} requested cleanup never overwrites a saved copy`, async () => {
         await checkCleanupRestart("verification_receipt", invocation, "saved_copy_exists");
     });
     for (const boundary of ["cleanup_effect", "cleanup_receipt"] as const) {
-        Deno.test(`load-plan ${invocation} requested cleanup after ${boundary} returns to the menu without overwriting primary`, async () => {
+        test(`load-plan ${invocation} requested cleanup after ${boundary} returns to the menu without overwriting primary`, async () => {
             await checkCleanupRestart(boundary, invocation);
         });
-        Deno.test(`load-plan ${invocation} requested cleanup after ${boundary} accepts remote advancement`, async () => {
+        test(`load-plan ${invocation} requested cleanup after ${boundary} accepts remote advancement`, async () => {
             await checkCleanupRestart(boundary, invocation, "advanced");
         });
     }
-    Deno.test(`load-plan ${invocation} requested cleanup preserves the receipt when the target was rewritten`, async () => {
+    test(`load-plan ${invocation} requested cleanup preserves the receipt when the target was rewritten`, async () => {
         await checkCleanupRestart("cleanup_effect", invocation, "rewritten");
     });
-    Deno.test(`load-plan ${invocation} requested cleanup checks the recorded upstream after configuration changes`, async () => {
+    test(`load-plan ${invocation} requested cleanup checks the recorded upstream after configuration changes`, async () => {
         await checkCleanupRestart("cleanup_effect", invocation, "upstream_reconfigured");
     });
-    Deno.test(`load-plan ${invocation} requested cleanup keeps publication evidence when only local history is available`, async () => {
+    test(`load-plan ${invocation} requested cleanup keeps publication evidence when only local history is available`, async () => {
         await checkCleanupRestart("cleanup_effect", invocation, "remote_removed");
     });
 }

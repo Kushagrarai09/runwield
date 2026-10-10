@@ -5,7 +5,7 @@
 
 import { chmodSync, copyFileSync, mkdirSync, statSync, unlinkSync } from "node:fs";
 import { deleteProjectRegistration } from "./project-removal.ts";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync } from "../sqlite.ts";
 import { dirname, extname } from "@std/path";
 import { ensureOwnerDatabaseDirectory, getOwnerCoordinationDatabasePath } from "./paths.ts";
 import {
@@ -62,7 +62,9 @@ export function openOwnerCoordinationDatabase(options = {}) {
                     db.exec("COMMIT");
                     return result;
                 } catch (error) {
-                    db.exec("ROLLBACK");
+                    try {
+                        db.exec("ROLLBACK");
+                    } catch { /* SQLite may already have rolled back after an I/O failure. */ }
                     throw error;
                 }
             },

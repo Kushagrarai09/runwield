@@ -662,3 +662,54 @@ separately under Deno afterward. No full-suite Deno rerun after those test-only 
 444-file run includes those corrections. Standalone application packages remain the qualified `4131b046a` builds;
 subsequent changes affect tests, fixtures and this plan. The original main checkout remains clean at `58b6ba176`;
 all implementation is on the isolated local migration branch. No push, PR, merge or release occurred.
+
+### Remaining source and golden harnesses
+
+All 158 previously unregistered source files now use the isolated active-runtime test path. The golden harness's
+47 files pass under Bun, including process-global isolation, child completion framing, rendered terminal snapshots,
+and the planned tutorial/non-Git validation commands. Additional subprocess fixtures now use the active executable,
+explicit dependency roots, literal shell quoting, and portable filesystem/process APIs. Deno permission-scoped Plan
+checks retain their original permissions; the Codex-discovery test uses a real macOS sandbox under Bun instead of
+silently discarding its denial of host application access. No test cases or assertions were removed.
+
+The migration exposed a native SQLite closure defect in Bun 1.4.3's `node:sqlite` compatibility layer: statements
+kept the native connection alive after close, and deleting/recreating the database could fail with
+`SQLITE_IOERR_SHORT_READ`. An independent descriptor audit and unchanged Session reconstruction test confirmed it.
+The shared SQLite boundary now uses native `bun:sqlite` with explicit `close(true)` on Bun and retains `node:sqlite`
+on Deno. It normalizes absent rows and direct-statement change counts (Bun includes cascade effects in its raw count).
+New close/recreate, read-only, binding and cascade regressions supplement the existing Session and Workspace storage
+cases. The focused corrected SQLite slice passes (`.ci-cache/sqlite-changes-qualification.log`); the unchanged
+13 Session tests pass with the native close fix.
+
+Browser-question completion also exposed a shutdown race: Bun force-aborted the answer socket before delivery.
+Accepted answers now drain with a one-second limit under Bun; cancellation/error cleanup remains forced. Deno keeps
+its native abort behavior, avoiding its invalid graceful-shutdown-to-abort transition. Independent probes verified
+complete 85 KB responses, canceled unfinished uploads, and bounded draining on both runtimes. A maintained child-process
+regression passes under Bun (`.ci-cache/browser-question-bun.log`).
+
+The expanded macOS Bun build/type/test gate passed 602/603 files
+(`.ci-cache/expanded-603-bun-ci.log`, report `.ci-cache/bun-report-guQl7V`). Its sole failure was the terminal-auth
+mutation fixture's external dependency root; the corrected test passes all ten cases
+(`.ci-cache/terminal-auth-bun-final.log`). The registry now has 604 files including the additional shutdown regression.
+Full Deno CI completed 645 files: 641 passed and four exposed fixture regressions. The Plan tests now preserve their
+filesystem-only Deno permission scope through the native temporary-directory operation; Workspace subprocess capture
+passes only supported options. The compiled Agy proxy owns and drains its three pipes and forwards termination, fixing
+an inherited-pipe orphan under Deno. That investigation also exposed a real MCP bridge lifecycle gap: stdin EOF now
+closes the upstream HTTP/SSE transport. A real-process regression initializes the bridge, closes stdin, drains output,
+and requires natural exit 0, so host timeout termination cannot pass.
+
+The three fixture corrections pass in `.ci-cache/source-deno-fixes.log`; that focused run's obsolete Agy case was
+explicitly stopped after reproducing the old proxy hang. The final Agy proxy passes all 32 cases in 35.2 seconds
+(`.ci-cache/agy-owned-pipes-deno.log`), and the maintained EOF regression passes under Deno
+(`.ci-cache/stdio-eof-deno.log`). The final seven-file source correction slice passes under Bun
+(`.ci-cache/source-final-fixes-bun.log`, report `.ci-cache/bun-report-4SJtOZ`). Thus all 645 Deno files and all 604 Bun
+files have passing coverage collectively, but a final integrated rerun is not yet claimed. Full source types and lint
+pass again, and the zero-seam baseline is retained. Independent Spec, Standards and Tests review approve the original
+slice and these final corrections with no remaining findings.
+
+A fresh native Linux ARM64 install into a disposable volume with empty cache/node_modules installed the then-locked
+827-package graph in 140.40 seconds with lifecycle scripts disabled (`.ci-cache/native-linux-clean-install.log`).
+This proves native installation rather than reuse of the macOS dependency graph. The subsequently explicit Prettier
+test dependency and final toolchain graph will be reinstalled before final native qualification. Standalone packages
+still require rebuilding after the application SQLite and shutdown changes. Bun-only development-check parity,
+remaining script tests, comparative application/install benchmarks, and final-head packages remain in progress.

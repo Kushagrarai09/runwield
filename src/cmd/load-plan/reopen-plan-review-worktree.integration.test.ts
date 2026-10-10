@@ -1,3 +1,9 @@
+import { collectProcessOutput } from "../../testing/subprocess-output.ts";
+import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
+import { spawnNativeProcess } from "../../shared/foreground-process.ts";
+import { test } from "node:test";
+import { writeFile as fsWriteFile } from "node:fs/promises";
+import process from "node:process";
 import { assert, assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
@@ -22,7 +28,7 @@ import { withRuntimeCommandFixture } from "../testing/runtime-command-fixture.ts
 import { reopenSavedPlanReview } from "./reopen-plan-review.ts";
 
 const repoFixture = defineGitFixture(async (repo) => {
-    await Deno.writeTextFile(join(repo, "README.md"), "base\n");
+    await fsWriteFile(join(repo, "README.md"), "base\n");
     await git(repo, ["add", "."]);
     await git(repo, ["commit", "-m", "base"]);
     await git(repo, ["switch", "-c", "review-target"]);
@@ -51,7 +57,7 @@ const repoFixture = defineGitFixture(async (repo) => {
     await git(repo, ["switch", "main"]);
 });
 
-Deno.test("reopened Sequence sends a complete group decision from its registered planning worktree", async () => {
+test("reopened Sequence sends a complete group decision from its registered planning worktree", async () => {
     await withRuntimeCommandFixture("reopen-worktree-sequence-", async ({ homeDir }) => {
         const repo = await repoFixture.checkout();
         const planning = await preparePlanningWorktreeForPlan(repo, "sequence", {
@@ -98,7 +104,7 @@ Deno.test("reopened Sequence sends a complete group decision from its registered
     });
 });
 
-Deno.test("Approve & Run executes the first Sequence child saved only in its planning worktree", async () => {
+test("Approve & Run executes the first Sequence child saved only in its planning worktree", async () => {
     await withRuntimeCommandFixture("reopen-worktree-sequence-run-", async ({ homeDir, setModelMessages }) => {
         const repo = await repoFixture.checkout();
         const planning = await preparePlanningWorktreeForPlan(repo, "sequence", {
@@ -164,7 +170,7 @@ Deno.test("Approve & Run executes the first Sequence child saved only in its pla
     });
 });
 
-Deno.test("Workspace accepts a live Sequence group decision from a registered planning worktree", async () => {
+test("Workspace accepts a live Sequence group decision from a registered planning worktree", async () => {
     await withRuntimeCommandFixture("workspace-worktree-sequence-", async ({ homeDir }) => {
         const repo = await repoFixture.checkout();
         const planning = await preparePlanningWorktreeForPlan(repo, "sequence", {
@@ -203,13 +209,19 @@ Deno.test("Workspace accepts a live Sequence group decision from a registered pl
                 store.close();
             }
         `;
-        const child = new Deno.Command(Deno.execPath(), {
-            args: ["eval", "--config", new URL("../../../deno.json", import.meta.url).pathname, code],
+        const child = spawnNativeProcess(process.execPath, {
+            args: runtimeSourceArgs([
+                "eval",
+                "--config",
+                new URL("../../../deno.json", import.meta.url).pathname,
+                code,
+            ]),
             cwd: repo,
             stdout: "piped",
             stderr: "piped",
-        }).spawn();
-        const outputPromise = child.output();
+            stdin: "null",
+        });
+        const outputPromise = collectProcessOutput(child);
         let finished = false;
         try {
             let operation: Awaited<ReturnType<typeof service.liveSession>>["operation"] = null;

@@ -1,4 +1,19 @@
 // @ts-nocheck: public workflow facade now forwards to TypeScript extraction modules; behavioral coverage remains unchanged.
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import {
+    chmod as fsChmod,
+    mkdir as fsMkdir,
+    mkdtemp as fsMkdtemp,
+    readFile as fsReadFile,
+    realpath as fsRealpath,
+    rm as fsRm,
+    stat as fsStat,
+    writeFile as fsWriteFile,
+} from "node:fs/promises";
+import { test } from "node:test";
+import { rmSync as fsRmSync } from "node:fs";
+import process from "node:process";
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { fauxAssistantMessage, fauxText } from "@earendil-works/pi-ai";
 import { withRuntimeCommandFixture } from "../../cmd/testing/runtime-command-fixture.ts";
@@ -55,7 +70,7 @@ function registerProjectCleanup() {
     globalThis.addEventListener("unload", () => {
         for (const path of projectsToRemove) {
             try {
-                Deno.removeSync(path, { recursive: true });
+                fsRmSync(path, { recursive: true });
             } catch {
                 // Best effort; a leftover temp directory must not fail a passing run.
             }
@@ -116,7 +131,7 @@ async function makeWorkflowProject(plans) {
     return cwd;
 }
 
-Deno.test("HostedSession scopes active execution workflow independently", () => {
+test("HostedSession scopes active execution workflow independently", () => {
     const sessionA = new HostedSession({ id: "workflow-a", cwd: "/project-a" });
     const sessionB = new HostedSession({ id: "workflow-b", cwd: "/project-b" });
     const workflowA = /** @type {const} */ ({
@@ -142,7 +157,7 @@ Deno.test("HostedSession scopes active execution workflow independently", () => 
     assertEquals(sessionB.getActiveExecutionCwd(), "/work/b");
 });
 
-Deno.test("startActiveExecutionWorkflow continues an existing in-progress worktree", async () => {
+test("startActiveExecutionWorkflow continues an existing in-progress worktree", async () => {
     const projectRoot = await makeWorkflowProject([{
         name: "continued-plan",
         status: "in_progress",
@@ -157,7 +172,7 @@ Deno.test("startActiveExecutionWorkflow continues an existing in-progress worktr
         planId: PLAN_UNDER_TEST,
         status: "in_progress",
     });
-    await Deno.writeTextFile(`${recorded.path}/continued-implementation.ts`, "export const continued = true;\n");
+    await fsWriteFile(`${recorded.path}/continued-implementation.ts`, "export const continued = true;\n");
     await git(recorded.path, ["add", "continued-implementation.ts"]);
     await git(recorded.path, ["commit", "-m", "complete continued implementation"]);
 
@@ -177,24 +192,24 @@ Deno.test("startActiveExecutionWorkflow continues an existing in-progress worktr
     assertEquals(hostedSession.getActiveExecutionWorkflow()?.planName, "continued-plan");
 });
 
-Deno.test("startActiveExecutionWorkflow indexes a newly created execution worktree", async () => {
+test("startActiveExecutionWorkflow indexes a newly created execution worktree", async () => {
     await withProcessGlobalTestLock(async () => {
         const projectRoot = await makeWorkflowProject([{ name: "indexed-plan", status: "ready_for_work" }]);
         const hostedSession = makeHostedSession("indexed-workflow", projectRoot);
         const events = [];
         hostedSession.setEventSink((event) => events.push(event));
-        const binDir = await Deno.makeTempDir({ prefix: "runwield-fake-cymbal-bin-" });
+        const binDir = await fsMkdtemp(join(tmpdir(), "runwield-fake-cymbal-bin-"));
         const markerPath = `${binDir}/cymbal-marker.txt`;
         const cymbalPath = `${binDir}/cymbal`;
-        const previousPath = Deno.env.get("PATH") || "";
-        const previousMarker = Deno.env.get("RUNWIELD_CYMBAL_MARKER");
-        await Deno.writeTextFile(
+        const previousPath = process.env["PATH"] || "";
+        const previousMarker = process.env["RUNWIELD_CYMBAL_MARKER"];
+        await fsWriteFile(
             cymbalPath,
             '#!/bin/sh\nprintf "%s\\n" "$PWD" > "$RUNWIELD_CYMBAL_MARKER"\nprintf "%s\\n" "$*" >> "$RUNWIELD_CYMBAL_MARKER"\n',
         );
-        await Deno.chmod(cymbalPath, 0o755);
-        Deno.env.set("PATH", `${binDir}:${previousPath}`);
-        Deno.env.set("RUNWIELD_CYMBAL_MARKER", markerPath);
+        await fsChmod(cymbalPath, 0o755);
+        process.env["PATH"] = `${binDir}:${previousPath}`;
+        process.env["RUNWIELD_CYMBAL_MARKER"] = markerPath;
         try {
             const result = await startActiveExecutionWorkflow({
                 planName: "indexed-plan",
@@ -204,25 +219,25 @@ Deno.test("startActiveExecutionWorkflow indexes a newly created execution worktr
                 ports: createExecutionStartPorts(),
             });
 
-            const marker = (await Deno.readTextFile(markerPath)).trim().split("\n");
-            assertEquals(marker, [await Deno.realPath(result.executionCwd), "index ."]);
+            const marker = (await fsReadFile(markerPath, "utf8")).trim().split("\n");
+            assertEquals(marker, [await fsRealpath(result.executionCwd), "index ."]);
             assertEquals(
                 events.some((event) => event.message === "Indexing the worktree for code search..."),
                 true,
             );
         } finally {
-            Deno.env.set("PATH", previousPath);
+            process.env["PATH"] = previousPath;
             if (previousMarker === undefined) {
-                Deno.env.delete("RUNWIELD_CYMBAL_MARKER");
+                delete process.env["RUNWIELD_CYMBAL_MARKER"];
             } else {
-                Deno.env.set("RUNWIELD_CYMBAL_MARKER", previousMarker);
+                process.env["RUNWIELD_CYMBAL_MARKER"] = previousMarker;
             }
-            await Deno.remove(binDir, { recursive: true }).catch(() => {});
+            await fsRm(binDir, { recursive: true }).catch(() => {});
         }
     });
 });
 
-Deno.test("startActiveExecutionWorkflow bases the execution worktree on the requested target branch", async () => {
+test("startActiveExecutionWorkflow bases the execution worktree on the requested target branch", async () => {
     const projectRoot = await makeWorkflowProject([{
         name: "targeted-plan",
         status: "ready_for_work",
@@ -230,7 +245,7 @@ Deno.test("startActiveExecutionWorkflow bases the execution worktree on the requ
     }]);
     await setCustomSetting("plans", { autoMergeIntoTargetBranch: true }, "project", projectRoot);
     const hostedSession = makeHostedSession("targeted-workflow", projectRoot);
-    await Deno.writeTextFile(`${projectRoot}/current-only-marker`, "present only in the current checkout\n");
+    await fsWriteFile(`${projectRoot}/current-only-marker`, "present only in the current checkout\n");
 
     const result = await startActiveExecutionWorkflow({
         // Padded on purpose: the target branch arrives from Front Matter a user edited.
@@ -269,7 +284,7 @@ Deno.test("startActiveExecutionWorkflow bases the execution worktree on the requ
     assertEquals(plan?.attrs.status, "in_progress");
 });
 
-Deno.test("startActiveExecutionWorkflow uses the latest uncommitted Plan revision instead of the target branch copy", async () => {
+test("startActiveExecutionWorkflow uses the latest uncommitted Plan revision instead of the target branch copy", async () => {
     const projectRoot = await makeWorkflowProject([{
         name: "revised-before-execution",
         status: "ready_for_work",
@@ -314,7 +329,7 @@ Deno.test("startActiveExecutionWorkflow uses the latest uncommitted Plan revisio
     }
 });
 
-Deno.test("startActiveExecutionWorkflow captures baseline after first Plan materialization and records metric", async () => {
+test("startActiveExecutionWorkflow captures baseline after first Plan materialization and records metric", async () => {
     const projectRoot = await makeWorkflowProject([{ name: "p", status: "ready_for_work" }]);
     const hostedSession = makeHostedSession("baseline-after-plan-restore", projectRoot);
     // The target commit has no Plan: initial materialization must use the approved
@@ -373,7 +388,7 @@ Deno.test("startActiveExecutionWorkflow captures baseline after first Plan mater
     assertStringIncludes(baselineFiles, "docs/plans/p.md");
 });
 
-Deno.test("startActiveExecutionWorkflow rejects an unsafe canonical source before worktree selection or creation", async () => {
+test("startActiveExecutionWorkflow rejects an unsafe canonical source before worktree selection or creation", async () => {
     const projectRoot = await makeWorkflowProject([{ name: "p", status: "ready_for_work" }]);
     const hostedSession = makeHostedSession("canonical-source-before-worktree", projectRoot);
     let reuseLookups = 0;
@@ -418,7 +433,7 @@ Deno.test("startActiveExecutionWorkflow rejects an unsafe canonical source befor
     assertEquals((await git(projectRoot, ["worktree", "list", "--porcelain"])).includes("refs/heads/worktree/"), false);
 });
 
-Deno.test("startActiveExecutionWorkflow preserves a malformed derived Plan and blocks", async () => {
+test("startActiveExecutionWorkflow preserves a malformed derived Plan and blocks", async () => {
     const projectRoot = await makeWorkflowProject([{ name: "p", status: "ready_for_work" }]);
     const hostedSession = makeHostedSession("reused-plan-block", projectRoot);
     const reused = await settleWorktreeAttempt(
@@ -428,8 +443,8 @@ Deno.test("startActiveExecutionWorkflow preserves a malformed derived Plan and b
     // Really malformed, rather than a stand-in reporting that it would have been:
     // preparation has to parse this file and refuse on what it finds. The worktree
     // carries no Plan of its own — restoring one is the step being blocked here.
-    await Deno.mkdir(`${reused.path}/docs/plans`, { recursive: true });
-    await Deno.writeTextFile(`${reused.path}/docs/plans/p.md`, "---\nnot: [valid\n---\n\n# broken\n");
+    await fsMkdir(`${reused.path}/docs/plans`, { recursive: true });
+    await fsWriteFile(`${reused.path}/docs/plans/p.md`, "---\nnot: [valid\n---\n\n# broken\n");
 
     try {
         await assertRejects(
@@ -450,16 +465,16 @@ Deno.test("startActiveExecutionWorkflow preserves a malformed derived Plan and b
             "could not be parsed",
         );
 
-        assertEquals((await Deno.stat(reused.path)).isDirectory, true);
+        assertEquals((await fsStat(reused.path)).isDirectory(), true);
         assertEquals((await findWorktreeRegistryEntryById(projectRoot, reused.id))?.status, "active");
         assertEquals((await loadPlan(projectRoot, "p"))?.attrs.status, "ready_for_work");
-        assertStringIncludes(await Deno.readTextFile(`${reused.path}/docs/plans/p.md`), "not: [valid");
+        assertStringIncludes(await fsReadFile(`${reused.path}/docs/plans/p.md`, "utf8"), "not: [valid");
     } finally {
-        await Deno.remove(getTransitionJournalDir(hostedSession.cwd), { recursive: true }).catch(() => {});
+        await fsRm(getTransitionJournalDir(hostedSession.cwd), { recursive: true }).catch(() => {});
     }
 });
 
-Deno.test("startActiveExecutionWorkflow rolls back a worktree that fails before execution begins", async () => {
+test("startActiveExecutionWorkflow rolls back a worktree that fails before execution begins", async () => {
     const projectRoot = await makeWorkflowProject([{
         name: "p",
         status: "ready_for_work",
@@ -471,9 +486,9 @@ Deno.test("startActiveExecutionWorkflow rolls back a worktree that fails before 
     // real Plan restore fails on the real filesystem — after the worktree exists, which
     // is what gives the rollback below something to preserve. Faking the restore's
     // return value would have skipped both the checkout and the failure.
-    const branchRoot = await Deno.makeTempDir({ prefix: "runwield-docs-as-file-" });
+    const branchRoot = await fsMkdtemp(join(tmpdir(), "runwield-docs-as-file-"));
     await git(projectRoot, ["worktree", "add", "--detach", branchRoot]);
-    await Deno.writeTextFile(`${branchRoot}/docs`, "not a directory\n");
+    await fsWriteFile(`${branchRoot}/docs`, "not a directory\n");
     await git(branchRoot, ["add", "docs"]);
     await git(branchRoot, [
         "-c",
@@ -507,11 +522,11 @@ Deno.test("startActiveExecutionWorkflow rolls back a worktree that fails before 
         const entries = await listWorktreeRegistryEntries(projectRoot);
         assertEquals(entries.length, 0);
     } finally {
-        await Deno.remove(getTransitionJournalDir(hostedSession.cwd), { recursive: true }).catch(() => {});
+        await fsRm(getTransitionJournalDir(hostedSession.cwd), { recursive: true }).catch(() => {});
     }
 });
 
-Deno.test("startActiveExecutionWorkflow bases untargeted plans on the repository default branch", async () => {
+test("startActiveExecutionWorkflow bases untargeted plans on the repository default branch", async () => {
     const projectRoot = await makeWorkflowProject([{ name: "untargeted-plan", status: "ready_for_work" }]);
     await setCustomSetting("plans", { autoMergeIntoTargetBranch: true }, "project", projectRoot);
     const hostedSession = makeHostedSession("untargeted-workflow", projectRoot);
@@ -550,7 +565,7 @@ Deno.test("startActiveExecutionWorkflow bases untargeted plans on the repository
     assertEquals(preparationCommit === targetCommit, false);
 });
 
-Deno.test("startActiveExecutionWorkflow resolves implicit current branch before reusing a recorded worktree", async () => {
+test("startActiveExecutionWorkflow resolves implicit current branch before reusing a recorded worktree", async () => {
     const projectRoot = await makeWorkflowProject([{ name: "untargeted-plan", status: "ready_for_work" }]);
     const hostedSession = makeHostedSession("implicit-target-reuse-workflow", projectRoot);
     const recorded = await settleWorktreeAttempt(
@@ -594,7 +609,7 @@ Deno.test("startActiveExecutionWorkflow resolves implicit current branch before 
     assertEquals(entry?.executionBaselineTree, result.baselineTree);
 });
 
-Deno.test("startActiveExecutionWorkflow rejects reusable worktree target mismatches", async () => {
+test("startActiveExecutionWorkflow rejects reusable worktree target mismatches", async () => {
     const projectRoot = await makeWorkflowProject([{ name: "targeted-plan", status: "ready_for_work" }]);
     const hostedSession = makeHostedSession("mismatched-workflow", projectRoot);
     const recorded = await settleWorktreeAttempt(
@@ -624,7 +639,7 @@ Deno.test("startActiveExecutionWorkflow rejects reusable worktree target mismatc
     assertEquals(await listWorktreeRegistryEntries(projectRoot), entriesBefore);
 });
 
-Deno.test("startActiveExecutionWorkflow matches explicit remote target to recorded local reusable target", async () => {
+test("startActiveExecutionWorkflow matches explicit remote target to recorded local reusable target", async () => {
     const projectRoot = await makeWorkflowProject([{ name: "targeted-plan", status: "ready_for_work" }]);
     const hostedSession = makeHostedSession("remote-reusable-workflow", projectRoot);
     const recorded = await settleWorktreeAttempt(
@@ -666,7 +681,7 @@ Deno.test("startActiveExecutionWorkflow matches explicit remote target to record
     assertEquals(result.worktreeBaseBranch, "feature-base");
 });
 
-Deno.test("startActiveExecutionWorkflow ignores an unregistered cached attempt and uses the saved target", async () => {
+test("startActiveExecutionWorkflow ignores an unregistered cached attempt and uses the saved target", async () => {
     const projectRoot = await makeWorkflowProject([{
         name: "targeted-plan",
         status: "ready_for_work",
@@ -696,7 +711,7 @@ Deno.test("startActiveExecutionWorkflow ignores an unregistered cached attempt a
     assertEquals((await findWorktreeRegistryEntryById(projectRoot, started.worktreeId))?.baseBranch, "feature-base");
 });
 
-Deno.test("startActiveExecutionWorkflow prompts once and uses CWD for non-Git in-place execution", async () => {
+test("startActiveExecutionWorkflow prompts once and uses CWD for non-Git in-place execution", async () => {
     const projectRoot = await makeWorkflowProject([{ name: "non-git-plan", status: "ready_for_work" }]);
     const hostedSession = makeHostedSession("non-git-feature-workflow", projectRoot);
     /** @type {string[]} */
@@ -732,7 +747,7 @@ Deno.test("startActiveExecutionWorkflow prompts once and uses CWD for non-Git in
     assertEquals(started?.attrs.executionMode, "non_git_in_place");
 });
 
-Deno.test("startActiveExecutionWorkflow cancels non-Git execution without consent", async () => {
+test("startActiveExecutionWorkflow cancels non-Git execution without consent", async () => {
     const projectRoot = await makeWorkflowProject([{ name: "non-git-plan", status: "ready_for_work" }]);
     const hostedSession = makeHostedSession("non-git-feature-cancel-workflow", projectRoot);
     await assertRejects(
@@ -757,7 +772,7 @@ Deno.test("startActiveExecutionWorkflow cancels non-Git execution without consen
     assertEquals((await loadPlan(projectRoot, "non-git-plan"))?.attrs.status, "ready_for_work");
 });
 
-Deno.test("startActiveExecutionWorkflow does not activate Frontend Engineer before non-Git consent commits", async () => {
+test("startActiveExecutionWorkflow does not activate Frontend Engineer before non-Git consent commits", async () => {
     const projectRoot = await makeWorkflowProject([{ name: "visual-plan", status: "ready_for_work" }]);
     const hostedSession = makeHostedSession("frontend-non-git-cancel-workflow", projectRoot);
     await assertRejects(
@@ -786,7 +801,7 @@ Deno.test("startActiveExecutionWorkflow does not activate Frontend Engineer befo
     assertEquals((await loadPlan(projectRoot, "visual-plan"))?.attrs.status, "ready_for_work");
 });
 
-Deno.test("readLatestPlanOutcome returns the latest plan_written outcome", () => {
+test("readLatestPlanOutcome returns the latest plan_written outcome", () => {
     const messages = [
         /** @type {any} */ ({
             role: "toolResult",
@@ -817,11 +832,11 @@ Deno.test("readLatestPlanOutcome returns the latest plan_written outcome", () =>
     });
 });
 
-Deno.test("readLatestPlanOutcome returns null when no plan_written tool result is present", () => {
+test("readLatestPlanOutcome returns null when no plan_written tool result is present", () => {
     assertEquals(readLatestPlanOutcome([]), null);
 });
 
-Deno.test("extractAssistantOutput falls back to task_completed message details", () => {
+test("extractAssistantOutput falls back to task_completed message details", () => {
     const messages = [
         /** @type {any} */ ({
             role: "assistant",
@@ -844,7 +859,7 @@ Deno.test("extractAssistantOutput falls back to task_completed message details",
     assertEquals(extractAssistantOutput(messages), "Implemented isolated worktree setup.");
 });
 
-Deno.test("extractAssistantOutput handles legacy assistant text shapes", () => {
+test("extractAssistantOutput handles legacy assistant text shapes", () => {
     assertEquals(
         extractAssistantOutput([
             /** @type {any} */ ({ role: "assistant", content: "Plain legacy summary." }),
@@ -859,7 +874,7 @@ Deno.test("extractAssistantOutput handles legacy assistant text shapes", () => {
     );
 });
 
-Deno.test("finalizePlanImplementation checkpoints worktree changes before lifecycle completion", async () => {
+test("finalizePlanImplementation checkpoints worktree changes before lifecycle completion", async () => {
     const projectRoot = await makeWorkflowProject([{ name: "feature-plan", status: "in_progress" }]);
     // A real worktree on a real branch. The checkpoint is RunWield's own policy — it
     // commits the Agent's work and refuses to return while the tree is still dirty —
@@ -871,7 +886,7 @@ Deno.test("finalizePlanImplementation checkpoints worktree changes before lifecy
     );
     await savePlan(worktree.path, "feature-plan", "# feature-plan", { status: "in_progress" });
     const branchHeadBefore = await git(projectRoot, ["rev-parse", `${worktree.branch}^{commit}`]);
-    await Deno.writeTextFile(`${worktree.path}/implemented.txt`, "the Agent's work\n");
+    await fsWriteFile(`${worktree.path}/implemented.txt`, "the Agent's work\n");
 
     const executionContext = /** @type {const} */ ({
         planName: "feature-plan",
@@ -910,14 +925,14 @@ Deno.test("finalizePlanImplementation checkpoints worktree changes before lifecy
     assertEquals((await findWorktreeRegistryEntryById(projectRoot, worktree.id))?.status, "completed");
 });
 
-Deno.test("finalizePlanImplementation restores missing execution_started before lifecycle completion", async () => {
+test("finalizePlanImplementation restores missing execution_started before lifecycle completion", async () => {
     const projectRoot = await makeWorkflowProject([{ name: "feature-plan", status: "ready_for_work" }]);
     const worktree = await settleWorktreeAttempt(
         projectRoot,
         await createWorktreeGitArtifacts({ projectRoot, planName: "feature-plan", planId: PLAN_UNDER_TEST }),
     );
     await savePlan(worktree.path, "feature-plan", "# feature-plan", { status: "ready_for_work" });
-    await Deno.writeTextFile(`${worktree.path}/recovered.txt`, "work done before the marker was lost\n");
+    await fsWriteFile(`${worktree.path}/recovered.txt`, "work done before the marker was lost\n");
 
     const executionContext = /** @type {const} */ ({
         planName: "feature-plan",
@@ -949,7 +964,7 @@ Deno.test("finalizePlanImplementation restores missing execution_started before 
     assertEquals((await findWorktreeRegistryEntryById(projectRoot, worktree.id))?.status, "completed");
 });
 
-Deno.test("finalizePlanImplementation restores a Plan deleted and committed by the Engineer", async () => {
+test("finalizePlanImplementation restores a Plan deleted and committed by the Engineer", async () => {
     const projectRoot = await makeWorkflowProject([{ name: "deleted-plan", status: "ready_for_work" }]);
     const hostedSession = makeHostedSession("deleted-execution-plan", projectRoot);
     const executionContext = await startActiveExecutionWorkflow({
@@ -968,8 +983,8 @@ Deno.test("finalizePlanImplementation restores a Plan deleted and committed by t
     const preparationCommit = await git(worktreePath, ["rev-parse", "HEAD"]);
     assertStringIncludes(await git(worktreePath, ["ls-files"]), "docs/plans/deleted-plan.md");
 
-    await Deno.writeTextFile(`${worktreePath}/implemented.txt`, "implementation survives\n");
-    await Deno.remove(planPath);
+    await fsWriteFile(`${worktreePath}/implemented.txt`, "implementation survives\n");
+    await fsRm(planPath);
     await git(worktreePath, ["add", "-A"]);
     await git(worktreePath, ["commit", "-m", "Engineer accidentally deletes Plan"]);
     assertEquals(await loadPlan(worktreePath, "deleted-plan"), null);
@@ -991,7 +1006,7 @@ Deno.test("finalizePlanImplementation restores a Plan deleted and committed by t
     assertEquals(await git(worktreePath, ["merge-base", "--is-ancestor", preparationCommit, "HEAD"]), "");
 });
 
-Deno.test("finalizePlanImplementation fails closed without durable execution context", async () => {
+test("finalizePlanImplementation fails closed without durable execution context", async () => {
     const projectRoot = await makeWorkflowProject([{ name: "feature-plan", status: "ready_for_work" }]);
     await assertRejects(
         () =>
@@ -1007,7 +1022,7 @@ Deno.test("finalizePlanImplementation fails closed without durable execution con
     assertEquals((await loadPlan(projectRoot, "feature-plan"))?.attrs.status, "ready_for_work");
 });
 
-Deno.test("buildSlicerRequest includes plan name and base instructions", () => {
+test("buildSlicerRequest includes plan name and base instructions", () => {
     const text = buildSlicerRequest("my-plan", undefined);
     assertStringIncludes(text, "Slice Plan: my-plan");
     assertStringIncludes(text, "docs/plans/my-plan.md");
@@ -1016,7 +1031,7 @@ Deno.test("buildSlicerRequest includes plan name and base instructions", () => {
     assertEquals(text.includes("Triage Report"), false);
 });
 
-Deno.test("buildSlicerRequest includes triage report fields when present", () => {
+test("buildSlicerRequest includes triage report fields when present", () => {
     const text = buildSlicerRequest("my-plan", {
         classification: "PROJECT",
         workKind: "DOCUMENTATION",
@@ -1032,7 +1047,7 @@ Deno.test("buildSlicerRequest includes triage report fields when present", () =>
     assertStringIncludes(text, "src/foo.js, src/bar.js");
 });
 
-Deno.test("buildSlicerRequest omits empty affectedPaths", () => {
+test("buildSlicerRequest omits empty affectedPaths", () => {
     const text = buildSlicerRequest("p", {
         classification: "PROJECT",
         complexity: "LOW",
@@ -1042,7 +1057,7 @@ Deno.test("buildSlicerRequest omits empty affectedPaths", () => {
     assertEquals(text.includes("Affected paths"), false);
 });
 
-Deno.test("startActiveExecutionWorkflow records attempt timestamp only after execution starts", async () => {
+test("startActiveExecutionWorkflow records attempt timestamp only after execution starts", async () => {
     const projectRoot = await makeWorkflowProject([{ name: "clock-plan", status: "ready_for_work" }]);
     const hostedSession = makeHostedSession("attempt-clock-workflow", projectRoot);
     const result = await startActiveExecutionWorkflow({
@@ -1064,7 +1079,7 @@ Deno.test("startActiveExecutionWorkflow records attempt timestamp only after exe
     assertEquals(hostedSession.getActiveExecutionWorkflow()?.executionAttemptStartedAtMs, 4242);
 });
 
-Deno.test("execution preparation ignores Plan body edits the user owns", async () => {
+test("execution preparation ignores Plan body edits the user owns", async () => {
     const projectRoot = await makeWorkflowProject([
         { name: "body-plan", status: "ready_for_work", classification: "FEATURE" },
     ]);
@@ -1102,7 +1117,7 @@ Deno.test("execution preparation ignores Plan body edits the user owns", async (
     assertStringIncludes(String(executionPlan?.markdown), "Edited in another editor.");
 });
 
-Deno.test("execution preparation still refuses when lifecycle front matter drifts", async () => {
+test("execution preparation still refuses when lifecycle front matter drifts", async () => {
     const projectRoot = await workflowRepo.checkout({ prefix: "runwield-exec-fm-" });
     try {
         await savePlan(projectRoot, "fm-plan", "# FM Plan\n", {
@@ -1150,11 +1165,11 @@ Deno.test("execution preparation still refuses when lifecycle front matter drift
             "front matter change",
         );
     } finally {
-        await Deno.remove(projectRoot, { recursive: true }).catch(() => {});
+        await fsRm(projectRoot, { recursive: true }).catch(() => {});
     }
 });
 
-Deno.test("runPlanningAgent records a known Plan name before the planning turn starts", async () => {
+test("runPlanningAgent records a known Plan name before the planning turn starts", async () => {
     await withRuntimeCommandFixture("workflow-planning-plan-name-", async ({ setModelResponseFactory }) => {
         const projectRoot = await makeWorkflowProject([{ name: "resumed-plan", status: "draft" }]);
         const hostedSession = makeAgentHostedSession("workflow-planning-plan-name", projectRoot);
@@ -1185,7 +1200,7 @@ Deno.test("runPlanningAgent records a known Plan name before the planning turn s
     });
 });
 
-Deno.test("runPlanningAgent leaves workflow Plan context alone when no Plan name is known", async () => {
+test("runPlanningAgent leaves workflow Plan context alone when no Plan name is known", async () => {
     await withRuntimeCommandFixture("workflow-planning-no-plan-name-", async ({ setModelResponseFactory }) => {
         const projectRoot = await makeWorkflowProject([{ name: "unrelated-plan", status: "draft" }]);
         const hostedSession = makeAgentHostedSession("workflow-planning-no-plan-name", projectRoot);

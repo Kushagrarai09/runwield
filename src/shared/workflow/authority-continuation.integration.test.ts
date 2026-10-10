@@ -1,3 +1,14 @@
+import { test } from "node:test";
+import {
+    chmod as fsChmod,
+    mkdtemp as fsMkdtemp,
+    readdir as fsReaddir,
+    readFile as fsReadFile,
+    realpath as fsRealpath,
+    rm as fsRm,
+    writeFile as fsWriteFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { join } from "@std/path";
 import {
@@ -24,15 +35,15 @@ const fixture = defineCommittedGitFixture({ ".gitignore": ".wld/\n", "app.ts": "
 
 async function withProject(run: (root: string, directory: string) => Promise<void>) {
     const root = await fixture.checkout();
-    const directory = await Deno.makeTempDir({ prefix: "rw-authority-continuation-" });
+    const directory = await fsMkdtemp(join(tmpdir(), "rw-authority-continuation-"));
     try {
         await run(root, directory);
     } finally {
-        for await (const entry of Deno.readDir(directory)) {
+        for await (const entry of await fsReaddir(directory, { withFileTypes: true })) {
             await git(root, ["worktree", "remove", "--force", join(directory, entry.name)]).catch(() => {});
         }
-        await Deno.remove(directory, { recursive: true });
-        await Deno.remove(root, { recursive: true });
+        await fsRm(directory, { recursive: true });
+        await fsRm(root, { recursive: true });
     }
 }
 
@@ -75,14 +86,14 @@ async function setStatus(root: string, status: "implemented" | "verified" | "in_
     await updatePlanFrontMatter(root, "demo", { status }, {}, { expectedRevision: plan.revision });
 }
 
-Deno.test("missing execution document cannot redirect a lifecycle write into primary", async () => {
+test("missing execution document cannot redirect a lifecycle write into primary", async () => {
     await withProject(async (root, directory) => {
         await createPlan(root);
         const tree = await addTree(root, directory, "current");
         const primary = await loadPlan(root, "demo");
         assert(primary);
         const body = await loadPlanBodyById(root, "demo");
-        await Deno.remove(join(tree, "docs/plans/demo.md"));
+        await fsRm(join(tree, "docs/plans/demo.md"));
         await assertRejects(() => loadPlanBodyById(root, "demo"));
         await assertRejects(() =>
             savePlanBodyById(root, "demo", "# Must not overwrite primary\n", body.bodyHash, {
@@ -98,18 +109,18 @@ Deno.test("missing execution document cannot redirect a lifecycle write into pri
             })
         );
         await assertRejects(() => resolvePlanWithPrimaryRecovery(root, "demo"));
-        assertEquals(await Deno.readTextFile(primary.path), primary.markdown);
+        assertEquals(await fsReadFile(primary.path, "utf8"), primary.markdown);
     });
 });
 
-Deno.test("missing execution worktree is rebuilt before lifecycle writes continue", async () => {
+test("missing execution worktree is rebuilt before lifecycle writes continue", async () => {
     await withProject(async (root, directory) => {
         await createPlan(root);
         const tree = await addTree(root, directory, "current");
         const primary = await loadPlan(root, "demo");
         assert(primary);
         const body = await loadPlanBodyById(root, "demo");
-        await Deno.remove(tree, { recursive: true });
+        await fsRm(tree, { recursive: true });
 
         assertEquals((await resolvePlanWithPrimaryRecovery(root, "demo")).plan.path, join(tree, "docs/plans/demo.md"));
         assertEquals((await loadPlanBodyById(root, "demo")).body, body.body);
@@ -125,11 +136,11 @@ Deno.test("missing execution worktree is rebuilt before lifecycle writes continu
 
         assertEquals((await resolvePlanWithPrimaryRecovery(root, "demo")).plan.attrs.status, "on_hold");
         assertEquals((await loadPlan(tree, "demo"))?.body, "# Recovered execution copy\n");
-        assertEquals(await Deno.readTextFile(primary.path), primary.markdown);
+        assertEquals(await fsReadFile(primary.path, "utf8"), primary.markdown);
     });
 });
 
-Deno.test("explicit loading cannot revive the stale primary copy of an archived execution Plan", async () => {
+test("explicit loading cannot revive the stale primary copy of an archived execution Plan", async () => {
     await withProject(async (root, directory) => {
         await createPlan(root);
         const tree = await addTree(root, directory, "current");
@@ -141,14 +152,14 @@ Deno.test("explicit loading cannot revive the stale primary copy of an archived 
 });
 
 for (const primaryState of ["missing", "malformed"] as const) {
-    Deno.test(`stored Plan path arguments select execution when primary is ${primaryState}`, async () => {
+    test(`stored Plan path arguments select execution when primary is ${primaryState}`, async () => {
         await withProject(async (root, directory) => {
             await createPlan(root);
             const tree = await addTree(root, directory, "current");
             await setStatus(tree, "in_progress");
             const primaryPath = join(root, "docs/plans/demo.md");
-            if (primaryState === "missing") await Deno.remove(primaryPath);
-            else await Deno.writeTextFile(primaryPath, "---\nstatus: [broken\n---\n# User edits\n");
+            if (primaryState === "missing") await fsRm(primaryPath);
+            else await fsWriteFile(primaryPath, "---\nstatus: [broken\n---\n# User edits\n");
             for (const cwd of [root, tree]) {
                 for (const argument of ["demo", "docs/plans/demo.md", "./docs/plans/demo.md", primaryPath]) {
                     const loaded = await resolvePlanWithPrimaryRecovery(cwd, argument);
@@ -157,14 +168,14 @@ for (const primaryState of ["missing", "malformed"] as const) {
                 }
             }
             if (primaryState === "missing") {
-                await assertRejects(() => Deno.readTextFile(primaryPath), Deno.errors.NotFound);
-            } else assertEquals(await Deno.readTextFile(primaryPath), "---\nstatus: [broken\n---\n# User edits\n");
+                await assertRejects(() => fsReadFile(primaryPath, "utf8"), Error, "ENOENT");
+            } else assertEquals(await fsReadFile(primaryPath, "utf8"), "---\nstatus: [broken\n---\n# User edits\n");
         });
     });
 }
 
 for (const retired of [false, true]) {
-    Deno.test(`restoring a ${retired ? "retired" : "live"} execution Plan with a new name keeps its identity and discovery`, async () => {
+    test(`restoring a ${retired ? "retired" : "live"} execution Plan with a new name keeps its identity and discovery`, async () => {
         await withProject(async (root, directory) => {
             await createPlan(root);
             const tree = await addTree(root, directory, "current");
@@ -191,20 +202,20 @@ for (const retired of [false, true]) {
             assertEquals((await listPlans(root)).length, 0);
             await restoreArchivedPlan(root, "demo");
             assertEquals((await listPlans(root)).map((plan) => plan.name), ["renamed"]);
-            assertEquals(await Deno.readTextFile(primary.path), primary.markdown);
+            assertEquals(await fsReadFile(primary.path, "utf8"), primary.markdown);
         });
     });
 }
 
 for (const failure of ["name_collision", "archive_unlink", "publication_started"] as const) {
-    Deno.test(`restore rename preserves the archived Plan when ${failure}`, async () => {
+    test(`restore rename preserves the archived Plan when ${failure}`, async () => {
         await withProject(async (root, directory) => {
             await createPlan(root);
             const tree = await addTree(root, directory, "current");
             await setStatus(tree, "verified");
             await archivePlan(root, "demo");
             const archivedPath = join(tree, "docs/plans/archived/demo.md");
-            const before = await Deno.readTextFile(archivedPath);
+            const before = await fsReadFile(archivedPath, "utf8");
             if (failure === "name_collision") {
                 await savePlan(root, "renamed", "# Different Plan\n", { planId: "other", status: "draft" });
             } else if (failure === "publication_started") {
@@ -223,22 +234,22 @@ for (const failure of ["name_collision", "archive_unlink", "publication_started"
                     }),
                 });
             } else {
-                await Deno.chmod(join(tree, "docs/plans/archived"), 0o555);
+                await fsChmod(join(tree, "docs/plans/archived"), 0o555);
             }
             try {
                 await assertRejects(() => restoreArchivedPlan(root, "demo", { to: "renamed" }));
-                assertEquals(await Deno.readTextFile(archivedPath), before);
+                assertEquals(await fsReadFile(archivedPath, "utf8"), before);
                 assertEquals(await loadPlan(tree, "renamed"), null);
                 assertEquals((await findById(root, "current"))?.planName, "demo");
             } finally {
-                await Deno.chmod(join(tree, "docs/plans/archived"), 0o755);
+                await fsChmod(join(tree, "docs/plans/archived"), 0o755);
             }
         });
     });
 }
 
 for (const event of ["manual_user_verified", "validation_passed"] as const) {
-    Deno.test(`${event} does not finish an Epic while a newer unstarted sibling remains`, async () => {
+    test(`${event} does not finish an Epic while a newer unstarted sibling remains`, async () => {
         await withProject(async (root, directory) => {
             await savePlan(root, "epic", "# Epic\n", {
                 planId: "epic",
@@ -281,7 +292,7 @@ for (const event of ["manual_user_verified", "validation_passed"] as const) {
     });
 }
 
-Deno.test("Epic completion reads published siblings without a permanent controller receipt", async () => {
+test("Epic completion reads published siblings without a permanent controller receipt", async () => {
     await withProject(async (root, directory) => {
         await savePlan(root, "epic/a", "# A\n", {
             planId: "epic/a",
@@ -323,7 +334,7 @@ Deno.test("Epic completion reads published siblings without a permanent controll
 });
 
 for (const change of ["reparented", "archived", "uncommitted_completion"] as const) {
-    Deno.test(`Epic completion does not revive a ${change} sibling from an old checkout`, async () => {
+    test(`Epic completion does not revive a ${change} sibling from an old checkout`, async () => {
         await withProject(async (root, directory) => {
             await savePlan(root, "epic/a", "# A\n", {
                 planId: "epic/a",
@@ -364,13 +375,13 @@ for (const change of ["reparented", "archived", "uncommitted_completion"] as con
             const b = siblings.find((child) => child.name === "epic/b");
             if (change === "uncommitted_completion") {
                 assertEquals(b?.attrs.status, "ready_for_work");
-                assertEquals(await Deno.realPath(b!.path), await Deno.realPath(join(root, "docs/plans/epic/b.md")));
+                assertEquals(await fsRealpath(b!.path), await fsRealpath(join(root, "docs/plans/epic/b.md")));
             } else assertEquals(b, undefined);
         });
     });
 }
 
-Deno.test("execution startup uses the live successor despite a cached retired Session", async () => {
+test("execution startup uses the live successor despite a cached retired Session", async () => {
     await withProject(async (root, directory) => {
         await createPlan(root);
         const old = await addTree(root, directory, "old", "demo", true);
@@ -401,7 +412,7 @@ Deno.test("execution startup uses the live successor despite a cached retired Se
             });
             const started = session.getActiveExecutionWorkflow();
             assert(started?.executionCwd);
-            assertEquals(await Deno.realPath(started.executionCwd), await Deno.realPath(current));
+            assertEquals(await fsRealpath(started.executionCwd), await fsRealpath(current));
             assertEquals((await findById(root, "old"))?.status, "abandoned");
             assertEquals((await findById(root, "current"))?.status, "active");
         } finally {

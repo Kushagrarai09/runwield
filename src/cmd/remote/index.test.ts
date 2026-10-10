@@ -1,3 +1,20 @@
+import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
+import { captureForegroundProcess } from "../../shared/captured-process.ts";
+import { test } from "node:test";
+import {
+    chmod as fsChmod,
+    copyFile as fsCopyFile,
+    mkdir as fsMkdir,
+    mkdtemp as fsMkdtemp,
+    readFile as fsReadFile,
+    realpath as fsRealpath,
+    rm as fsRm,
+    stat as fsStat,
+    symlink as fsSymlink,
+    writeFile as fsWriteFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import process from "node:process";
 import { assertEquals, assertRejects, assertStringIncludes, assertThrows } from "@std/assert";
 import { fromFileUrl, join, toFileUrl } from "@std/path";
 import { parseRemoteDestination } from "./index.ts";
@@ -20,20 +37,20 @@ interface RemoteFixture {
 
 /** Run the real CLI with a disposable home and an SSH executable that runs the remote command in a shell. */
 async function withRemoteFixture(test: (fixture: RemoteFixture) => Promise<void>): Promise<void> {
-    const root = await Deno.realPath(await Deno.makeTempDir());
+    const root = await fsRealpath(await fsMkdtemp(join(tmpdir(), "runwield-fixture-")));
     try {
         const local = join(root, "local");
         const remote = join(root, "remote-home");
         const bin = join(root, "bin");
         const sshLog = join(root, "ssh-args");
-        await Promise.all([Deno.mkdir(local), Deno.mkdir(remote), Deno.mkdir(bin)]);
+        await Promise.all([fsMkdir(local), fsMkdir(remote), fsMkdir(bin)]);
         // Only this SSH subprocess sees a Linux host. The resolver itself still
         // runs unchanged through the actual shell and Python interpreter.
-        await Deno.writeTextFile(
+        await fsWriteFile(
             join(root, "sitecustomize.py"),
             'import platform\nplatform.system = lambda: "Linux"\nplatform.machine = lambda: "x86_64"\n',
         );
-        await Deno.writeTextFile(
+        await fsWriteFile(
             join(bin, "ssh"),
             `#!/bin/sh
 printf '%s\\n' "$@" > "$SSH_LOG"
@@ -42,21 +59,21 @@ HOME="$REMOTE_HOME" PYTHONPATH="$REMOTE_PYTHONPATH" export HOME PYTHONPATH
 exec /bin/sh -c "$4"
 `,
         );
-        await Deno.chmod(join(bin, "ssh"), 0o700);
+        await fsChmod(join(bin, "ssh"), 0o700);
         // The source checkout has no compiled launcher identity. Supply only that
         // build boundary to the CLI subprocess, without writing into the checkout.
         const identity = join(root, "build-identity.js");
-        await Deno.writeTextFile(
+        await fsWriteFile(
             identity,
             `export const BUILD_ID = "${"a".repeat(64)}";\nexport const REMOTE_PROTOCOL_VERSION = 1;\n`,
         );
         // A development launcher requires a local Linux artifact, regardless of the release build version.
         const version = join(root, "version.js");
-        await Deno.writeTextFile(version, 'export const VERSION = "development";\n');
+        await fsWriteFile(version, 'export const VERSION = "development";\n');
         const config = join(root, "deno.json");
         const projectConfig = new URL("../../../deno.json", import.meta.url);
-        const { imports } = JSON.parse(await Deno.readTextFile(projectConfig));
-        await Deno.writeTextFile(
+        const { imports } = JSON.parse(await fsReadFile(projectConfig, "utf8"));
+        await fsWriteFile(
             config,
             JSON.stringify({
                 extends: fromFileUrl(projectConfig),
@@ -76,28 +93,53 @@ exec /bin/sh -c "$4"
                 },
             }),
         );
+        const preload = join(root, "build-boundary.ts");
+        if (!process.versions.deno) {
+            const replacements = {
+                [fromFileUrl(new URL("../../shared/build-identity.js", import.meta.url))]: identity,
+                [fromFileUrl(new URL("../../shared/version.js", import.meta.url))]: version,
+            };
+            await fsWriteFile(
+                preload,
+                `import { plugin } from "bun";
+import { readFileSync } from "node:fs";
+const replacements = ${JSON.stringify(replacements)};
+plugin({ name: "fixture-build-boundary", setup(build) {
+    build.onResolve({ filter: /(?:build-identity|version)\\.js$/ }, ({ path, importer }) => {
+        const target = new URL(path, "file://" + importer).pathname;
+        const replacement = replacements[target];
+        if (replacement) return { path: replacement };
+    });
+}});
+`,
+            );
+        }
         await test({
             local,
             remote,
             sshLog,
             run: async (args, proof) => {
-                const output = await new Deno.Command(Deno.execPath(), {
-                    args: ["run", "-A", "--quiet", "--config", config, cli, "remote", ...args],
+                const output = await captureForegroundProcess(process.execPath, {
+                    args: process.versions.deno
+                        ? runtimeSourceArgs(["run", "-A", "--quiet", "--config", config, cli, "remote", ...args])
+                        : [
+                            "run",
+                            "--preload",
+                            preload,
+                            ...runtimeSourceArgs(["run", "-A", cli, "remote", ...args]).slice(1),
+                        ],
                     cwd: local,
                     env: {
                         HOME: local,
                         WLD_TEST_SANDBOX_HOME: local,
                         MNEMOTECA_DB_PATH: join(local, "mnemoteca.db"),
-                        PATH: `${bin}:${Deno.env.get("PATH") ?? ""}`,
+                        PATH: `${bin}:${process.env["PATH"] ?? ""}`,
                         SSH_LOG: sshLog,
                         REMOTE_HOME: remote,
                         REMOTE_PYTHONPATH: root,
                         ...(proof === undefined ? {} : { WLD_REMOTE_MODEL_PROOF: proof }),
                     },
-                    stdin: "null",
-                    stdout: "piped",
-                    stderr: "piped",
-                }).output();
+                });
                 return {
                     code: output.code,
                     stdout: decoder.decode(output.stdout),
@@ -106,24 +148,24 @@ exec /bin/sh -c "$4"
             },
         });
     } finally {
-        await Deno.remove(root, { recursive: true });
+        await fsRm(root, { recursive: true });
     }
 }
 
-Deno.test("remote destination separates a directory from an SSH host without changing the host", () => {
+test("remote destination separates a directory from an SSH host without changing the host", () => {
     assertEquals(parseRemoteDestination("alias"), { host: "alias", path: null });
     assertEquals(parseRemoteDestination("user@alias:~/repo:branch"), { host: "user@alias", path: "~/repo:branch" });
     assertEquals(parseRemoteDestination("[2001:db8::1]:/srv/repo"), { host: "[2001:db8::1]", path: "/srv/repo" });
     assertEquals(parseRemoteDestination("alias:"), { host: "alias", path: null });
 });
 
-Deno.test("remote destination rejects option-like and malformed hosts", () => {
+test("remote destination rejects option-like and malformed hosts", () => {
     for (const destination of ["", "-oProxyCommand=bad", "-oBad:/repo", ":/repo", "alias name", "[unfinished"]) {
         assertThrows(() => parseRemoteDestination(destination), Error, "Invalid SSH destination");
     }
 });
 
-Deno.test("remote CLI help and invalid arity do not contact SSH", async () => {
+test("remote CLI help and invalid arity do not contact SSH", async () => {
     await withRemoteFixture(async ({ run, sshLog }) => {
         const help = await run(["--help"]);
         assertEquals(help.code, 0);
@@ -137,11 +179,11 @@ Deno.test("remote CLI help and invalid arity do not contact SSH", async () => {
     });
 });
 
-Deno.test("source remote help works without a generated identity and connection explains the build step", async () => {
-    const root = await Deno.makeTempDir();
+test("source remote help works without a generated identity and connection explains the build step", async () => {
+    const root = await fsMkdtemp(join(tmpdir(), "runwield-fixture-"));
     try {
         for (const path of ["src/cmd/remote", "src/shared/remote", "scripts"]) {
-            await Deno.mkdir(join(root, path), { recursive: true });
+            await fsMkdir(join(root, path), { recursive: true });
         }
         for (
             const path of [
@@ -161,7 +203,14 @@ Deno.test("source remote help works without a generated identity and connection 
                 "scripts/build-metadata.js",
                 "src/shared/version.js",
             ]
-        ) await Deno.copyFile(path, join(root, path));
+        ) await fsCopyFile(path, join(root, path));
+        if (!process.versions.deno) {
+            await fsSymlink(
+                fromFileUrl(new URL("../../../node_modules", import.meta.url)),
+                join(root, "node_modules"),
+                "dir",
+            );
+        }
         const module = await import(toFileUrl(join(root, "src/cmd/remote/index.ts")).href);
         const originalLog = console.log;
         let help = "";
@@ -176,11 +225,11 @@ Deno.test("source remote help works without a generated identity and connection 
         assertStringIncludes(help, "Usage: wld remote");
         await assertRejects(() => module.runRemoteCommand(["example"]), Error, "scripts/compile.js --output bin/wld");
     } finally {
-        await Deno.remove(root, { recursive: true });
+        await fsRm(root, { recursive: true });
     }
 });
 
-Deno.test("remote CLI refuses malformed LIVE proof before contacting SSH", async () => {
+test("remote CLI refuses malformed LIVE proof before contacting SSH", async () => {
     await withRemoteFixture(async ({ run, sshLog }) => {
         for (
             const proof of [
@@ -199,7 +248,7 @@ Deno.test("remote CLI refuses malformed LIVE proof before contacting SSH", async
     });
 });
 
-Deno.test("remote CLI rejects an option-like host before invoking SSH", async () => {
+test("remote CLI rejects an option-like host before invoking SSH", async () => {
     await withRemoteFixture(async ({ run, sshLog }) => {
         const result = await run(["-oProxyCommand=bad"]);
         assertEquals(result.code, 1);
@@ -208,33 +257,33 @@ Deno.test("remote CLI rejects an option-like host before invoking SSH", async ()
     });
 });
 
-Deno.test("remote CLI resolves a host home without initializing a local project and requires a built artifact", async () => {
+test("remote CLI resolves a host home without initializing a local project and requires a built artifact", async () => {
     await withRemoteFixture(async ({ run, local, remote, sshLog }) => {
         const result = await run(["remote-alias"]);
         assertEquals(result.code, 1);
         assertStringIncludes(result.stderr, "Missing x86_64-unknown-linux-gnu artifact");
         assertStringIncludes(result.stderr, "scripts/compile.js --target x86_64-unknown-linux-gnu");
-        assertEquals((await Deno.readTextFile(sshLog)).split("\n").slice(0, 3), ["-T", "--", "remote-alias"]);
+        assertEquals((await fsReadFile(sshLog, "utf8")).split("\n").slice(0, 3), ["-T", "--", "remote-alias"]);
         assertEquals(await exists(join(local, ".wld")), false);
         assertEquals(await exists(join(local, ".git")), false);
         assertEquals(await exists(join(remote, ".cache")), false);
     });
 });
 
-Deno.test("remote CLI keeps shell metacharacters in the target path literal", async () => {
+test("remote CLI keeps shell metacharacters in the target path literal", async () => {
     await withRemoteFixture(async ({ run, remote, sshLog }) => {
         const name = "space ' $(touch BAD); folder";
-        await Deno.mkdir(join(remote, name));
+        await fsMkdir(join(remote, name));
         const result = await run([`remote-alias:${name}`]);
         // Reaching artifact verification proves the existing directory was found.
         assertStringIncludes(result.stderr, "Missing x86_64-unknown-linux-gnu artifact");
         assertEquals(await exists(join(remote, "BAD")), false);
-        const sshArgs = await Deno.readTextFile(sshLog);
+        const sshArgs = await fsReadFile(sshLog, "utf8");
         assertEquals(sshArgs.includes(name), false);
     });
 });
 
-Deno.test("remote CLI reports an absent remote directory before artifact setup", async () => {
+test("remote CLI reports an absent remote directory before artifact setup", async () => {
     await withRemoteFixture(async ({ run, remote }) => {
         const result = await run(["remote-alias:missing"]);
         assertEquals(result.code, 1);
@@ -244,5 +293,5 @@ Deno.test("remote CLI reports an absent remote directory before artifact setup",
 });
 
 async function exists(path: string): Promise<boolean> {
-    return await Deno.stat(path).then(() => true, () => false);
+    return await fsStat(path).then(() => true, () => false);
 }

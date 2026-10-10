@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assertEquals } from "@std/assert";
 import {
     projectChildCiFailureStopScenario,
@@ -15,16 +16,13 @@ const scenarioExportNames = new Map(
 );
 
 for (const scenario of projectWorkflowScenarios) {
-    Deno.test({
-        name: `golden PROJECT workflow: ${scenario.name}`,
-        fn: async () => {
-            const { runGoldenScenarioChildProcess } = await import("../testing/child-protocol.js");
-            const result = await runGoldenScenarioChildProcess({
-                scenarioModule: "src/ui/tui/golden-scenarios/project-workflow.js",
-                exportName: scenarioExportNames.get(scenario) || "",
-                timeoutMs: /** @type {{ timeoutMs?: number }} */ (scenario).timeoutMs || 30000,
-            });
-            assertEquals(result.result.actor.remaining, []);
-        },
+    test(`golden PROJECT workflow: ${scenario.name}`, async () => {
+        const { runGoldenScenarioChildProcess } = await import("../testing/child-protocol.js");
+        const result = await runGoldenScenarioChildProcess({
+            scenarioModule: "src/ui/tui/golden-scenarios/project-workflow.js",
+            exportName: scenarioExportNames.get(scenario) || "",
+            timeoutMs: /** @type {{ timeoutMs?: number }} */ (scenario).timeoutMs || 30000,
+        });
+        assertEquals(result.result.actor.remaining, []);
     });
 }

@@ -1,3 +1,12 @@
+import { makeTempFile } from "../../testing/temp-file.ts";
+import { test } from "node:test";
+import {
+    copyFile as fsCopyFile,
+    mkdir as fsMkdir,
+    readFile as fsReadFile,
+    realpath as fsRealpath,
+    rm as fsRm,
+} from "node:fs/promises";
 import { assertEquals } from "@std/assert";
 import { openOwnerCoordinationStore } from "../../shared/owner-coordination/index.js";
 import { withWorkflowMetricsFixture } from "../../testing/workflow-metrics-fixture.ts";
@@ -8,9 +17,9 @@ import { makeManagedSessionFixture } from "../../testing/managed-session-fixture
 import { encodeCwdForSessionDir } from "../../shared/session/root-session.js";
 import { join } from "@std/path";
 
-Deno.test("Owner command observations require authentication, catalog names, and a registered Project", async () => {
+test("Owner command observations require authentication, catalog names, and a registered Project", async () => {
     await withWorkflowMetricsFixture(async ({ projectRoot }) => {
-        const dbPath = await Deno.makeTempFile({ suffix: ".sqlite3" });
+        const dbPath = await makeTempFile({ suffix: ".sqlite3" });
         const store = openOwnerCoordinationStore({ dbPath });
         const app = createOwnerWorkspaceApp({ mode: "owner", publicOrigin: "http://127.0.0.1:8787", store });
         try {
@@ -104,7 +113,7 @@ Deno.test("Owner command observations require authentication, catalog names, and
                 200,
             );
             await drainWorkflowMetrics();
-            const contents = await Deno.readTextFile(getWorkflowMetricsFilePath(canonicalRoot));
+            const contents = await fsReadFile(getWorkflowMetricsFilePath(canonicalRoot), "utf8");
             const records = contents.trim().split("\n").map((line) => JSON.parse(line));
             assertEquals(records.length, 7);
             assertEquals(records[0].command, "settings");
@@ -126,17 +135,17 @@ Deno.test("Owner command observations require authentication, catalog names, and
                 200,
             );
             await drainWorkflowMetrics();
-            const aliased = (await Deno.readTextFile(getWorkflowMetricsFilePath(canonicalRoot))).trim().split("\n")
+            const aliased = (await fsReadFile(getWorkflowMetricsFilePath(canonicalRoot), "utf8")).trim().split("\n")
                 .map((line) => JSON.parse(line)).at(-1);
             assertEquals([aliased.command, aliased.alias], ["model", "models"]);
         } finally {
             store.close();
-            await Deno.remove(dbPath).catch(() => {});
+            await fsRm(dbPath).catch(() => {});
         }
     });
 });
 
-Deno.test("Owner rejects a real Session linked to another registered Project", async () => {
+test("Owner rejects a real Session linked to another registered Project", async () => {
     const first = await makeManagedSessionFixture();
     const second = await makeManagedSessionFixture();
     const store = first.openStore();
@@ -145,11 +154,11 @@ Deno.test("Owner rejects a real Session linked to another registered Project", a
         first.home,
         ".wld",
         "sessions",
-        encodeCwdForSessionDir(await Deno.realPath(second.projectRoot)),
+        encodeCwdForSessionDir(await fsRealpath(second.projectRoot)),
     );
-    await Deno.mkdir(otherDir, { recursive: true });
+    await fsMkdir(otherDir, { recursive: true });
     const transcriptPath = join(otherDir, second.transcriptPath.split("/").at(-1) ?? "");
-    await Deno.copyFile(second.transcriptPath, transcriptPath);
+    await fsCopyFile(second.transcriptPath, transcriptPath);
     const otherSession = await store.ensureSessionCatalogRecord({
         projectId: otherProject.projectId,
         piSessionId: "pi-managed-fixture",

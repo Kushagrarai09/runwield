@@ -1,3 +1,5 @@
+import { test } from "node:test";
+import { readdir as fsReaddir, readFile as fsReadFile } from "node:fs/promises";
 import { assert, assertEquals } from "@std/assert";
 import {
     buildPlanRecoveryUserMessage,
@@ -49,8 +51,8 @@ function fleschKincaidGrade(message: string): number {
 
 async function validationDisplaySources(): Promise<string[]> {
     const paths: string[] = [];
-    for await (const entry of Deno.readDir(new URL(".", import.meta.url))) {
-        if (entry.isFile && /^validation-.*\.(?:ts|js)$/.test(entry.name) && !entry.name.includes("test")) {
+    for await (const entry of await fsReaddir(new URL(".", import.meta.url), { withFileTypes: true })) {
+        if (entry.isFile() && /^validation-.*\.(?:ts|js)$/.test(entry.name) && !entry.name.includes("test")) {
             paths.push(new URL(entry.name, import.meta.url).pathname);
         }
     }
@@ -68,7 +70,7 @@ function recoveryDisplaySources(): string[] {
     return names.map((name) => new URL(name, directory).pathname);
 }
 
-Deno.test("publication messages name the selected target branch", () => {
+test("publication messages name the selected target branch", () => {
     const targetBranch = "release/next";
     const phases = [
         "preparing",
@@ -101,7 +103,7 @@ Deno.test("publication messages name the selected target branch", () => {
     assert(messages.every((message) => !message.includes("main")));
 });
 
-Deno.test("code review messages distinguish user review from AI review", () => {
+test("code review messages distinguish user review from AI review", () => {
     const reviewUrl = "http://127.0.0.1:4567/review/code?token=test";
 
     assertEquals(
@@ -120,14 +122,14 @@ Deno.test("code review messages distinguish user review from AI review", () => {
     );
 });
 
-Deno.test("saved integration notes name the parent Epic and note count", () => {
+test("saved integration notes name the parent Epic and note count", () => {
     assertEquals(
         buildValidationUserMessage({ kind: "integration_notes_saved", count: 2, epicPlanName: "demo" }),
         "AI review left 2 note(s) for demo.",
     );
 });
 
-Deno.test("Epic child Work Record message explains that generation waits for the parent", () => {
+test("Epic child Work Record message explains that generation waits for the parent", () => {
     assertEquals(
         buildValidationUserMessage({
             kind: "work_record_result",
@@ -138,7 +140,7 @@ Deno.test("Epic child Work Record message explains that generation waits for the
     );
 });
 
-Deno.test("incomplete publication cleanup names the Git objects and recovery commands", () => {
+test("incomplete publication cleanup names the Git objects and recovery commands", () => {
     const message = buildValidationUserMessage({
         kind: "publication_cleanup_incomplete",
         targetBranch: "release/next",
@@ -155,7 +157,7 @@ Deno.test("incomplete publication cleanup names the Git objects and recovery com
     assert(message.includes("wld plans doctor"));
 });
 
-Deno.test("all validation recovery and doctor messages stay plain", async () => {
+test("all validation recovery and doctor messages stay plain", async () => {
     const recoveryRequests: PlanRecoveryMessageRequest[] = [
         { kind: "manual_merge_unavailable" },
         { kind: "missing_worktree" },
@@ -315,7 +317,7 @@ Deno.test("all validation recovery and doctor messages stay plain", async () => 
     // details must not skip the typed catalog.
     let inventoriedCalls = 0;
     for (const path of await validationDisplaySources()) {
-        const source = await Deno.readTextFile(path);
+        const source = await fsReadFile(path, "utf8");
         inventoriedCalls += (source.match(
             /(?:emitStatus|emitProgress|emitSystemStatus|emitRunWieldSystemStatus|appendSystemMessage)\s*\(/g,
         ) || [])
@@ -340,7 +342,7 @@ Deno.test("all validation recovery and doctor messages stay plain", async () => 
     assert(inventoriedCalls > 30, "the display inventory did not find production calls");
 
     for (const path of recoveryDisplaySources()) {
-        const source = await Deno.readTextFile(path);
+        const source = await fsReadFile(path, "utf8");
         const calls = source.match(/appendSystemMessage\s*\(/g) || [];
         const catalogCalls = source.match(
             /appendSystemMessage\s*\(\s*(?:buildPlanRecoveryUserMessage|buildValidationRecoveryNotice|buildValidationUserMessage|planRecoveryMessage)\s*\(/g,

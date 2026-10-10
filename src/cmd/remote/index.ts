@@ -180,7 +180,10 @@ export async function runRemoteCommand(args: string[]): Promise<void> {
     try {
         identity = await import("../../shared/build-identity.js");
     } catch (error) {
-        if (!(error instanceof TypeError && error.message.includes("build-identity.js"))) throw error;
+        const missingIdentity = error instanceof Error && error.message.includes("build-identity.js") &&
+            (error instanceof TypeError ||
+                ("code" in error && ["ERR_MODULE_NOT_FOUND", "MODULE_NOT_FOUND"].includes(String(error.code))));
+        if (!missingIdentity) throw error;
         throw new Error(
             "No launcher build identity. Build the launcher and matching Linux artifact explicitly with deno run -A scripts/compile.js --output bin/wld.",
         );

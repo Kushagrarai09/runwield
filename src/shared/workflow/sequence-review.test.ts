@@ -1,3 +1,6 @@
+import { readdirSync as fsReaddirSync, readFileSync as fsReadFileSync } from "node:fs";
+import { test } from "node:test";
+import { mkdir as fsMkdir, readFile as fsReadFile, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
 import fs from "node:fs/promises";
 import { dirname } from "@std/path";
 import { withProcessGlobalTestLock } from "../../testing/process-global-lock.ts";
@@ -47,7 +50,7 @@ async function setup() {
     return { cwd, hostedSession };
 }
 
-Deno.test("PROJECT type persists and selects actions without making containers executable", async () => {
+test("PROJECT type persists and selects actions without making containers executable", async () => {
     const { cwd } = await setup();
     try {
         const plan = await loadPlan(cwd, "sequence");
@@ -62,12 +65,12 @@ Deno.test("PROJECT type persists and selects actions without making containers e
         assertEquals(normalizePlanApprovalAction({ classification: "PROJECT", type: "epic", action: "run" }), "later");
         assertEquals(isEpicPlan({ classification: "PLANNED_CHANGE", type: "epic" }), false);
     } finally {
-        await Deno.remove(cwd, { recursive: true });
+        await fsRm(cwd, { recursive: true });
     }
 });
 
 for (const approvalAction of ["run", "later"] as const) {
-    Deno.test(`Sequence ${approvalAction} settles every child and publishes one correct handoff`, async () => {
+    test(`Sequence ${approvalAction} settles every child and publishes one correct handoff`, async () => {
         const { cwd, hostedSession } = await setup();
         try {
             hostedSession.setWorkflowPlanName("sequence");
@@ -97,17 +100,17 @@ for (const approvalAction of ["run", "later"] as const) {
             const payload = event?.payload as PlanWrittenEventPayload | undefined;
             assertEquals(payload?.planName, expectedPlanName);
         } finally {
-            await Deno.remove(cwd, { recursive: true });
+            await fsRm(cwd, { recursive: true });
         }
     });
 }
 
-Deno.test("Sequence rejects stale child content before approving any member", async () => {
+test("Sequence rejects stale child content before approving any member", async () => {
     const { cwd, hostedSession } = await setup();
     try {
         const documents = await prepareSequenceReview(cwd, "sequence");
         const last = documents[2];
-        await Deno.writeTextFile(last.planPath, `${last.plan}\nA changed requirement.\n`);
+        await fsWriteFile(last.planPath, `${last.plan}\nA changed requirement.\n`);
         const result = await applySequenceReviewDecision({
             cwd,
             documents,
@@ -124,11 +127,11 @@ Deno.test("Sequence rejects stale child content before approving any member", as
         assertEquals((await loadPlan(cwd, "sequence/index"))?.attrs.status, "draft");
         assertEquals(listPendingWorkflowToolEvents(hostedSession).length, 0);
     } finally {
-        await Deno.remove(cwd, { recursive: true });
+        await fsRm(cwd, { recursive: true });
     }
 });
 
-Deno.test("Sequence feedback keeps each direct edit on its Plan and does not authorize execution", async () => {
+test("Sequence feedback keeps each direct edit on its Plan and does not authorize execution", async () => {
     const { cwd, hostedSession } = await setup();
     try {
         const documents = await prepareSequenceReview(cwd, "sequence");
@@ -154,11 +157,11 @@ Deno.test("Sequence feedback keeps each direct edit on its Plan and does not aut
             assertStringIncludes(result.feedback || "", `${doc.planName} (${doc.planId})`);
         }
     } finally {
-        await Deno.remove(cwd, { recursive: true });
+        await fsRm(cwd, { recursive: true });
     }
 });
 
-Deno.test("Sequence preflight rejects omitted children and forward dependencies", async () => {
+test("Sequence preflight rejects omitted children and forward dependencies", async () => {
     const { cwd } = await setup();
     try {
         await assertRejects(
@@ -171,11 +174,11 @@ Deno.test("Sequence preflight rejects omitted children and forward dependencies"
         });
         await assertRejects(() => prepareSequenceReview(cwd, "sequence"), Error, "forward dependency");
     } finally {
-        await Deno.remove(cwd, { recursive: true });
+        await fsRm(cwd, { recursive: true });
     }
 });
 
-Deno.test("Sibling Plan ID dependency survives a child rename", async () => {
+test("Sibling Plan ID dependency survives a child rename", async () => {
     const { cwd } = await setup();
     try {
         const documents = await prepareSequenceReview(cwd, "sequence");
@@ -188,11 +191,11 @@ Deno.test("Sibling Plan ID dependency survives a child rename", async () => {
         assertEquals(dependencies[0].planName, "sequence/renamed");
         assertEquals(dependencies[0].planId, first.planId);
     } finally {
-        await Deno.remove(cwd, { recursive: true });
+        await fsRm(cwd, { recursive: true });
     }
 });
 
-Deno.test("plan_written reviews all Sequence tabs and dispatches the first child without Slicer", async () => {
+test("plan_written reviews all Sequence tabs and dispatches the first child without Slicer", async () => {
     const { cwd, hostedSession } = await setup();
     try {
         hostedSession.setInteractionAdapter({
@@ -224,7 +227,7 @@ Deno.test("plan_written reviews all Sequence tabs and dispatches the first child
         assertEquals((result.details as ToolOutcome).planName, "sequence/index");
         assertEquals(listPendingWorkflowToolEvents(hostedSession).length, 1);
     } finally {
-        await Deno.remove(cwd, { recursive: true });
+        await fsRm(cwd, { recursive: true });
     }
 });
 
@@ -233,7 +236,7 @@ interface ToolOutcome {
     planName?: string;
 }
 
-Deno.test("Sequence browser transport preserves the full decision for the workflow owner", async () => {
+test("Sequence browser transport preserves the full decision for the workflow owner", async () => {
     const { cwd, hostedSession } = await setup();
     try {
         const documents = await prepareSequenceReview(cwd, "sequence");
@@ -269,11 +272,11 @@ Deno.test("Sequence browser transport preserves the full decision for the workfl
         assertEquals((await loadPlan(cwd, "sequence/search"))?.attrs.collaborationRecommendation, "pair");
         assertStringIncludes((await loadPlan(cwd, "sequence/index"))!.body, "Reviewed tab 1.");
     } finally {
-        await Deno.remove(cwd, { recursive: true });
+        await fsRm(cwd, { recursive: true });
     }
 });
 
-Deno.test("An interrupted Sequence write blocks child actions until the complete group is restored", async () => {
+test("An interrupted Sequence write blocks child actions until the complete group is restored", async () => {
     const { cwd } = await setup();
     try {
         const documents = await prepareSequenceReview(cwd, "sequence");
@@ -293,8 +296,8 @@ Deno.test("An interrupted Sequence write blocks child actions until the complete
         }));
         assertEquals(plans[1].before === plans[1].after, false);
         const path = getTransitionJournalPath(cwd, "interrupted-sequence");
-        await Deno.mkdir(path.slice(0, path.lastIndexOf("/")), { recursive: true });
-        await Deno.writeTextFile(
+        await fsMkdir(path.slice(0, path.lastIndexOf("/")), { recursive: true });
+        await fsWriteFile(
             path,
             JSON.stringify({
                 transitionId: "interrupted-sequence",
@@ -305,7 +308,7 @@ Deno.test("An interrupted Sequence write blocks child actions until the complete
                 completedEffects: [{ effect: "sequence_review_prepared", proof: { plans } }],
             }),
         );
-        await Deno.writeTextFile(documents[1].planPath, plans[1].after);
+        await fsWriteFile(documents[1].planPath, plans[1].after);
         assertEquals((await healSettledTransitionRecords(cwd)).remaining.length, 1);
         const child = await loadPlan(cwd, "sequence/index");
         assertExists(child);
@@ -318,17 +321,17 @@ Deno.test("An interrupted Sequence write blocks child actions until the complete
         });
         assertEquals(action.kind, "invalid_action");
         assertEquals((await loadPlan(cwd, "sequence/index"))?.attrs.status, "ready_for_work");
-        await Deno.writeTextFile(documents[1].planPath, `${plans[1].after}\nNew external edit.\n`);
+        await fsWriteFile(documents[1].planPath, `${plans[1].after}\nNew external edit.\n`);
         assertEquals((await healSettledTransitionRecords(cwd)).remaining.length, 1);
-        assertStringIncludes(await Deno.readTextFile(documents[1].planPath), "New external edit.");
-        await Deno.writeTextFile(documents[1].planPath, plans[1].before);
+        assertStringIncludes(await fsReadFile(documents[1].planPath, "utf8"), "New external edit.");
+        await fsWriteFile(documents[1].planPath, plans[1].before);
         assertEquals((await healSettledTransitionRecords(cwd)).closed.length, 1);
     } finally {
-        await Deno.remove(cwd, { recursive: true });
+        await fsRm(cwd, { recursive: true });
     }
 });
 
-Deno.test("Sequence continuation uses sibling IDs and stops at a held child", async () => {
+test("Sequence continuation uses sibling IDs and stops at a held child", async () => {
     const { cwd, hostedSession } = await setup();
     try {
         const docs = await prepareSequenceReview(cwd, "sequence");
@@ -368,7 +371,7 @@ Deno.test("Sequence continuation uses sibling IDs and stops at a held child", as
             "child_on_hold",
         );
     } finally {
-        await Deno.remove(cwd, { recursive: true });
+        await fsRm(cwd, { recursive: true });
     }
 });
 
@@ -378,7 +381,7 @@ interface SequenceJournalState {
 }
 
 for (const failurePoint of ["acceptance", "commit"] as const) {
-    Deno.test(`Sequence ${failurePoint} persistence failure cannot dispatch a child and permits retry`, async () => {
+    test(`Sequence ${failurePoint} persistence failure cannot dispatch a child and permits retry`, async () => {
         await withProcessGlobalTestLock(async () => {
             const { cwd, hostedSession } = await setup();
             const originalRename = fs.rename;
@@ -405,7 +408,9 @@ for (const failurePoint of ["acceptance", "commit"] as const) {
                                 record.completedEffects.some((effect) => effect.effect === "sequence_review_accepted");
                         if (atFailure) {
                             failed = true;
-                            throw new Deno.errors.PermissionDenied(`injected ${failurePoint} persistence failure`);
+                            throw Object.assign(new Error(`injected ${failurePoint} persistence failure`), {
+                                code: "EACCES",
+                            });
                         }
                     }
                     return await originalRename(from, to);
@@ -459,13 +464,13 @@ for (const failurePoint of ["acceptance", "commit"] as const) {
                 fs.rename = originalRename;
                 abort.abort();
                 await waiting;
-                await Deno.remove(cwd, { recursive: true });
+                await fsRm(cwd, { recursive: true });
             }
         });
     });
 }
 
-Deno.test("Sequence live consumer sees committed approval before receiving the child handoff", async () => {
+test("Sequence live consumer sees committed approval before receiving the child handoff", async () => {
     const { cwd, hostedSession } = await setup();
     const abort = new AbortController();
     const waiting = waitForWorkflowToolEvent(hostedSession, {
@@ -474,9 +479,11 @@ Deno.test("Sequence live consumer sees committed approval before receiving the c
         signal: abort.signal,
     }).then((event) => {
         const dir = dirname(getTransitionJournalPath(cwd, "unused"));
-        const journals = [...Deno.readDirSync(dir)].filter((entry) => entry.name.endsWith(".json"));
+        const journals = [...fsReaddirSync(dir, { withFileTypes: true })].filter((entry) =>
+            entry.name.endsWith(".json")
+        );
         const states = journals.map((entry) => {
-            const record: SequenceJournalState = JSON.parse(Deno.readTextFileSync(`${dir}/${entry.name}`));
+            const record: SequenceJournalState = JSON.parse(fsReadFileSync(`${dir}/${entry.name}`, "utf8"));
             return record.state;
         });
         return { event, states };
@@ -509,11 +516,11 @@ Deno.test("Sequence live consumer sees committed approval before receiving the c
     } finally {
         abort.abort();
         await waiting;
-        await Deno.remove(cwd, { recursive: true });
+        await fsRm(cwd, { recursive: true });
     }
 });
 
-Deno.test("Sequence preserves committed approval when Session publication fails and can retry", async () => {
+test("Sequence preserves committed approval when Session publication fails and can retry", async () => {
     const { cwd, hostedSession } = await setup();
     const manager = hostedSession.getRootSessionManager()!;
     assertExists(manager.appendCustomEntry);
@@ -555,6 +562,6 @@ Deno.test("Sequence preserves committed approval when Session publication fails 
         assertEquals(listPendingWorkflowToolEvents(hostedSession).length, 1);
     } finally {
         manager.appendCustomEntry = append;
-        await Deno.remove(cwd, { recursive: true });
+        await fsRm(cwd, { recursive: true });
     }
 });

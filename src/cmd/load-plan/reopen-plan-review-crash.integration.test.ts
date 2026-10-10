@@ -1,3 +1,10 @@
+import { collectProcessOutput } from "../../testing/subprocess-output.ts";
+import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
+import { spawnNativeProcess } from "../../shared/foreground-process.ts";
+import { getCwd } from "../../constants.js";
+import { test } from "node:test";
+import { readFile as fsReadFile } from "node:fs/promises";
+import process from "node:process";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { fromFileUrl, join } from "@std/path";
 import { fauxAssistantMessage, fauxText } from "@earendil-works/pi-ai";
@@ -10,7 +17,7 @@ import { createOwnerWorkspaceApp } from "../../ui/workspace/server.js";
 
 type OwnerApp = ReturnType<typeof createOwnerWorkspaceApp> & { close(): Promise<void> };
 
-Deno.test("a Session reopens the current saved Plan after its pending review process is killed", async () => {
+test("a Session reopens the current saved Plan after its pending review process is killed", async () => {
     await withRuntimeCommandFixture(
         "reopen-review-crash-",
         async ({ homeDir, projectRoot, setModelResponseFactory }) => {
@@ -26,6 +33,7 @@ Deno.test("a Session reopens the current saved Plan after its pending review pro
             // This process creates the real Session and leaves its review unresolved. It
             // never closes the runtime or settles the operation before SIGKILL.
             const script = `
+            import { writeFileSync, renameSync } from "node:fs";
             import { createSessionRuntime } from ${
                 JSON.stringify(import.meta.resolve("../../shared/session/session-runtime.ts"))
             };
@@ -46,8 +54,8 @@ Deno.test("a Session reopens the current saved Plan after its pending review pro
                 requestInteraction(request) {
                     if (request.type !== RuntimeInteractionTypes.PLAN_REVIEW) throw new Error("Unexpected interaction");
                     const persistentId = runtime.getSessionSnapshot(sessionId).managed.runwieldSessionId;
-                    Deno.writeTextFileSync(${JSON.stringify(readyPath + ".tmp")}, JSON.stringify({ persistentId }));
-                    Deno.renameSync(${JSON.stringify(readyPath + ".tmp")}, ${JSON.stringify(readyPath)});
+                    writeFileSync(${JSON.stringify(readyPath + ".tmp")}, JSON.stringify({ persistentId }));
+                    renameSync(${JSON.stringify(readyPath + ".tmp")}, ${JSON.stringify(readyPath)});
                     return new Promise(() => {});
                 },
             });
@@ -60,20 +68,27 @@ Deno.test("a Session reopens the current saved Plan after its pending review pro
             });
             setInterval(() => {}, 1000);
         `;
-            const worker = new Deno.Command(Deno.execPath(), {
-                args: ["eval", "--config", fromFileUrl(new URL("../../../deno.json", import.meta.url)), script],
+            const worker = spawnNativeProcess(process.execPath, {
+                args: runtimeSourceArgs([
+                    "eval",
+                    "--config",
+                    fromFileUrl(new URL("../../../deno.json", import.meta.url)),
+                    script,
+                ]),
                 stdout: "null",
                 stderr: "piped",
-            }).spawn();
+                cwd: getCwd(),
+                stdin: "null",
+            });
             try {
                 const deadline = Date.now() + 15_000;
                 let persistentId = "";
                 while (Date.now() < deadline) {
                     try {
-                        persistentId = JSON.parse(await Deno.readTextFile(readyPath)).persistentId;
+                        persistentId = JSON.parse(await fsReadFile(readyPath, "utf8")).persistentId;
                         if (persistentId) break;
                     } catch (error) {
-                        if (!(error instanceof Deno.errors.NotFound)) throw error;
+                        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
                     }
                     await new Promise((resolve) => setTimeout(resolve, 25));
                 }
@@ -81,7 +96,7 @@ Deno.test("a Session reopens the current saved Plan after its pending review pro
                     try {
                         worker.kill("SIGKILL");
                     } catch { /* Already stopped. */ }
-                    const output = await worker.output();
+                    const output = await collectProcessOutput(worker);
                     throw new Error(`Review did not become pending: ${new TextDecoder().decode(output.stderr)}`);
                 }
                 worker.kill("SIGKILL");
@@ -114,7 +129,7 @@ Deno.test("a Session reopens the current saved Plan after its pending review pro
                             if (request.type === RuntimeInteractionTypes.PLAN_REVIEW) {
                                 assertEquals(request._meta?.planName, "target");
                                 assertEquals(request._meta?.planningAgentName, "planner");
-                                reviewedContent = await Deno.readTextFile(String(request._meta?.planPath));
+                                reviewedContent = await fsReadFile(String(request._meta?.planPath), "utf8");
                                 return { outcome: "accepted", _meta: { approved: true, approvalAction: "later" } };
                             }
                             return { outcome: "canceled" };
@@ -139,7 +154,7 @@ Deno.test("a Session reopens the current saved Plan after its pending review pro
     );
 });
 
-Deno.test("Workspace opens and approves a saved Plan review after its owner is SIGKILLed", async () => {
+test("Workspace opens and approves a saved Plan review after its owner is SIGKILLed", async () => {
     await withRuntimeCommandFixture(
         "workspace-review-crash-",
         async ({ homeDir, projectRoot, setModelResponseFactory }) => {
@@ -153,6 +168,7 @@ Deno.test("Workspace opens and approves a saved Plan review after its owner is S
             const plan = await ensurePlanIdentity(projectRoot, "target");
             const readyPath = join(homeDir, "workspace-review-pending.json");
             const script = `
+            import { writeFileSync, renameSync } from "node:fs";
             import { createSessionRuntime } from ${
                 JSON.stringify(import.meta.resolve("../../shared/session/session-runtime.ts"))
             };
@@ -184,35 +200,45 @@ Deno.test("Workspace opens and approves a saved Plan review after its owner is S
             runtime.setInteractionAdapter(sessionId, {
                 requestInteraction(request) {
                     if (request.type !== RuntimeInteractionTypes.PLAN_REVIEW) throw new Error("Unexpected interaction");
-                    Deno.writeTextFileSync(${JSON.stringify(readyPath + ".tmp")}, JSON.stringify({ persistentId }));
-                    Deno.renameSync(${JSON.stringify(readyPath + ".tmp")}, ${JSON.stringify(readyPath)});
+                    writeFileSync(${JSON.stringify(readyPath + ".tmp")}, JSON.stringify({ persistentId }));
+                    renameSync(${JSON.stringify(readyPath + ".tmp")}, ${JSON.stringify(readyPath)});
                     return new Promise(() => {});
                 },
             });
             void runtime.reopenPlanReview(sessionId);
             setInterval(() => {}, 1000);
         `;
-            const worker = new Deno.Command(Deno.execPath(), {
-                args: ["eval", "--config", fromFileUrl(new URL("../../../deno.json", import.meta.url)), script],
+            const worker = spawnNativeProcess(process.execPath, {
+                args: runtimeSourceArgs([
+                    "eval",
+                    "--config",
+                    fromFileUrl(new URL("../../../deno.json", import.meta.url)),
+                    script,
+                ]),
                 stdout: "null",
                 stderr: "piped",
-            }).spawn();
+                cwd: getCwd(),
+                stdin: "null",
+            });
             try {
                 let persistentId = "";
                 const deadline = Date.now() + 15_000;
                 while (Date.now() < deadline) {
                     try {
-                        persistentId = JSON.parse(await Deno.readTextFile(readyPath)).persistentId;
+                        persistentId = JSON.parse(await fsReadFile(readyPath, "utf8")).persistentId;
                         if (persistentId) break;
                     } catch (error) {
                         // A read can race with the signal file being written.
-                        if (!(error instanceof Deno.errors.NotFound) && !(error instanceof SyntaxError)) throw error;
+                        if (
+                            !(error instanceof Error && "code" in error && error.code === "ENOENT") &&
+                            !(error instanceof SyntaxError)
+                        ) throw error;
                     }
                     await new Promise((resolve) => setTimeout(resolve, 25));
                 }
                 if (!persistentId) {
                     worker.kill("SIGKILL");
-                    const output = await worker.output();
+                    const output = await collectProcessOutput(worker);
                     throw new Error(`Review did not become pending: ${new TextDecoder().decode(output.stderr)}`);
                 }
                 worker.kill("SIGKILL");

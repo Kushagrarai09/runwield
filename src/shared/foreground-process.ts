@@ -29,9 +29,9 @@ export interface NativeProcess {
     stderr: ReadableStream<Uint8Array>;
     stdin: WritableStream<Uint8Array>;
     status: Promise<NativeProcessStatus>;
-    kill(signal?: "SIGKILL" | "SIGTERM"): void;
+    kill(signal?: "SIGKILL" | "SIGTERM" | "SIGINT"): void;
 }
-interface NativeSpawnOptions {
+export interface NativeSpawnOptions {
     args: string[];
     cwd: string;
     env?: Record<string, string>;
@@ -55,7 +55,7 @@ interface BunProcess {
     stderr: ReadableStream<Uint8Array>;
     stdin: BunInputSink;
     exited: Promise<number>;
-    kill(signal?: "SIGKILL" | "SIGTERM"): void;
+    kill(signal?: "SIGKILL" | "SIGTERM" | "SIGINT"): void;
 }
 interface BunSpawnOptions {
     cmd: string[];

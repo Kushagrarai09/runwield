@@ -1,3 +1,14 @@
+import { writeFileSync as fsWriteFileSync } from "node:fs";
+import { test } from "node:test";
+import {
+    mkdtemp as fsMkdtemp,
+    readFile as fsReadFile,
+    realpath as fsRealpath,
+    rm as fsRm,
+    stat as fsStat,
+    writeFile as fsWriteFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { join } from "@std/path";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
@@ -18,9 +29,9 @@ import { runActiveAgentTurn, switchActiveAgent } from "../session/agent-switchin
 import { __getRootSessionMetadataForTests } from "../session/session.js";
 import { runEpicChildContinuation } from "./epic-continuation.ts";
 
-Deno.test("publication repair completion never creates a validation checkpoint in either checkout", async () => {
+test("publication repair completion never creates a validation checkpoint in either checkout", async () => {
     const projectRoot = await makeRepo();
-    const repairRoot = await Deno.makeTempDir({ prefix: "publication-repair-receipt-" });
+    const repairRoot = await fsMkdtemp(join(tmpdir(), "publication-repair-receipt-"));
     const hostedSession = new HostedSession({ id: crypto.randomUUID(), cwd: projectRoot });
     try {
         await savePlan(projectRoot, "p", "# Publication repair\n", {
@@ -65,13 +76,13 @@ Deno.test("publication repair completion never creates a validation checkpoint i
         }
     } finally {
         hostedSession.dispose();
-        await Deno.remove(repairRoot, { recursive: true });
-        await Deno.remove(projectRoot, { recursive: true });
+        await fsRm(repairRoot, { recursive: true });
+        await fsRm(projectRoot, { recursive: true });
     }
 });
 
 for (const outcome of ["canceled", "blocked"] as const) {
-    Deno.test(`canceling human review (${outcome}) cannot publish through the outer driver`, async () => {
+    test(`canceling human review (${outcome}) cannot publish through the outer driver`, async () => {
         const projectRoot = await makeValidationProjectRoot("p", {
             classification: "PLANNED_CHANGE",
             status: "reviewed",
@@ -109,10 +120,10 @@ for (const outcome of ["canceled", "blocked"] as const) {
     });
 }
 
-Deno.test("verified Epic-child publication leaves the removed worktree before continuing the parent Epic", async () => {
+test("verified Epic-child publication leaves the removed worktree before continuing the parent Epic", async () => {
     await withRuntimeCommandFixture("published-handoff-", async ({ setModelResponseFactories }) => {
         const projectRoot = await makeRepo();
-        const worktreeRoot = await Deno.makeTempDir({ prefix: "runwield-validation-worktree-" });
+        const worktreeRoot = await fsMkdtemp(join(tmpdir(), "runwield-validation-worktree-"));
         const parentPlan = "published-epic";
         const planName = `${parentPlan}/01-published-follow-up`;
         const nextPlanName = `${parentPlan}/02-frontend-follow-up`;
@@ -177,7 +188,7 @@ Deno.test("verified Epic-child publication leaves the removed worktree before co
                 worktreeBranch: worktree.branch,
                 worktreeBaseBranch: "main",
             }, { expectedRevision: worktreePlan.revision });
-            await Deno.writeTextFile(join(worktree.path, "published-marker.txt"), "from worktree\n");
+            await fsWriteFile(join(worktree.path, "published-marker.txt"), "from worktree\n");
             const hostedSession = new HostedSession({ id: crypto.randomUUID(), cwd: worktree.path });
             await switchActiveAgent(hostedSession, { agentName: "planner", cwd: worktree.path });
             hostedSession.setActiveExecutionWorkflow({
@@ -208,10 +219,10 @@ Deno.test("verified Epic-child publication leaves the removed worktree before co
             });
 
             assertEquals(result.kind, "verified");
-            assertEquals(await Deno.stat(worktree.path).then(() => true).catch(() => false), false);
+            assertEquals(await fsStat(worktree.path).then(() => true).catch(() => false), false);
             assertEquals(hostedSession.getActiveExecutionWorkflow(), null);
             assertEquals(hostedSession.getRootAgentName(), "engineer");
-            const canonicalProjectRoot = await Deno.realPath(projectRoot);
+            const canonicalProjectRoot = await fsRealpath(projectRoot);
             assertEquals(hostedSession.cwd, canonicalProjectRoot);
             const rootAgentSession = hostedSession.getRootAgentSession() as AgentSession | null;
             if (!rootAgentSession) throw new Error("Root Agent session was not rebuilt");
@@ -263,16 +274,16 @@ Deno.test("verified Epic-child publication leaves the removed worktree before co
             assertEquals(__getRootSessionMetadataForTests(continuationRootSession)?.cwd, nextExecutionCwd);
             hostedSession.dispose();
         } finally {
-            await Deno.remove(projectRoot, { recursive: true }).catch(() => {});
-            await Deno.remove(worktreeRoot, { recursive: true }).catch(() => {});
+            await fsRm(projectRoot, { recursive: true }).catch(() => {});
+            await fsRm(worktreeRoot, { recursive: true }).catch(() => {});
         }
     });
 });
 
-Deno.test("paused validation keeps the execution Agent and worktree cwd", async () => {
+test("paused validation keeps the execution Agent and worktree cwd", async () => {
     await withRuntimeCommandFixture("paused-context-", async () => {
         const projectRoot = await makeRepo();
-        const worktreeRoot = await Deno.makeTempDir({ prefix: "runwield-paused-worktree-" });
+        const worktreeRoot = await fsMkdtemp(join(tmpdir(), "runwield-paused-worktree-"));
         const planName = "paused-context";
         try {
             await savePlan(projectRoot, planName, `# ${planName}\n`, {
@@ -346,7 +357,7 @@ Deno.test("paused validation keeps the execution Agent and worktree cwd", async 
                 workRecordMnemotecaPort: createWorkRecordMnemotecaFixture(),
             });
             assertEquals(result.kind, "paused");
-            assertEquals(await Deno.stat(worktree.path).then(() => true).catch(() => false), true);
+            assertEquals(await fsStat(worktree.path).then(() => true).catch(() => false), true);
             assertEquals(hostedSession.getRootAgentName(), "engineer");
             assertEquals(hostedSession.getActiveExecutionWorkflow()?.executionCwd, worktree.path);
             const rootAgentSession = hostedSession.getRootAgentSession() as AgentSession | null;
@@ -354,14 +365,14 @@ Deno.test("paused validation keeps the execution Agent and worktree cwd", async 
             assertEquals(__getRootSessionMetadataForTests(rootAgentSession)?.cwd, worktree.path);
             hostedSession.dispose();
         } finally {
-            await Deno.remove(projectRoot, { recursive: true }).catch(() => {});
-            await Deno.remove(worktreeRoot, { recursive: true }).catch(() => {});
+            await fsRm(projectRoot, { recursive: true }).catch(() => {});
+            await fsRm(worktreeRoot, { recursive: true }).catch(() => {});
         }
     });
 });
 
 for (const repaired of [true, false]) {
-    Deno.test(`third repair is checked before ${repaired ? "continuing" : "stopping without a fourth repair"}`, async () => {
+    test(`third repair is checked before ${repaired ? "continuing" : "stopping without a fourth repair"}`, async () => {
         await withRuntimeCommandFixture("third-repair-boundary-", async ({ setModelResponseFactories }) => {
             const projectRoot = await makeValidationProjectRoot("p", {
                 classification: "PLANNED_CHANGE",
@@ -384,7 +395,7 @@ for (const repaired of [true, false]) {
             let checks = 0;
             const repairResponse = () => {
                 repairs += 1;
-                Deno.writeTextFileSync(join(projectRoot, "implementation.txt"), String(repairs));
+                fsWriteFileSync(join(projectRoot, "implementation.txt"), String(repairs));
                 return fauxAssistantMessage(fauxToolCall("task_completed", { message: `Repair ${repairs} finished.` }));
             };
             setModelResponseFactories([repairResponse, repairResponse, repairResponse]);
@@ -398,7 +409,7 @@ for (const repaired of [true, false]) {
                         checks += 1;
                         if (checks > 1) {
                             assertEquals(
-                                await Deno.readTextFile(join(projectRoot, "implementation.txt")),
+                                await fsReadFile(join(projectRoot, "implementation.txt"), "utf8"),
                                 String(checks - 1),
                             );
                         }
@@ -415,7 +426,7 @@ for (const repaired of [true, false]) {
     });
 }
 
-Deno.test("accepted completion stops the producer without waiting for natural turn end", async () => {
+test("accepted completion stops the producer without waiting for natural turn end", async () => {
     const cwd = await makeValidationProjectRoot("p", { classification: "PLANNED_CHANGE", status: "implemented" });
     const hostedSession = new HostedSession({ id: crypto.randomUUID(), cwd });
     let interrupted = false;
@@ -451,7 +462,7 @@ Deno.test("accepted completion stops the producer without waiting for natural tu
 });
 
 for (const foreign of [false, true]) {
-    Deno.test(`${foreign ? "another Session's" : "an earlier invocation's"} completion cannot advance a repair`, async () => {
+    test(`${foreign ? "another Session's" : "an earlier invocation's"} completion cannot advance a repair`, async () => {
         const cwd = await makeValidationProjectRoot("p", { classification: "PLANNED_CHANGE", status: "implemented" });
         const hostedSession = new HostedSession({ id: crypto.randomUUID(), cwd });
         const sessionManager = SessionManager.inMemory(cwd);
@@ -479,7 +490,7 @@ for (const foreign of [false, true]) {
     });
 }
 
-Deno.test("canceling the CI follow-up prompt does not send the default feedback to an Engineer", async () => {
+test("canceling the CI follow-up prompt does not send the default feedback to an Engineer", async () => {
     const cwd = await makeValidationProjectRoot("p", {
         classification: "PLANNED_CHANGE",
         status: "implemented",
@@ -516,7 +527,7 @@ Deno.test("canceling the CI follow-up prompt does not send the default feedback 
     hostedSession.dispose();
 });
 
-Deno.test("Engineer follow-up after restart rebuilds context and accepts a real completion tool", async () => {
+test("Engineer follow-up after restart rebuilds context and accepts a real completion tool", async () => {
     await withRuntimeCommandFixture("repair-restart-", async ({ setModelResponseFactory }) => {
         const cwd = await makeValidationProjectRoot("p", { classification: "PLANNED_CHANGE", status: "implemented" });
         const hostedSession = new HostedSession({ id: crypto.randomUUID(), cwd });

@@ -1,3 +1,20 @@
+import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
+import { captureForegroundProcess } from "../../shared/captured-process.ts";
+import { getCwd } from "../../constants.js";
+import { tmpdir } from "node:os";
+import { test } from "node:test";
+import {
+    chmod as fsChmod,
+    copyFile as fsCopyFile,
+    mkdir as fsMkdir,
+    mkdtemp as fsMkdtemp,
+    readFile as fsReadFile,
+    rm as fsRm,
+    stat as fsStat,
+    symlink as fsSymlink,
+    writeFile as fsWriteFile,
+} from "node:fs/promises";
+import process from "node:process";
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { dirname, join } from "@std/path";
 import { VERSION } from "../../shared/version.js";
@@ -47,7 +64,7 @@ function createInstallerFixture(exitCode = 0): InstallerFixture {
         port: {
             run: async (scriptPath, releaseTag, env) => {
                 invocations.push({
-                    script: await Deno.readTextFile(scriptPath),
+                    script: await fsReadFile(scriptPath, "utf8"),
                     scriptPath,
                     releaseTag,
                     env: { ...env },
@@ -80,10 +97,10 @@ async function captureConsole(run: () => void | Promise<void>): Promise<{ logs: 
 }
 
 async function assertRemoved(path: string): Promise<void> {
-    await assertRejects(() => Deno.stat(path), Deno.errors.NotFound);
+    await assertRejects(() => fsStat(path), Error, "ENOENT");
 }
 
-Deno.test("update downloads the pinned installer, writes a real temp script, executes it, and cleans up", async () => {
+test("update downloads the pinned installer, writes a real temp script, executes it, and cleans up", async () => {
     await withProcessGlobalTestLock(async () => {
         const network = createNetworkFixture(makeJsonResponse({ tag_name: "v999.0.0" }));
         const installer = createInstallerFixture();
@@ -109,7 +126,7 @@ Deno.test("update downloads the pinned installer, writes a real temp script, exe
     });
 });
 
-Deno.test("update falls back to the GitHub web raw installer URL after raw.githubusercontent.com returns 403", async () => {
+test("update falls back to the GitHub web raw installer URL after raw.githubusercontent.com returns 403", async () => {
     const urls: string[] = [];
     const network: { port: UpdateNetworkPort } = {
         port: {
@@ -140,10 +157,10 @@ Deno.test("update falls back to the GitHub web raw installer URL after raw.githu
     assertEquals(installer.invocations[0].script, "#!/usr/bin/env bash\n# fallback\n");
 });
 
-Deno.test("update passes the real WLD_INSTALL_DIR environment override to the installer", async () => {
+test("update passes the real WLD_INSTALL_DIR environment override to the installer", async () => {
     await withProcessGlobalTestLock(async () => {
-        const previousInstallDir = Deno.env.get("WLD_INSTALL_DIR");
-        Deno.env.set("WLD_INSTALL_DIR", "/fixture/custom/bin");
+        const previousInstallDir = process.env["WLD_INSTALL_DIR"];
+        process.env["WLD_INSTALL_DIR"] = "/fixture/custom/bin";
         const network = createNetworkFixture(makeJsonResponse({ tag_name: "v999.0.0" }));
         const installer = createInstallerFixture();
         try {
@@ -154,13 +171,13 @@ Deno.test("update passes the real WLD_INSTALL_DIR environment override to the in
             });
             assertEquals(installer.invocations[0].env.WLD_INSTALL_DIR, "/fixture/custom/bin");
         } finally {
-            if (previousInstallDir === undefined) Deno.env.delete("WLD_INSTALL_DIR");
-            else Deno.env.set("WLD_INSTALL_DIR", previousInstallDir);
+            if (previousInstallDir === undefined) delete process.env["WLD_INSTALL_DIR"];
+            else process.env["WLD_INSTALL_DIR"] = previousInstallDir;
         }
     });
 });
 
-Deno.test("update rejects arguments through the real usage formatter before external work", async () => {
+test("update rejects arguments through the real usage formatter before external work", async () => {
     await withProcessGlobalTestLock(async () => {
         const exits = createExitFixture();
         const output = await captureConsole(() =>
@@ -178,7 +195,7 @@ Deno.test("update rejects arguments through the real usage formatter before exte
     });
 });
 
-Deno.test("update installs latest RC only after confirmation", async () => {
+test("update installs latest RC only after confirmation", async () => {
     await withProcessGlobalTestLock(async () => {
         const prompts: string[] = [];
         const previousPrompt = globalThis.prompt;
@@ -212,7 +229,7 @@ Deno.test("update installs latest RC only after confirmation", async () => {
     });
 });
 
-Deno.test("update cancels RC installation when user answers no", async () => {
+test("update cancels RC installation when user answers no", async () => {
     await withProcessGlobalTestLock(async () => {
         const previousPrompt = globalThis.prompt;
         globalThis.prompt = () => "n";
@@ -237,7 +254,7 @@ Deno.test("update cancels RC installation when user answers no", async () => {
     });
 });
 
-Deno.test("update accepts Enter as Yes for an RC", async () => {
+test("update accepts Enter as Yes for an RC", async () => {
     await withProcessGlobalTestLock(async () => {
         const previousPrompt = globalThis.prompt;
         globalThis.prompt = () => "";
@@ -258,7 +275,7 @@ Deno.test("update accepts Enter as Yes for an RC", async () => {
     });
 });
 
-Deno.test("update cancels RC installation when prompt is dismissed", async () => {
+test("update cancels RC installation when prompt is dismissed", async () => {
     await withProcessGlobalTestLock(async () => {
         const previousPrompt = globalThis.prompt;
         globalThis.prompt = () => null;
@@ -282,7 +299,7 @@ Deno.test("update cancels RC installation when prompt is dismissed", async () =>
     });
 });
 
-Deno.test("update installs an exact stable tag without confirmation", async () => {
+test("update installs an exact stable tag without confirmation", async () => {
     const network = createNetworkFixture(makeJsonResponse({ tag_name: "v111.0.0" }));
     const installer = createInstallerFixture();
 
@@ -296,7 +313,7 @@ Deno.test("update installs an exact stable tag without confirmation", async () =
     assertEquals(installer.invocations[0].releaseTag, "v999.1.0");
 });
 
-Deno.test("update refuses exact downgrade only when the current build version is comparable", async () => {
+test("update refuses exact downgrade only when the current build version is comparable", async () => {
     await withProcessGlobalTestLock(async () => {
         const installer = createInstallerFixture();
         const exits = createExitFixture();
@@ -323,7 +340,7 @@ Deno.test("update refuses exact downgrade only when the current build version is
     });
 });
 
-Deno.test("update installs exact downgrade when it is explicit and confirmed", async () => {
+test("update installs exact downgrade when it is explicit and confirmed", async () => {
     await withProcessGlobalTestLock(async () => {
         const previousPrompt = globalThis.prompt;
         globalThis.prompt = () => "INSTALL";
@@ -343,7 +360,7 @@ Deno.test("update installs exact downgrade when it is explicit and confirmed", a
     });
 });
 
-Deno.test("update skips confirmation when yes is supplied for an RC", async () => {
+test("update skips confirmation when yes is supplied for an RC", async () => {
     await withProcessGlobalTestLock(async () => {
         const previousPrompt = globalThis.prompt;
         globalThis.prompt = () => {
@@ -368,7 +385,7 @@ Deno.test("update skips confirmation when yes is supplied for an RC", async () =
     });
 });
 
-Deno.test("update cleans its real temp directory before forwarding installer failure", async () => {
+test("update cleans its real temp directory before forwarding installer failure", async () => {
     await withProcessGlobalTestLock(async () => {
         const network = createNetworkFixture(makeJsonResponse({ tag_name: "v999.0.0" }));
         const installer = createInstallerFixture(7);
@@ -387,7 +404,7 @@ Deno.test("update cleans its real temp directory before forwarding installer fai
     });
 });
 
-Deno.test("update reports release lookup failures without creating an installer process", async () => {
+test("update reports release lookup failures without creating an installer process", async () => {
     await withProcessGlobalTestLock(async () => {
         const network = createNetworkFixture(makeJsonResponse({}, 500));
         const installer = createInstallerFixture();
@@ -407,19 +424,19 @@ Deno.test("update reports release lookup failures without creating an installer 
     });
 });
 
-Deno.test("package-managed update prints the package command and does not run the installer", async () => {
-    const root = await Deno.makeTempDir({ prefix: "runwield-package-update-" });
+test("package-managed update prints the package command and does not run the installer", async () => {
+    const root = await fsMkdtemp(join(tmpdir(), "runwield-package-update-"));
     try {
         const libexec = join(root, "Cellar", "wld", "1.2.3", "libexec");
         const bin = join(root, "bin");
-        await Deno.mkdir(libexec, { recursive: true });
-        await Deno.mkdir(bin, { recursive: true });
+        await fsMkdir(libexec, { recursive: true });
+        await fsMkdir(bin, { recursive: true });
         const exe = join(libexec, "wld");
         const link = join(bin, "wld");
-        await Deno.copyFile(Deno.execPath(), exe);
-        await Deno.chmod(exe, 0o755);
-        await Deno.symlink(exe, link);
-        await Deno.writeTextFile(
+        await fsCopyFile(process.execPath, exe);
+        await fsChmod(exe, 0o755);
+        await fsSymlink(exe, link);
+        await fsWriteFile(
             join(libexec, "runwield-install.json"),
             JSON.stringify({
                 schemaVersion: 1,
@@ -432,9 +449,11 @@ Deno.test("package-managed update prints the package command and does not run th
             }),
         );
         const child = join(root, "assert-update.ts");
-        await Deno.writeTextFile(
+        await fsWriteFile(
             child,
-            `import { assertEquals, assertStringIncludes } from "@std/assert";\n` +
+            `import { assertEquals, assertStringIncludes } from ${
+                JSON.stringify(import.meta.resolve("@std/assert"))
+            };\n` +
                 `import { runUpdateCommand } from ${JSON.stringify(new URL("./index.ts", import.meta.url).href)};\n` +
                 `const calls = [];\n` +
                 `const originalLog = console.log;\n` +
@@ -450,15 +469,14 @@ Deno.test("package-managed update prints the package command and does not run th
                 `assertStringIncludes(logs.join("\\n"), "brew upgrade gandazgul/tap/wld");\n` +
                 `assertStringIncludes(logs.join("\\n"), "Stable channel");\n`,
         );
-        const result = await new Deno.Command(link, {
-            args: ["run", "-A", "--config", join(Deno.cwd(), "deno.json"), child],
-            stdout: "piped",
-            stderr: "piped",
-        }).output();
+        const result = await captureForegroundProcess(link, {
+            args: runtimeSourceArgs(["run", "-A", "--config", join(getCwd(), "deno.json"), child]),
+            cwd: getCwd(),
+        });
         const stdout = new TextDecoder().decode(result.stdout);
         const stderr = new TextDecoder().decode(result.stderr);
         assertEquals(result.code, 0, `${stdout}\n${stderr}`);
     } finally {
-        await Deno.remove(root, { recursive: true });
+        await fsRm(root, { recursive: true });
     }
 });

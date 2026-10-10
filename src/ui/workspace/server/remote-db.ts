@@ -1,6 +1,6 @@
 /** @module ui/workspace/server/remote-db */
 
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync } from "../../../shared/sqlite.ts";
 import { REMOTE_SCHEMA_V1_SQL, REMOTE_SCHEMA_V2_SQL, REMOTE_SCHEMA_VERSION } from "./remote-schema.ts";
 
 export interface RemoteDatabase {

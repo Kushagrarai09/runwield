@@ -1,3 +1,4 @@
+import process from "node:process";
 /**
  * @module ui/tui/golden-scenarios/planned-change-workflow
  * Composed Golden PLANNED_CHANGE workflow scenarios.
@@ -425,7 +426,7 @@ export const onboardingTutorialDeliveryScenario = {
         {
             path: "tutorial-behavior.test.ts",
             text:
-                'import { tutorialLabel } from "./tutorial-behavior.ts";\nDeno.test("tutorial behavior", () => { if (tutorialLabel() !== "ready") throw new Error("not ready"); });\n',
+                'import { test } from "node:test";\nimport { tutorialLabel } from "./tutorial-behavior.ts";\ntest("tutorial behavior", () => { if (tutorialLabel() !== "ready") throw new Error("not ready"); });\n',
         },
     ],
     coverage: [...plannedChangeReviewRepairValidationScenario.coverage, "tutorial:onboarding"],
@@ -434,7 +435,10 @@ export const onboardingTutorialDeliveryScenario = {
         { type: "select", promptIncludes: "Tutorial guidance", value: "continue" },
         ...plannedChangeReviewRepairValidationScenario.scriptedInteractions.map((interaction) =>
             interaction.type === "text" && interaction.promptIncludes.includes("runs this project's tests")
-                ? { ...interaction, value: "sleep 5; deno test tutorial-behavior.test.ts" }
+                ? {
+                    ...interaction,
+                    value: `sleep 5; '${process.execPath.replaceAll("'", "'\\''")}' test tutorial-behavior.test.ts`,
+                }
                 : interaction
         ),
         { type: "select", promptIncludes: "were stopped before they finished", value: "stop" },
@@ -775,11 +779,15 @@ export const plannedChangeNonGitInPlaceScenario = {
     reviewDecisions: [{ approved: true, feedback: "Approved for non-Git execution.", approvalAction: "run" }],
     reviewedPlan: "# Non-Git PLANNED_CHANGE\n\nGolden non-Git content.\n",
     initialProjectFiles: [
-        { path: "deno.json", text: '{"tasks":{"test":"deno eval \\"true\\""}}\n' },
+        { path: "package.json", text: '{"name":"golden-non-git-fixture","private":true}\n' },
     ],
     scriptedInteractions: [
         { type: "select", promptIncludes: "Git is not available for this project", value: "proceed" },
-        { type: "text", promptIncludes: "Enter the command that runs this project's tests", value: "deno task test" },
+        {
+            type: "text",
+            promptIncludes: "Enter the command that runs this project's tests",
+            value: `'${process.execPath.replaceAll("'", "'\\''")}' ${process.versions.deno ? "eval" : "-e"} 'true'`,
+        },
     ],
     script: [
         {

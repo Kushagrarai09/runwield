@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assertEquals } from "@std/assert";
 import {
     managedSyncQueueImageScenario,
@@ -15,7 +16,7 @@ const scenarioExportNames = new Map([
 ]);
 
 for (const scenario of presentationAndTerminalScenarios) {
-    Deno.test(`golden presentation/terminal: ${scenario.name}`, async () => {
+    test(`golden presentation/terminal: ${scenario.name}`, async () => {
         const { runGoldenScenarioChildProcess } = await import("../testing/child-protocol.js");
         const result = await runGoldenScenarioChildProcess({
             scenarioModule: "src/ui/tui/golden-scenarios/presentation-and-terminal.js",

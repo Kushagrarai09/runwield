@@ -1,15 +1,8 @@
+import fsPromises from "node:fs/promises";
 import { open as fsOpen } from "node:fs/promises";
 import { type NativeFileLock, openNativeFileLock } from "./native-file-lock.ts";
 import { type Stats } from "node:fs";
-import {
-    link as fsLink,
-    lstat as fsLstat,
-    mkdir as fsMkdir,
-    readdir as fsReaddir,
-    readFile as fsReadFile,
-    rename as fsRename,
-    rm as fsRm,
-} from "node:fs/promises";
+import { lstat as fsLstat, mkdir as fsMkdir, readdir as fsReaddir, readFile as fsReadFile } from "node:fs/promises";
 /** Recover writes made through the old layout after ownership moved to internal/. */
 import { dirname, join } from "@std/path";
 import type { ControllerRecord } from "./workflow/controller-registry.ts";
@@ -90,16 +83,16 @@ async function writeAtomic(path: string, bytes: Uint8Array, onlyIfMissing = fals
         if (onlyIfMissing) {
             try {
                 // Atomic no-replace publication; never overwrite a concurrent writer.
-                await fsLink(temporary, path);
+                await fsPromises.link(temporary, path);
             } catch (error) {
                 if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
             }
         } else {
-            await fsRename(temporary, path);
+            await fsPromises.rename(temporary, path);
         }
         await syncDirectory(dirname(path));
     } finally {
-        await fsRm(temporary).catch((error) => {
+        await fsPromises.rm(temporary).catch((error) => {
             if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
         });
     }
@@ -212,7 +205,7 @@ export async function recoverLegacyRuntimeFiles(paths: RuntimeRecoveryPaths): Pr
         }
         // A writer without a controller inode lock must not lose a new write.
         if (equalBytes(await fsReadFile(paths.source), legacy)) {
-            await fsRm(paths.source);
+            await fsPromises.rm(paths.source);
             await syncDirectory(dirname(paths.source));
         }
     } finally {

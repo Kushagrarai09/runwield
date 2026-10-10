@@ -4,7 +4,7 @@
 import { mkdirSync, renameSync } from "node:fs";
 import { readdir, stat as fsStat } from "node:fs/promises";
 import { clearInterval, clearTimeout, setInterval, setTimeout } from "node:timers";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync } from "../../../shared/sqlite.ts";
 import { dirname, join, relative } from "node:path";
 import { getHomeDir } from "../../../constants.js";
 import { listPlanResources } from "../../../plan-store.js";

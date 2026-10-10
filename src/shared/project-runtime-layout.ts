@@ -1,3 +1,4 @@
+import fsPromises from "node:fs/promises";
 import { open as fsOpen, rmdir as fsRmdir } from "node:fs/promises";
 import { type NativeFileLock, openNativeFileLock } from "./native-file-lock.ts";
 import { type CapturedProcessOutput, captureForegroundProcess } from "./captured-process.ts";
@@ -9,8 +10,6 @@ import {
     readdir as fsReaddir,
     readFile as fsReadFile,
     realpath as fsRealpath,
-    rename as fsRename,
-    rm as fsRm,
     writeFile as fsWriteFile,
 } from "node:fs/promises";
 import { clearInterval, setInterval } from "node:timers";
@@ -468,7 +467,7 @@ export async function migrateLegacyProjectRuntimeState(
                     ignoreMigrationLock: true,
                 });
                 if (lockedUnchanged && lockedMarker.marker) {
-                    await fsRm(layout.primary.layoutMigrationJournalPath).catch((error) => {
+                    await fsPromises.rm(layout.primary.layoutMigrationJournalPath).catch((error) => {
                         if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
                     });
                     return {
@@ -492,7 +491,7 @@ export async function migrateLegacyProjectRuntimeState(
                     adoptedSelectedCheckoutRoots,
                     completedAt: new Date().toISOString(),
                 });
-                await fsRm(layout.primary.layoutMigrationJournalPath).catch((error) => {
+                await fsPromises.rm(layout.primary.layoutMigrationJournalPath).catch((error) => {
                     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
                 });
                 return { kind: "ready", layout, migrated: true, adoptedSelectedCheckoutRoots };
@@ -1744,7 +1743,7 @@ async function applyRenameOperation(
         await writeJournal(layout.primary.layoutMigrationJournalPath, markOperation(journal, operation.source, false));
         await fsMkdir(dirname(operation.destination), { recursive: true, mode: 0o700 });
         try {
-            await fsRename(operation.source, operation.destination);
+            await fsPromises.rename(operation.source, operation.destination);
         } catch (error) {
             if (error instanceof Error && isCrossDeviceError(error)) {
                 return block(
@@ -1777,7 +1776,7 @@ async function applyRenameOperation(
         await fsRmdir(operation.destination);
         await syncDirectory(dirname(operation.destination));
         try {
-            await fsRename(operation.source, operation.destination);
+            await fsPromises.rename(operation.source, operation.destination);
         } catch (error) {
             if (error instanceof Error && isCrossDeviceError(error)) {
                 return block(
@@ -1953,10 +1952,10 @@ async function atomicWriteJson(path: string, value: MigrationJournal | LayoutMar
         } finally {
             await file.close();
         }
-        await fsRename(temporary, path);
+        await fsPromises.rename(temporary, path);
         await syncDirectory(dirname(path));
     } finally {
-        await fsRm(temporary).catch((error) => {
+        await fsPromises.rm(temporary).catch((error) => {
             if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
         });
     }
@@ -2021,7 +2020,7 @@ async function removeMigrationLockIfOwned(lockPath: string, token: string): Prom
     try {
         const parsed = JSON.parse(await fsReadFile(lockPath, "utf8"));
         if (parsed.token !== token) return;
-        await fsRm(lockPath);
+        await fsPromises.rm(lockPath);
     } catch (error) {
         if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     }

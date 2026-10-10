@@ -1,3 +1,4 @@
+import { captureForegroundProcess } from "../../shared/captured-process.ts";
 /**
  * @param {Record<string, string | undefined>} values
  * @returns {Deno.Env}
@@ -40,8 +41,7 @@ export function createTestApiContext(request) {
  * @param {string[]} args
  */
 export async function git(cwd, args) {
-    const command = new Deno.Command("git", { args, cwd, stdout: "piped", stderr: "piped" });
-    const output = await command.output();
+    const output = await captureForegroundProcess("git", { cwd, args });
     if (!output.success) {
         const decoder = new TextDecoder();
         throw new Error(decoder.decode(output.stderr) || decoder.decode(output.stdout));

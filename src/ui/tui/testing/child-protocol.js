@@ -1,3 +1,7 @@
+import { rmSync as fsRmSync } from "node:fs";
+import { mkdtemp as fsMkdtemp, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import process from "node:process";
 /**
  * @module ui/tui/testing/child-protocol
  * Parent/child protocol for subprocess-isolated Golden TUI scenarios.
@@ -44,8 +48,8 @@ function parseLastJsonLine(stdout) {
  * @param {unknown} childPayload
  */
 async function writeChildFailureArtifact(request, result, childPayload) {
-    const artifactDir = await Deno.makeTempDir({ prefix: "runwield-golden-tui-child-failure-" });
-    await Deno.writeTextFile(
+    const artifactDir = await fsMkdtemp(join(tmpdir(), "runwield-golden-tui-child-failure-"));
+    await fsWriteFile(
         join(artifactDir, "child-diagnostics.json"),
         JSON.stringify(
             {
@@ -76,7 +80,7 @@ async function removeChildEnvironmentRoot(childPayload) {
     if (!env || typeof env !== "object") return;
     const root = /** @type {{ root?: unknown }} */ (env).root;
     if (typeof root !== "string" || !root) return;
-    await Deno.remove(root, { recursive: true }).catch(() => {});
+    await fsRm(root, { recursive: true }).catch(() => {});
 }
 
 /**
@@ -101,11 +105,7 @@ export async function runGoldenScenarioChildProcess(request) {
     // stalls scenario startup. The repo type gate is `deno task check`.
     const result = await runGoldenChild([
         "run",
-        "-A",
-        "--no-check",
-        // The sandboxed test runner prepares dependencies before any test runs.
-        // Keep a fresh process, but reuse that installation for every journey.
-        "--node-modules-dir=manual",
+        ...(process.versions.deno ? ["-A", "--no-check", "--node-modules-dir=manual"] : ["--no-install"]),
         fromFileUrl(import.meta.url),
         CHILD_FLAG,
         payload,
@@ -153,7 +153,7 @@ export async function runGoldenScenarioChildProcess(request) {
             ? /** @type {{ heartbeatArtifactDir?: unknown }} */ (childPayload).heartbeatArtifactDir
             : null;
         if (!request.keepArtifacts && typeof heartbeatArtifactDir === "string") {
-            await Deno.remove(heartbeatArtifactDir, { recursive: true }).catch(() => {});
+            await fsRm(heartbeatArtifactDir, { recursive: true }).catch(() => {});
         }
         // Run the scenario's own assertions against the pre-exit report; the
         // child that produced it is already gone.
@@ -178,8 +178,8 @@ async function runChild(request) {
         initDone: request.initDone,
         initArtifact: request.initArtifact,
     });
-    const timeoutArtifactDir = await Deno.makeTempDir({ prefix: "runwield-golden-tui-timeout-" });
-    await Deno.writeTextFile(
+    const timeoutArtifactDir = await fsMkdtemp(join(tmpdir(), "runwield-golden-tui-timeout-"));
+    await fsWriteFile(
         join(timeoutArtifactDir, "timeout-diagnostics.json"),
         JSON.stringify(
             {
@@ -212,7 +212,7 @@ async function runChild(request) {
     const handleTermination = () => {
         if (!request.keepArtifacts) {
             try {
-                Deno.removeSync(env.root, { recursive: true });
+                fsRmSync(env.root, { recursive: true });
             } catch {
                 // Best effort; the parent sweeps the environment as a backstop.
             }
@@ -220,34 +220,34 @@ async function runChild(request) {
         // Composed scenarios run under the process-global test lock, and exiting
         // here skips the release in its `finally`.
         releaseProcessGlobalTestLockSync();
-        Deno.exit(143);
+        process.exit(143);
     };
-    Deno.addSignalListener("SIGTERM", handleTermination);
+    process.on("SIGTERM", handleTermination);
     try {
-        for (const [key, value] of Object.entries(env.env)) Deno.env.set(key, value);
-        Deno.chdir(env.projectRoot);
-        Deno.env.set("WLD_GOLDEN_TUI_CHILD", "1");
-        await Deno.writeTextFile(join(timeoutArtifactDir, "startup-phase.txt"), "loading init state\n");
+        for (const [key, value] of Object.entries(env.env)) process.env[key] = value;
+        process.chdir(env.projectRoot);
+        process.env["WLD_GOLDEN_TUI_CHILD"] = "1";
+        await fsWriteFile(join(timeoutArtifactDir, "startup-phase.txt"), "loading init state\n");
         const { _setTestStatePath } = await import("../../../cmd/init/init-state.ts");
         _setTestStatePath(join(env.runwieldDir, "init-state.json"));
-        await Deno.writeTextFile(join(timeoutArtifactDir, "startup-phase.txt"), "loading scenario runner\n");
+        await fsWriteFile(join(timeoutArtifactDir, "startup-phase.txt"), "loading scenario runner\n");
         const { runGoldenScenario } = await import("./scenario-runner.js");
         const moduleUrl = request.scenarioModule.startsWith("file:")
             ? request.scenarioModule
             : toFileUrl(join(REPO_ROOT, request.scenarioModule)).href;
-        await Deno.writeTextFile(join(timeoutArtifactDir, "startup-phase.txt"), "loading scenario\n");
+        await fsWriteFile(join(timeoutArtifactDir, "startup-phase.txt"), "loading scenario\n");
         const module = await import(moduleUrl);
         const scenario = module[request.exportName];
         if (!scenario) throw new Error(`Missing scenario export: ${request.exportName}`);
         try {
-            await Deno.writeTextFile(join(timeoutArtifactDir, "startup-phase.txt"), "starting scenario\n");
+            await fsWriteFile(join(timeoutArtifactDir, "startup-phase.txt"), "starting scenario\n");
             const result = await runGoldenScenario(scenario, {
                 keepArtifacts: request.keepArtifacts,
                 artifactRoot: timeoutArtifactDir,
                 heartbeatPath: join(timeoutArtifactDir, "timeout-diagnostics.json"),
                 onReady: () => console.log(GOLDEN_CHILD_READY_MARKER),
             });
-            await Deno.remove(timeoutArtifactDir, { recursive: true }).catch(() => {});
+            await fsRm(timeoutArtifactDir, { recursive: true }).catch(() => {});
             console.log(JSON.stringify({ ok: true, result, env: { root: env.root, projectRoot: env.projectRoot } }));
         } catch (error) {
             console.log(JSON.stringify({
@@ -260,18 +260,18 @@ async function runChild(request) {
                 heartbeatArtifactDir: timeoutArtifactDir,
                 env: { root: env.root, projectRoot: env.projectRoot },
             }));
-            Deno.exitCode = 1;
+            process.exitCode = 1;
             return;
         }
     } finally {
         // A registered signal listener holds the event loop open, so this has to
         // come off before the child can exit on its own.
-        Deno.removeSignalListener("SIGTERM", handleTermination);
+        process.off("SIGTERM", handleTermination);
         await env.cleanup();
     }
 }
 
-if (import.meta.main && Deno.args[0] === CHILD_FLAG) {
-    const request = JSON.parse(Deno.args[1] || "{}");
+if (import.meta.main && process.argv.slice(2)[0] === CHILD_FLAG) {
+    const request = JSON.parse(process.argv.slice(2)[1] || "{}");
     await runChild(request);
 }

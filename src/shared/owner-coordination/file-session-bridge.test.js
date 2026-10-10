@@ -9,7 +9,7 @@ import { test } from "node:test";
 import { tmpdir } from "node:os";
 import { assertEquals } from "@std/assert";
 import { join } from "@std/path";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync } from "../sqlite.ts";
 import { openFileSessionStore } from "../session/file-session-store.ts";
 import { encodeCwdForSessionDir } from "../session/root-session.js";
 import { openOwnerCoordinationStore } from "./index.js";

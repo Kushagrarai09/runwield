@@ -1,3 +1,5 @@
+import { spawnForegroundProcess } from "../../foreground-process.ts";
+import { runtimeSourceArgs } from "../../../testing/runtime-source-args.ts";
 import process from "node:process";
 import { mkdtemp as fsMkdtemp, rm as fsRm, stat as fsStat, writeFile as fsWriteFile } from "node:fs/promises";
 import { test } from "node:test";
@@ -138,6 +140,51 @@ test("Agy stdio review calls survive sixty elapsed seconds and preserve structur
         decision.resolve();
         await client.close();
         await transport.close();
+        await bridge.close();
+        await fsRm(cwd, { recursive: true });
+    }
+});
+
+
+test("stdio EOF releases the upstream bridge and exits without a host termination signal", async () => {
+    const cwd = await fsMkdtemp(join(tmpdir(), "runwield-stdio-eof-"));
+    const bridge = await startRunWieldMcpBridge({
+        tools: [defineTool({
+            name: "task_completed", label: "Completion", description: "Report completion.", parameters: Type.Object({}),
+            execute() { return Promise.resolve({ content: [{ type: "text", text: "done" }], details: {} }); },
+        })], cwd, sessionManager: SessionManager.inMemory(cwd),
+        assistantBase: { api: "agy-cli", provider: "agy-cli", model: "fixture-model" },
+        provenance: AGY_CLI_MCP_PROVENANCE,
+    });
+    const child = spawnForegroundProcess({
+        command: process.execPath,
+        args: runtimeSourceArgs(["run", "-A", "--unstable-no-legacy-abort", `${getCwd()}/src/cli.ts`, "mcp", "agy-cli"]),
+        cwd: getCwd(), stdin: "piped", timeoutMs: 10_000,
+        env: { [RUNWIELD_MCP_BRIDGE_URL_ENV]: bridge.url, [RUNWIELD_MCP_BRIDGE_TOKEN_ENV]: bridge.token },
+    });
+    const writer = child.stdin!.getWriter();
+    const reader = child.stdout.getReader();
+    const stderr = new Response(child.stderr).text();
+    try {
+        await writer.write(new TextEncoder().encode(JSON.stringify({
+            jsonrpc: "2.0", id: 1, method: "initialize",
+            params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "eof-regression", version: "1" } },
+        }) + "\n"));
+        let response = "";
+        while (!response.includes("\n")) {
+            const chunk = await reader.read();
+            if (chunk.done) throw new Error(`Bridge exited before initialization: ${await stderr}`);
+            response += new TextDecoder().decode(chunk.value);
+        }
+        assertEquals(JSON.parse(response.split("\n")[0]).id, 1);
+        await writer.close();
+        while (!(await reader.read()).done) { /* Drain until natural exit. */ }
+        assertEquals(await child.done, { exitCode: 0, terminatedBy: null }, await stderr);
+    } finally {
+        child.kill();
+        reader.releaseLock();
+        writer.releaseLock();
+        await child.done;
         await bridge.close();
         await fsRm(cwd, { recursive: true });
     }

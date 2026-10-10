@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assertEquals, assertRejects } from "@std/assert";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { Type } from "@earendil-works/pi-ai";
@@ -70,7 +71,7 @@ function deferredVoid(): { promise: Promise<void>; resolve: () => void } {
     return { promise, resolve };
 }
 
-Deno.test("agent handler completes a real root turn and requests user attention", async () => {
+test("agent handler completes a real root turn and requests user attention", async () => {
     await withRuntimeCommandFixture("agent-handler-turn-", async ({ projectRoot, setModelResponse }) => {
         const events: CapturedRuntimeEvent[] = [];
         setModelResponse("Fixture answer from the real Guide root session.");
@@ -91,7 +92,7 @@ Deno.test("agent handler completes a real root turn and requests user attention"
     });
 });
 
-Deno.test("agent handler settles the accepted plan tool before dispatch without another model answer", async () => {
+test("agent handler settles the accepted plan tool before dispatch without another model answer", async () => {
     await withRuntimeCommandFixture("agent-handler-live-plan-", async ({ projectRoot, setModelMessages }) => {
         const events: CapturedRuntimeEvent[] = [];
         const toolPublished = deferredVoid();
@@ -139,7 +140,7 @@ Deno.test("agent handler settles the accepted plan tool before dispatch without 
     });
 });
 
-Deno.test("agent handler leaves a prior triage event for its original request", async () => {
+test("agent handler leaves a prior triage event for its original request", async () => {
     await withRuntimeCommandFixture("agent-handler-stale-triage-", async ({ projectRoot, setModelResponse }) => {
         const events: CapturedRuntimeEvent[] = [];
         setModelResponse("Answer the new request without routing the old one.");
@@ -162,7 +163,7 @@ Deno.test("agent handler leaves a prior triage event for its original request", 
     });
 });
 
-Deno.test("agent handler safely stops a terminal Plan outcome after feedback", async () => {
+test("agent handler safely stops a terminal Plan outcome after feedback", async () => {
     await withRuntimeCommandFixture(
         "agent-handler-feedback-terminal-",
         async ({ projectRoot, setModelResponseFactories }) => {
@@ -225,7 +226,7 @@ Deno.test("agent handler safely stops a terminal Plan outcome after feedback", a
     );
 });
 
-Deno.test("agent handler routes a real triage tool outcome through Operator completion", async () => {
+test("agent handler routes a real triage tool outcome through Operator completion", async () => {
     await withRuntimeCommandFixture("agent-handler-operation-", async ({ projectRoot, setModelMessages }) => {
         const events: CapturedRuntimeEvent[] = [];
         setModelMessages([
@@ -260,7 +261,7 @@ Deno.test("agent handler routes a real triage tool outcome through Operator comp
     });
 });
 
-Deno.test("agent handler does not redispatch a stale Triage report on a later invocation", async () => {
+test("agent handler does not redispatch a stale Triage report on a later invocation", async () => {
     await withRuntimeCommandFixture("agent-handler-stale-triage-", async ({ projectRoot, setModelResponse }) => {
         const events: CapturedRuntimeEvent[] = [];
         setModelResponse("The later Router invocation completed without another routing decision.");
@@ -289,7 +290,7 @@ Deno.test("agent handler does not redispatch a stale Triage report on a later in
     });
 });
 
-Deno.test("agent handler rejects a handler whose root Agent changed", async () => {
+test("agent handler rejects a handler whose root Agent changed", async () => {
     await withRuntimeCommandFixture("agent-handler-drift-", async ({ projectRoot }) => {
         const events: CapturedRuntimeEvent[] = [];
         const fixture = await activateHandler(projectRoot, "guide", events);
@@ -304,7 +305,7 @@ Deno.test("agent handler rejects a handler whose root Agent changed", async () =
     });
 });
 
-Deno.test("agent handler does not treat a resume phrase as Pair authority", async () => {
+test("agent handler does not treat a resume phrase as Pair authority", async () => {
     await withRuntimeCommandFixture("agent-handler-pair-", async ({ projectRoot, setModelResponse }) => {
         const events: CapturedRuntimeEvent[] = [];
         setModelResponse("Continuing the isolated Pair execution.");
@@ -328,7 +329,7 @@ Deno.test("agent handler does not treat a resume phrase as Pair authority", asyn
     });
 });
 
-Deno.test("agent handler replays accepted task_completed after HostedSession replacement", async () => {
+test("agent handler replays accepted task_completed after HostedSession replacement", async () => {
     await withRuntimeCommandFixture("agent-handler-durable-completion-", async ({ projectRoot }) => {
         const sessionManager = SessionManager.inMemory(projectRoot);
         const original = new HostedSession({
@@ -386,10 +387,17 @@ Deno.test("agent handler replays accepted task_completed after HostedSession rep
     });
 });
 
-Deno.test("sequential QUICK_FIX completions each run Mechanical Validation", async () => {
+test("sequential QUICK_FIX completions each run Mechanical Validation", async () => {
     await withRuntimeCommandFixture("agent-handler-quick-fix-rearm-", async ({ projectRoot, setModelResponse }) => {
         setModelResponse("Continuing QUICK_FIX work.");
-        await setCustomSetting("verification_command", "deno eval 'Deno.exit(0)'", "project", projectRoot);
+        await setCustomSetting(
+            "verification_command",
+            `'${process.execPath.replaceAll("'", "'\"'\"'")}' ${
+                process.versions.deno ? "eval" : "--eval"
+            } 'process.exit(0)'`,
+            "project",
+            projectRoot,
+        );
         const events: CapturedRuntimeEvent[] = [];
         const fixture = await activateHandler(projectRoot, "engineer", events);
         fixture.hostedSession.setActiveExecutionWorkflow({
