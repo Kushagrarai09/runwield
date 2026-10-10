@@ -428,3 +428,22 @@ with 1,168 Deno references (including compatibility backends and fixture helpers
 not be read as complete command coverage. The next implementation should start at `project-runtime-layout.ts`,
 `plan-store.js`, `lock-file-snapshot.ts`, `controller-registry.ts` and their real contention/recovery tests. No
 publication, merge, release, installation, credential change or study cohort occurred.
+
+## Portable Plan and project runtime persistence (2026-10-10)
+
+Plan storage, project layout/recovery, controller registry and Git evidence now use portable filesystem and captured
+process APIs. Native lock descriptors preserve inode identity, async contention, full durable writes and snapshots.
+Existing recovery archives, no-overwrite Plan creation and controller revisions remain enforced. The catalog contention
+test proves ID backfill waits for the writer before changing bytes; returning-controller tests preserve decisions and
+source backups. Review S5 corrected a Node EEXIST consumer; T14 strengthened the real contention assertion. All three
+review axes approved.
+
+The complete Deno CI gate passed 635 files in 629.3 seconds (`.ci-cache/plan-port-full-ci.log`). The integrated Bun gate
+passed all 24 registered files on macOS (141 tests, five platform skips), and Linux passed 144 tests with two skips
+(`.ci-cache/plan-port-ci-bun.log`, `.ci-cache/linux-plan-port-suite.log`). Both standalone packages also execute the
+actual `plans` command from disposable HOME/cwd, alongside the previous image/Workspace qualification; Linux again
+passed in a minimal container without the checkout (`.ci-cache/plan-package-check.log`,
+`.ci-cache/plan-linux-package-check-minimal.log`).
+
+The next slice targets interactive onboarding, Session activation, provider turns and durable resume. Remote transport,
+supervisor and broader workflow paths, full Bun type coverage, Windows and x64 remain unqualified.

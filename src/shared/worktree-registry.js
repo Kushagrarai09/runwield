@@ -1,3 +1,16 @@
+import { open as fsOpen } from "node:fs/promises";
+import { captureForegroundProcess } from "./captured-process.ts";
+import { realpathSync as fsRealpathSync } from "node:fs";
+import {
+    mkdir as fsMkdir,
+    readFile as fsReadFile,
+    realpath as fsRealpath,
+    rename as fsRename,
+    rm as fsRm,
+    stat as fsStat,
+    writeFile as fsWriteFile,
+} from "node:fs/promises";
+import { pid } from "node:process";
 /**
  * @module shared/worktree-registry
  * Durable registry for RunWield execution worktrees.
@@ -144,8 +157,7 @@ function delay(ms) {
  * @returns {Promise<{ code: number, stdout: string, stderr: string }>}
  */
 async function runGitResult(cwd, args) {
-    const command = new Deno.Command("git", { args, cwd, stdout: "piped", stderr: "piped" });
-    const { code, stdout, stderr } = await command.output();
+    const { code, stdout, stderr } = await captureForegroundProcess("git", { args, cwd });
     const decoder = new TextDecoder();
     return { code, stdout: decoder.decode(stdout), stderr: decoder.decode(stderr) };
 }
@@ -258,8 +270,8 @@ async function migrateLegacyRegistryEntries(projectRoot, entries, resources) {
     }
     if (migrationIssues.length > 0) {
         const path = resolveProjectRuntimeLayout(projectRoot).primary.worktreeRegistryMigrationIssuesPath;
-        await Deno.mkdir(dirname(path), { recursive: true });
-        await Deno.writeTextFile(path, JSON.stringify({ version: 1, issues: migrationIssues }, null, 2));
+        await fsMkdir(dirname(path), { recursive: true });
+        await fsWriteFile(path, JSON.stringify({ version: 1, issues: migrationIssues }, null, 2));
     }
     return changed;
 }
@@ -322,7 +334,7 @@ async function readRegistry(projectRoot, options = {}) {
         }
         return entries;
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) return [];
+        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return [];
         throw error;
     }
 }
@@ -362,26 +374,26 @@ function assertNoDuplicateNonterminalAttempt(entries, candidate) {
  */
 async function writeRegistry(projectRoot, entries) {
     const path = (await enterProjectRuntime(projectRoot)).primary.worktreeRegistryPath;
-    await Deno.mkdir(dirname(path), { recursive: true });
+    await fsMkdir(dirname(path), { recursive: true });
     const tmp = `${path}.${crypto.randomUUID()}.tmp`;
     const payload = `${JSON.stringify({ version: 2, entries }, null, 2)}\n`;
     try {
-        const file = await Deno.open(tmp, { create: true, write: true, truncate: true });
+        const file = await fsOpen(tmp, "w");
         try {
-            await file.write(new TextEncoder().encode(payload));
+            await file.writeFile(payload);
             await file.sync();
         } finally {
-            file.close();
+            await file.close();
         }
-        await Deno.rename(tmp, path);
-        const dir = await Deno.open(dirname(path), { read: true });
+        await fsRename(tmp, path);
+        const dir = await fsOpen(dirname(path), "r");
         try {
             await dir.sync();
         } finally {
-            dir.close();
+            await dir.close();
         }
     } catch (error) {
-        await Deno.remove(tmp).catch(() => {});
+        await fsRm(tmp).catch(() => {});
         throw error;
     }
 }
@@ -408,28 +420,28 @@ async function isStaleLock(snapshot) {
  * @returns {Promise<T>}
  */
 export async function withWorktreeRegistryLockAtPath(lockPath, fn) {
-    await Deno.mkdir(dirname(lockPath), { recursive: true });
+    await fsMkdir(dirname(lockPath), { recursive: true });
     const deadline = Date.now() + LOCK_TIMEOUT_MS;
     const token = crypto.randomUUID();
 
     while (true) {
         try {
-            const file = await Deno.open(lockPath, { createNew: true, write: true });
+            const file = await fsOpen(lockPath, "wx");
             try {
                 const payload = JSON.stringify({
                     token,
-                    pid: Deno.pid,
+                    pid: pid,
                     hostname: getLockHostname(),
                     createdAtMs: Date.now(),
                 });
-                await file.write(new TextEncoder().encode(payload));
+                await file.writeFile(payload);
                 await file.sync();
             } finally {
-                file.close();
+                await file.close();
             }
             break;
         } catch (error) {
-            if (!(error instanceof Deno.errors.AlreadyExists)) throw error;
+            if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
             const snapshot = await readLockFileSnapshot(lockPath);
             if (!snapshot) continue;
             if (await isStaleLock(snapshot) && await removeLockFileIfSnapshotMatches(lockPath, snapshot)) {
@@ -476,9 +488,11 @@ export async function inspectWorktreeRegistryAtPath(registryPath) {
     const integrityIssues = [];
     let text;
     try {
-        text = await Deno.readTextFile(registryPath);
+        text = await fsReadFile(registryPath, "utf8");
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) return { version: 2, entries: [], integrityIssues };
+        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) {
+            return { version: 2, entries: [], integrityIssues };
+        }
         return {
             version: 0,
             entries: [],
@@ -897,14 +911,14 @@ export async function restoreEntryFromPlanEvidence(projectRoot, evidence) {
         const expectedRef = `refs/heads/${evidence.branch}`;
         let evidenceRealPath = evidence.path;
         try {
-            evidenceRealPath = await Deno.realPath(evidence.path);
+            evidenceRealPath = await fsRealpath(evidence.path);
         } catch {
             return { restored: false, reason: `Recorded worktree path is missing: ${evidence.path}` };
         }
         const match = parseGitWorktreeRecords(worktreeList).find((record) => {
             let recordRealPath = record.path;
             try {
-                recordRealPath = Deno.realPathSync(record.path);
+                recordRealPath = fsRealpathSync(record.path);
             } catch {
                 // Keep the recorded path; the equality will fail.
             }
@@ -1207,7 +1221,7 @@ export async function findById(projectRoot, id, options = {}) {
 async function addWorktreePathVariants(paths, path) {
     paths.add(path);
     try {
-        paths.add(await Deno.realPath(path));
+        paths.add(await fsRealpath(path));
     } catch {
         // Missing paths are handled by the caller's stat check.
     }
@@ -1215,13 +1229,10 @@ async function addWorktreePathVariants(paths, path) {
 
 /** @param {string} projectRoot */
 async function listGitWorktreePaths(projectRoot) {
-    const command = new Deno.Command("git", {
+    const { code, stdout } = await captureForegroundProcess("git", {
         args: ["worktree", "list", "--porcelain"],
         cwd: projectRoot,
-        stdout: "piped",
-        stderr: "null",
     });
-    const { code, stdout } = await command.output();
     if (code !== 0) return null;
     const text = new TextDecoder().decode(stdout);
     const paths = new Set();
@@ -1243,11 +1254,11 @@ export async function pruneStaleEntries(projectRoot) {
         const stale = [];
         for (const entry of entries) {
             try {
-                const stat = await Deno.stat(entry.path);
-                const realPath = await Deno.realPath(entry.path);
+                const stat = await fsStat(entry.path);
+                const realPath = await fsRealpath(entry.path);
                 const isRegisteredGitWorktree = !gitWorktreePaths ||
                     gitWorktreePaths.has(entry.path) || gitWorktreePaths.has(realPath);
-                if (stat.isDirectory && isRegisteredGitWorktree) kept.push(entry);
+                if (stat.isDirectory() && isRegisteredGitWorktree) kept.push(entry);
                 else stale.push(entry);
             } catch {
                 stale.push(entry);

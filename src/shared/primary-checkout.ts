@@ -1,9 +1,10 @@
+import { readFileSync as fsReadFileSync, type Stats, statSync as fsStatSync } from "node:fs";
 import { dirname, join, normalize } from "@std/path";
 
 function isGitEntry(path: string): boolean {
     try {
-        const stat = Deno.statSync(path);
-        return stat.isDirectory || stat.isFile;
+        const stat = fsStatSync(path);
+        return stat.isDirectory() || stat.isFile();
     } catch {
         return false;
     }
@@ -17,17 +18,17 @@ function isGitEntry(path: string): boolean {
  */
 export function resolvePrimaryCheckoutRoot(root: string): string {
     const gitPath = join(root, ".git");
-    let gitStat: Deno.FileInfo;
+    let gitStat: Stats;
     try {
-        gitStat = Deno.statSync(gitPath);
+        gitStat = fsStatSync(gitPath);
     } catch {
         return root;
     }
-    if (!gitStat.isFile) return root;
+    if (!gitStat.isFile()) return root;
 
     let text = "";
     try {
-        text = Deno.readTextFileSync(gitPath).trim();
+        text = fsReadFileSync(gitPath, "utf8").trim();
     } catch {
         return root;
     }

@@ -17,5 +17,10 @@
     "src/ui/workspace/workspace-portable.test.ts",
     "src/shared/session/file-session-store.test.js",
     "src/shared/owner-coordination/database.test.js",
-    "src/ui/review/document-link-host.test.ts"
+    "src/ui/review/document-link-host.test.ts",
+    "src/plan-store-locks.test.ts",
+    "src/shared/primary-checkout.test.ts",
+    "src/shared/git-evidence-cache.test.ts",
+    "src/shared/project-runtime-entry.integration.test.ts",
+    "src/shared/project-runtime-portable.test.ts"
 ]

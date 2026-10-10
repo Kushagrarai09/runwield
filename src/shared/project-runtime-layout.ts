@@ -1,3 +1,20 @@
+import { open as fsOpen, rmdir as fsRmdir } from "node:fs/promises";
+import { type NativeFileLock, openNativeFileLock } from "./native-file-lock.ts";
+import { type CapturedProcessOutput, captureForegroundProcess } from "./captured-process.ts";
+import { type Dirent, realpathSync as fsRealpathSync, type Stats } from "node:fs";
+import {
+    chmod as fsChmod,
+    lstat as fsLstat,
+    mkdir as fsMkdir,
+    readdir as fsReaddir,
+    readFile as fsReadFile,
+    realpath as fsRealpath,
+    rename as fsRename,
+    rm as fsRm,
+    writeFile as fsWriteFile,
+} from "node:fs/promises";
+import { clearInterval, setInterval } from "node:timers";
+import { pid, platform } from "node:process";
 import { basename, dirname, join, resolve, SEPARATOR } from "@std/path";
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
@@ -243,9 +260,9 @@ const WORK_RECORD_LOCK_HEARTBEAT_MS = 10_000;
 
 export function resolveProjectRoot(projectRoot: string): string {
     try {
-        return Deno.realPathSync(projectRoot);
+        return fsRealpathSync(projectRoot);
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) return resolve(projectRoot);
+        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return resolve(projectRoot);
         throw error;
     }
 }
@@ -371,11 +388,11 @@ export function enterProjectRuntime(selectedCheckoutRoot: string): Promise<Proje
 }
 
 async function enterProjectRuntimeUncached(selectedCheckoutRoot: string): Promise<ProjectRuntimeLayout> {
-    const rootInfo = await Deno.lstat(selectedCheckoutRoot).catch((error) => {
-        if (error instanceof Deno.errors.NotFound) return null;
+    const rootInfo = await fsLstat(selectedCheckoutRoot).catch((error) => {
+        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return null;
         throw error;
     });
-    if (rootInfo && !rootInfo.isDirectory) throw new Error("Project root must be a directory");
+    if (rootInfo && !rootInfo.isDirectory()) throw new Error("Project root must be a directory");
     const result = await migrateLegacyProjectRuntimeState(selectedCheckoutRoot);
     if (result.kind === "blocked") throw new ProjectRuntimeEntryRefusedError(result);
     if (rootInfo) {
@@ -451,8 +468,8 @@ export async function migrateLegacyProjectRuntimeState(
                     ignoreMigrationLock: true,
                 });
                 if (lockedUnchanged && lockedMarker.marker) {
-                    await Deno.remove(layout.primary.layoutMigrationJournalPath).catch((error) => {
-                        if (!(error instanceof Deno.errors.NotFound)) throw error;
+                    await fsRm(layout.primary.layoutMigrationJournalPath).catch((error) => {
+                        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
                     });
                     return {
                         kind: "ready",
@@ -475,8 +492,8 @@ export async function migrateLegacyProjectRuntimeState(
                     adoptedSelectedCheckoutRoots,
                     completedAt: new Date().toISOString(),
                 });
-                await Deno.remove(layout.primary.layoutMigrationJournalPath).catch((error) => {
-                    if (!(error instanceof Deno.errors.NotFound)) throw error;
+                await fsRm(layout.primary.layoutMigrationJournalPath).catch((error) => {
+                    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
                 });
                 return { kind: "ready", layout, migrated: true, adoptedSelectedCheckoutRoots };
             };
@@ -513,7 +530,7 @@ function block(
 
 async function canonicalExistingRoot(path: string): Promise<string> {
     try {
-        return await Deno.realPath(path);
+        return await fsRealpath(path);
     } catch {
         return resolve(path);
     }
@@ -539,7 +556,7 @@ async function readLayoutMarker(
     layout: ProjectRuntimeLayout,
 ): Promise<{ marker: LayoutMarker | null } | ProjectRuntimeMigrationBlockedResult> {
     try {
-        const parsed = JSON.parse(await Deno.readTextFile(layout.primary.layoutMarkerPath));
+        const parsed = JSON.parse(await fsReadFile(layout.primary.layoutMarkerPath, "utf8"));
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
             return block(
                 "malformed_migration_evidence",
@@ -574,7 +591,7 @@ async function readLayoutMarker(
         }
         return { marker: parsed as LayoutMarker };
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) return { marker: null };
+        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return { marker: null };
         if (error instanceof SyntaxError) {
             return block(
                 "malformed_migration_evidence",
@@ -823,13 +840,11 @@ async function listGitWorktrees(
     const reused = reusedGitRead<GitWorktreeRecord[]>(evidence);
     if (reused) return { worktrees: await withRealPaths(reused) };
     const runWorktreeList = () =>
-        new Deno.Command("git", {
+        captureForegroundProcess("git", {
             cwd: primaryCheckoutRoot,
             args: ["worktree", "list", "--porcelain"],
-            stdout: "piped",
-            stderr: "piped",
-        }).output();
-    let output: Deno.CommandOutput;
+        });
+    let output: CapturedProcessOutput;
     try {
         output = await runWorktreeList();
         // Git can report a transient failure while another process changes a linked worktree.
@@ -872,7 +887,7 @@ async function withRealPaths(records: GitWorktreeRecord[]): Promise<GitWorktree[
     for (const { path, branch } of records) {
         let realPath = path;
         try {
-            realPath = await Deno.realPath(path);
+            realPath = await fsRealpath(path);
         } catch {
             // A missing worktree is not usable evidence.
         }
@@ -919,28 +934,30 @@ async function resolveSelectedRoots(
     }
     for (const entry of entries) {
         if (typeof entry.path !== "string" || !entry.path) continue;
-        let stat: Deno.FileInfo;
+        let stat: Stats;
         try {
-            stat = await Deno.lstat(entry.path);
+            stat = await fsLstat(entry.path);
         } catch (error) {
-            if (error instanceof Deno.errors.NotFound && entry.status === "abandoned") continue;
+            if (
+                (error instanceof Error && "code" in error && error.code === "ENOENT") && entry.status === "abandoned"
+            ) continue;
             return block(
                 "invalid_registered_checkout",
                 [entry.path],
                 "A live registry entry names a missing checkout.",
             );
         }
-        if (stat.isSymlink) {
+        if (stat.isSymbolicLink()) {
             return block("symlink", [entry.path], "A registry entry names a symlinked checkout.");
         }
-        if (!stat.isDirectory) {
+        if (!stat.isDirectory()) {
             return block(
                 "invalid_registered_checkout",
                 [entry.path],
                 "A registry entry names a non-directory checkout.",
             );
         }
-        const realPath = await Deno.realPath(entry.path);
+        const realPath = await fsRealpath(entry.path);
         if (!byRealPath.has(realPath)) {
             return block(
                 "invalid_registered_checkout",
@@ -991,14 +1008,12 @@ async function findTrackedRuntimePaths(
             addTrackedRuntimePaths(root, reused, runtimePaths, secretPaths);
             continue;
         }
-        let output: Deno.CommandOutput;
+        let output: CapturedProcessOutput;
         try {
-            output = await new Deno.Command("git", {
+            output = await captureForegroundProcess("git", {
                 cwd: root,
                 args: ["ls-files", "-z", "--", ...pathspecs],
-                stdout: "piped",
-                stderr: "null",
-            }).output();
+            });
         } catch (error) {
             if (!(await lstatOrNull(join(root, ".git")))) continue;
             throw error;
@@ -1106,7 +1121,7 @@ function authoritySymlinks(
 
 async function collectOnlyThisSymlink(path: string, symlinks: string[]): Promise<void> {
     const info = await lstatOrNull(path);
-    if (info?.isSymlink) symlinks.push(path);
+    if (info?.isSymbolicLink()) symlinks.push(path);
 }
 
 async function collectSymlinks(
@@ -1116,11 +1131,11 @@ async function collectSymlinks(
 ): Promise<void> {
     const info = await lstatOrNull(path);
     if (!info) return;
-    if (info.isSymlink) {
+    if (info.isSymbolicLink()) {
         symlinks.push(path);
         return;
     }
-    if (!info.isDirectory) return;
+    if (!info.isDirectory()) return;
     const entries = await safeReadDir(path);
     if (!entries) return;
     if (repositoryContainers.has(path)) {
@@ -1128,11 +1143,11 @@ async function collectSymlinks(
             const checkoutRoot = join(path, entry.name);
             const checkoutInfo = await lstatOrNull(checkoutRoot);
             if (!checkoutInfo) continue;
-            if (checkoutInfo.isSymlink) {
+            if (checkoutInfo.isSymbolicLink()) {
                 symlinks.push(checkoutRoot);
                 continue;
             }
-            if (checkoutInfo.isDirectory && await lstatOrNull(join(checkoutRoot, ".git"))) continue;
+            if (checkoutInfo.isDirectory() && await lstatOrNull(join(checkoutRoot, ".git"))) continue;
             await collectSymlinks(checkoutRoot, symlinks, repositoryContainers);
         }
         return;
@@ -1146,10 +1161,10 @@ async function collectSpecialFiles(path: string, kind: PathKind, specialFiles: s
     const info = await lstatOrNull(path);
     if (!info) return;
     if (kind === "file") {
-        if (!info.isFile) specialFiles.push(path);
+        if (!info.isFile()) specialFiles.push(path);
         return;
     }
-    if (!info.isDirectory) {
+    if (!info.isDirectory()) {
         specialFiles.push(path);
         return;
     }
@@ -1159,8 +1174,8 @@ async function collectSpecialFiles(path: string, kind: PathKind, specialFiles: s
         const child = join(path, entry.name);
         const childInfo = await lstatOrNull(child);
         if (!childInfo) continue;
-        if (childInfo.isDirectory) await collectSpecialFiles(child, "directory", specialFiles);
-        else if (!childInfo.isFile && !childInfo.isSymlink) specialFiles.push(child);
+        if (childInfo.isDirectory()) await collectSpecialFiles(child, "directory", specialFiles);
+        else if (!childInfo.isFile() && !childInfo.isSymbolicLink()) specialFiles.push(child);
     }
 }
 
@@ -1223,7 +1238,7 @@ async function currentConflictsInRoot(
 ): Promise<string[]> {
     const info = await lstatOrNull(internalRoot);
     if (!info) return [];
-    if (!info.isDirectory) return [internalRoot];
+    if (!info.isDirectory()) return [internalRoot];
     const entries = await safeReadDir(internalRoot);
     if (!entries) return [];
     const conflicts: string[] = [];
@@ -1352,8 +1367,8 @@ function retireLockOperation(source: string, proof: LockSnapshot): MigrationReti
     return { action: "retire", source, kind: "file", proof, completed: false };
 }
 
-async function canTakeControllerLock(path: string): Promise<boolean> {
-    const file = await Deno.open(path, { read: true, write: true });
+function canTakeControllerLock(path: string): boolean {
+    const file = openNativeFileLock(path, false);
     try {
         if (!file.tryLockSync(true)) return false;
         file.unlockSync();
@@ -1571,7 +1586,7 @@ async function readJournal(
     path: string,
 ): Promise<{ journal: MigrationJournal | null } | ProjectRuntimeMigrationBlockedResult> {
     try {
-        const parsed = JSON.parse(await Deno.readTextFile(path));
+        const parsed = JSON.parse(await fsReadFile(path, "utf8"));
         if (
             !parsed || typeof parsed !== "object" || Array.isArray(parsed) || parsed.version !== LAYOUT_VERSION ||
             typeof parsed.primaryCheckoutRoot !== "string" || !Array.isArray(parsed.selectedCheckoutRoots) ||
@@ -1582,7 +1597,7 @@ async function readJournal(
         }
         return { journal: parsed as MigrationJournal };
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) return { journal: null };
+        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return { journal: null };
         if (error instanceof SyntaxError) {
             return block("malformed_migration_evidence", [path], "The runtime migration journal is not valid JSON.");
         }
@@ -1727,9 +1742,9 @@ async function applyRenameOperation(
     const destination = await lstatOrNull(operation.destination);
     if (source && !destination) {
         await writeJournal(layout.primary.layoutMigrationJournalPath, markOperation(journal, operation.source, false));
-        await Deno.mkdir(dirname(operation.destination), { recursive: true, mode: 0o700 });
+        await fsMkdir(dirname(operation.destination), { recursive: true, mode: 0o700 });
         try {
-            await Deno.rename(operation.source, operation.destination);
+            await fsRename(operation.source, operation.destination);
         } catch (error) {
             if (error instanceof Error && isCrossDeviceError(error)) {
                 return block(
@@ -1759,10 +1774,10 @@ async function applyRenameOperation(
         );
     }
     if (source && destination && await isEmptyDirectory(operation.destination)) {
-        await Deno.remove(operation.destination);
+        await fsRmdir(operation.destination);
         await syncDirectory(dirname(operation.destination));
         try {
-            await Deno.rename(operation.source, operation.destination);
+            await fsRename(operation.source, operation.destination);
         } catch (error) {
             if (error instanceof Error && isCrossDeviceError(error)) {
                 return block(
@@ -1846,7 +1861,7 @@ function workRecordRecoveryLockPathForRetire(journal: MigrationJournal, lockPath
 }
 
 async function acquireLegacyWorkRecordRecoveryLock(lockPath: string): Promise<() => Promise<void>> {
-    await Deno.mkdir(dirname(lockPath), { recursive: true, mode: 0o700 });
+    await fsMkdir(dirname(lockPath), { recursive: true, mode: 0o700 });
     const token = crypto.randomUUID();
     const deadline = Date.now() + WORK_RECORD_LOCK_WAIT_TIMEOUT_MS;
     while (true) {
@@ -1855,14 +1870,14 @@ async function acquireLegacyWorkRecordRecoveryLock(lockPath: string): Promise<()
             const heartbeat = setInterval(() => {
                 updateWorkRecordLockFile(file, lockPath, token).catch(() => {});
             }, WORK_RECORD_LOCK_HEARTBEAT_MS);
-            Deno.unrefTimer(heartbeat);
+            heartbeat.unref();
             return async () => {
                 clearInterval(heartbeat);
                 file.close();
                 await removeWorkRecordLockIfOwned(lockPath, token);
             };
         } catch (error) {
-            if (!(error instanceof Deno.errors.AlreadyExists)) throw error;
+            if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
             const status = await classifyWorkRecordLock(lockPath, WORK_RECORD_RECOVERY_LOCK_STALE_MS);
             if (Date.now() >= deadline) {
                 throw new Error(`Timed out waiting for the Work Record supersession recovery lock: ${lockPath}`);
@@ -1878,8 +1893,8 @@ async function acquireLegacyWorkRecordRecoveryLock(lockPath: string): Promise<()
     }
 }
 
-async function createWorkRecordLockFile(lockPath: string, token: string): Promise<Deno.FsFile> {
-    const file = await Deno.open(lockPath, { createNew: true, read: true, write: true, mode: 0o600 });
+async function createWorkRecordLockFile(lockPath: string, token: string): Promise<NativeFileLock> {
+    const file = openNativeFileLock(lockPath, "exclusive");
     try {
         file.lockSync(true);
         const now = Date.now();
@@ -1891,17 +1906,14 @@ async function createWorkRecordLockFile(lockPath: string, token: string): Promis
     }
 }
 
-async function updateWorkRecordLockFile(file: Deno.FsFile, lockPath: string, token: string): Promise<void> {
-    const parsed = parseJsonDocument(await Deno.readTextFile(lockPath));
+async function updateWorkRecordLockFile(file: NativeFileLock, lockPath: string, token: string): Promise<void> {
+    const parsed = parseJsonDocument(await fsReadFile(lockPath, "utf8"));
     if (parsed?.token !== token || typeof parsed.createdAt !== "number") return;
     await writeWorkRecordLockFile(file, { token, createdAt: parsed.createdAt, updatedAt: Date.now() });
 }
 
-async function writeWorkRecordLockFile(file: Deno.FsFile, record: WorkRecordLockDocument): Promise<void> {
-    await file.truncate(0);
-    await file.seek(0, Deno.SeekMode.Start);
-    await file.write(new TextEncoder().encode(JSON.stringify(record)));
-    await file.sync();
+function writeWorkRecordLockFile(file: NativeFileLock, record: WorkRecordLockDocument): void {
+    file.replaceTextSync(JSON.stringify(record));
 }
 
 async function removeWorkRecordLockIfOwned(lockPath: string, token: string): Promise<void> {
@@ -1929,30 +1941,30 @@ async function writeLayoutMarker(path: string, marker: LayoutMarker): Promise<vo
 }
 
 async function atomicWriteJson(path: string, value: MigrationJournal | LayoutMarker): Promise<void> {
-    await Deno.mkdir(dirname(path), { recursive: true, mode: 0o700 });
-    await Deno.chmod(dirname(path), 0o700).catch(() => {});
+    await fsMkdir(dirname(path), { recursive: true, mode: 0o700 });
+    await fsChmod(dirname(path), 0o700).catch(() => {});
     const temporary = `${path}.${crypto.randomUUID()}.tmp`;
     const payload = `${JSON.stringify(value, null, 2)}\n`;
     try {
-        const file = await Deno.open(temporary, { createNew: true, write: true, mode: 0o600 });
+        const file = await fsOpen(temporary, "wx", 0o600);
         try {
-            await file.write(new TextEncoder().encode(payload));
+            await file.writeFile(payload);
             await file.sync();
         } finally {
-            file.close();
+            await file.close();
         }
-        await Deno.rename(temporary, path);
+        await fsRename(temporary, path);
         await syncDirectory(dirname(path));
     } finally {
-        await Deno.remove(temporary).catch((error) => {
-            if (!(error instanceof Deno.errors.NotFound)) throw error;
+        await fsRm(temporary).catch((error) => {
+            if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
         });
     }
 }
 
 async function acquireMigrationLock(lockPath: string): Promise<{ release: () => Promise<void> }> {
-    await Deno.mkdir(dirname(lockPath), { recursive: true, mode: 0o700 });
-    await Deno.chmod(dirname(lockPath), 0o700).catch(() => {});
+    await fsMkdir(dirname(lockPath), { recursive: true, mode: 0o700 });
+    await fsChmod(dirname(lockPath), 0o700).catch(() => {});
     const token = crypto.randomUUID();
     while (true) {
         try {
@@ -1960,7 +1972,7 @@ async function acquireMigrationLock(lockPath: string): Promise<{ release: () => 
             const heartbeat = setInterval(() => {
                 updateMigrationLockFile(lockPath, token).catch(() => {});
             }, MIGRATION_LOCK_HEARTBEAT_MS);
-            Deno.unrefTimer(heartbeat);
+            heartbeat.unref();
             return {
                 release: async () => {
                     clearInterval(heartbeat);
@@ -1968,7 +1980,7 @@ async function acquireMigrationLock(lockPath: string): Promise<{ release: () => 
                 },
             };
         } catch (error) {
-            if (!(error instanceof Deno.errors.AlreadyExists)) throw error;
+            if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
             const status = await classifyProcessLock(lockPath, MIGRATION_LOCK_STALE_MS);
             if (status.status === "stale") {
                 await removeLockFileIfSnapshotMatches(lockPath, status.snapshot);
@@ -1980,13 +1992,13 @@ async function acquireMigrationLock(lockPath: string): Promise<{ release: () => 
 }
 
 async function createMigrationLockFile(lockPath: string, token: string): Promise<void> {
-    const file = await Deno.open(lockPath, { createNew: true, write: true, mode: 0o600 });
+    const file = await fsOpen(lockPath, "wx", 0o600);
     try {
-        await file.write(
+        await file.writeFile(
             new TextEncoder().encode(
                 JSON.stringify({
                     token,
-                    pid: Deno.pid,
+                    pid: pid,
                     hostname: getLockHostname(),
                     createdAtMs: Date.now(),
                     updatedAtMs: Date.now(),
@@ -1995,23 +2007,23 @@ async function createMigrationLockFile(lockPath: string, token: string): Promise
         );
         await file.sync();
     } finally {
-        file.close();
+        await file.close();
     }
 }
 
 async function updateMigrationLockFile(lockPath: string, token: string): Promise<void> {
-    const parsed = JSON.parse(await Deno.readTextFile(lockPath));
+    const parsed = JSON.parse(await fsReadFile(lockPath, "utf8"));
     if (parsed.token !== token) return;
-    await Deno.writeTextFile(lockPath, JSON.stringify({ ...parsed, updatedAtMs: Date.now() }));
+    await fsWriteFile(lockPath, JSON.stringify({ ...parsed, updatedAtMs: Date.now() }));
 }
 
 async function removeMigrationLockIfOwned(lockPath: string, token: string): Promise<void> {
     try {
-        const parsed = JSON.parse(await Deno.readTextFile(lockPath));
+        const parsed = JSON.parse(await fsReadFile(lockPath, "utf8"));
         if (parsed.token !== token) return;
-        await Deno.remove(lockPath);
+        await fsRm(lockPath);
     } catch (error) {
-        if (!(error instanceof Deno.errors.NotFound)) throw error;
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     }
 }
 
@@ -2019,33 +2031,33 @@ function mergedSelectedRoots(marker: LayoutMarker | null, selectedRoots: string[
     return [...new Set([...(marker?.adoptedSelectedCheckoutRoots || []), ...selectedRoots])].sort();
 }
 
-async function lstatOrNull(path: string): Promise<Deno.FileInfo | null> {
+async function lstatOrNull(path: string): Promise<Stats | null> {
     try {
-        return await Deno.lstat(path);
+        return await fsLstat(path);
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) return null;
+        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return null;
         throw error;
     }
 }
 
-async function safeReadDir(path: string): Promise<Deno.DirEntry[] | null> {
+async function safeReadDir(path: string): Promise<Dirent[] | null> {
     try {
-        const entries: Deno.DirEntry[] = [];
-        for await (const entry of Deno.readDir(path)) entries.push(entry);
+        const entries: Dirent[] = [];
+        for await (const entry of await fsReaddir(path, { withFileTypes: true })) entries.push(entry);
         return entries;
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) return null;
+        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return null;
         throw error;
     }
 }
 
 async function listFiles(path: string): Promise<string[]> {
     const info = await lstatOrNull(path);
-    if (!info || !info.isDirectory) return [];
+    if (!info || !info.isDirectory()) return [];
     const files: string[] = [];
-    for await (const entry of Deno.readDir(path)) {
+    for await (const entry of await fsReaddir(path, { withFileTypes: true })) {
         const child = join(path, entry.name);
-        if (entry.isDirectory) files.push(...await listFiles(child));
+        if (entry.isDirectory()) files.push(...await listFiles(child));
         else files.push(child);
     }
     return files;
@@ -2054,15 +2066,15 @@ async function listFiles(path: string): Promise<string[]> {
 async function isEmptyDirectory(path: string): Promise<boolean> {
     const info = await lstatOrNull(path);
     if (!info) return true;
-    if (!info.isDirectory) return false;
-    for await (const _entry of Deno.readDir(path)) return false;
+    if (!info.isDirectory()) return false;
+    for await (const _entry of await fsReaddir(path, { withFileTypes: true })) return false;
     return true;
 }
 
 async function removeEmptyDirectory(path: string): Promise<void> {
     if (!(await isEmptyDirectory(path))) return;
-    await Deno.remove(path).catch((error) => {
-        if (!(error instanceof Deno.errors.NotFound)) throw error;
+    await fsRmdir(path).catch((error) => {
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     });
 }
 
@@ -2077,12 +2089,12 @@ async function listSiblingTemps(path: string): Promise<string[]> {
 }
 
 async function syncDirectory(path: string): Promise<void> {
-    if (Deno.build.os === "windows") return;
-    const directory = await Deno.open(path, { read: true });
+    if (platform === "win32") return;
+    const directory = await fsOpen(path, "r");
     try {
         await directory.sync();
     } finally {
-        directory.close();
+        await directory.close();
     }
 }
 

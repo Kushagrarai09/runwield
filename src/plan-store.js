@@ -1,3 +1,16 @@
+import { open as fsOpen } from "node:fs/promises";
+import { openNativeFileLock } from "./shared/native-file-lock.ts";
+import {
+    link as fsLink,
+    lstat as fsLstat,
+    mkdir as fsMkdir,
+    readdir as fsReaddir,
+    readFile as fsReadFile,
+    rename as fsRename,
+    rm as fsRm,
+    stat as fsStat,
+} from "node:fs/promises";
+import { pid, platform } from "node:process";
 import { isProjectPlan } from "./shared/project-plan.ts";
 export { isEpicPlan, isProjectPlan, isSequencePlan } from "./shared/project-plan.ts";
 /**
@@ -85,7 +98,7 @@ export function getPlansDir(cwd) {
 export async function ensurePlansDir(cwd) {
     const dir = getPlansDir(cwd);
     try {
-        await Deno.mkdir(dir, { recursive: true });
+        await fsMkdir(dir, { recursive: true });
     } catch {
         // already exists, fine
     }
@@ -1323,7 +1336,7 @@ async function withControllerMetadata(filePath, attrs) {
             attrs,
             view.state,
             attrs.status === "validated"
-                ? { planName: location.planName, markdown: await Deno.readTextFile(filePath) }
+                ? { planName: location.planName, markdown: await fsReadFile(filePath, "utf8") }
                 : undefined,
         ),
         controllerRevision: view.revision,
@@ -1589,11 +1602,11 @@ export async function getPlanFrontMatterRevisionForText(text) {
 /** @param {string} path */
 async function syncDirectory(path) {
     try {
-        const dir = await Deno.open(path, { read: true });
+        const dir = await fsOpen(path, "r");
         try {
             await dir.sync();
         } finally {
-            dir.close();
+            await dir.close();
         }
     } catch {
         // Directory fsync is unavailable on some platforms/filesystems; atomic rename still protects torn writes.
@@ -1605,20 +1618,20 @@ async function syncDirectory(path) {
  * @param {string} content
  */
 export async function atomicWriteTextFile(path, content) {
-    await Deno.mkdir(dirname(path), { recursive: true });
+    await fsMkdir(dirname(path), { recursive: true });
     const tmp = join(dirname(path), `.${basename(path)}.${crypto.randomUUID()}.tmp`);
     let file;
     try {
-        file = await Deno.open(tmp, { createNew: true, write: true });
-        await file.write(new TextEncoder().encode(content));
+        file = await fsOpen(tmp, "wx");
+        await file.writeFile(content);
         await file.sync();
-        file.close();
+        await file.close();
         file = undefined;
-        await Deno.rename(tmp, path);
+        await fsRename(tmp, path);
         await syncDirectory(dirname(path));
     } catch (error) {
-        if (file) file.close();
-        await Deno.remove(tmp).catch(() => {});
+        if (file) await file.close();
+        await fsRm(tmp).catch(() => {});
         throw error;
     }
 }
@@ -1632,24 +1645,24 @@ export async function atomicWriteTextFile(path, content) {
  */
 export async function atomicWriteTextFileIfAbsent(path, content) {
     const parent = dirname(path);
-    await Deno.mkdir(parent, { recursive: true });
-    const temporaryPath = await Deno.makeTempFile({ dir: parent, prefix: ".rw-create-", suffix: ".tmp" });
+    await fsMkdir(parent, { recursive: true });
+    const temporaryPath = join(parent, `.rw-create-${crypto.randomUUID()}.tmp`);
     let file;
     try {
-        file = await Deno.open(temporaryPath, { write: true, truncate: true });
-        await file.write(new TextEncoder().encode(content));
+        file = await fsOpen(temporaryPath, "wx", 0o600);
+        await file.writeFile(content);
         await file.sync();
-        file.close();
+        await file.close();
         file = undefined;
         // Linking a complete same-filesystem file publishes all bytes at once and
         // still fails when another writer already owns the target path.
-        await Deno.link(temporaryPath, path);
+        await fsLink(temporaryPath, path);
         await syncDirectory(parent);
     } catch (error) {
-        if (file) file.close();
+        if (file) await file.close();
         throw error;
     } finally {
-        await Deno.remove(temporaryPath).catch(() => {});
+        await fsRm(temporaryPath).catch(() => {});
     }
 }
 
@@ -1672,31 +1685,23 @@ export class PlanLockTimeoutError extends Error {
 
 /** @param {string} lockPath */
 async function acquireSimpleLock(lockPath) {
-    await Deno.mkdir(dirname(lockPath), { recursive: true });
+    await fsMkdir(dirname(lockPath), { recursive: true });
     const deadline = Date.now() + PLAN_LOCK_WAIT_TIMEOUT_MS;
     const token = crypto.randomUUID();
     while (true) {
         try {
-            const file = await Deno.open(lockPath, { createNew: true, read: true, write: true });
+            const file = openNativeFileLock(lockPath, "exclusive");
             try {
                 file.lockSync(true);
-                const writeHeartbeat = async () => {
-                    await file.truncate(0);
-                    await file.seek(0, Deno.SeekMode.Start);
-                    await file.write(
-                        new TextEncoder().encode(
-                            // The hostname makes the pid meaningful: a waiter can ask the
-                            // operating system whether this exact holder is still alive
-                            // instead of waiting out a timeout after a crash.
-                            JSON.stringify({
-                                token,
-                                pid: Deno.pid,
-                                hostname: getLockHostname(),
-                                updatedAtMs: Date.now(),
-                            }),
-                        ),
-                    );
-                    await file.sync();
+                const writeHeartbeat = () => {
+                    // Hostname scopes the pid to this machine; stale recovery still
+                    // requires the real OS lock and matching ownership evidence.
+                    file.replaceTextSync(JSON.stringify({
+                        token,
+                        pid,
+                        hostname: getLockHostname(),
+                        updatedAtMs: Date.now(),
+                    }));
                 };
                 await writeHeartbeat();
                 let heartbeatWrite = Promise.resolve();
@@ -1718,7 +1723,7 @@ async function acquireSimpleLock(lockPath) {
                 throw setupError;
             }
         } catch (error) {
-            if (!(error instanceof Deno.errors.AlreadyExists)) throw error;
+            if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
             const snapshot = await readLockFileSnapshot(lockPath);
             if (!snapshot) continue;
             // Deliberately no same-process shortcut here. Re-entrancy is handled by
@@ -1736,7 +1741,7 @@ async function acquireSimpleLock(lockPath) {
             // Age only permits an ownership check: removal must still acquire the
             // OS lock and match the snapshot, so a paused live holder stays safe.
             // Windows removal cannot retain that OS lock across unlink.
-            const abandoned = Deno.build.os !== "windows" &&
+            const abandoned = platform !== "win32" &&
                 Date.now() - Math.max(snapshot.mtime, snapshot.updatedAt || 0) > PLAN_LOCK_ABANDONED_MS;
             const stale = abandoned || await isLockHolderGone(snapshot.text);
             if (stale && await removeLockFileIfSnapshotMatches(lockPath, snapshot)) {
@@ -1838,16 +1843,18 @@ export async function inspectPlanFileStrict(filePath) {
 export async function loadPlanFileStrict(filePath, documentOnly = false) {
     let stat;
     try {
-        stat = await Deno.lstat(filePath);
+        stat = await fsLstat(filePath);
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) return { kind: "not_found", path: filePath };
+        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) {
+            return { kind: "not_found", path: filePath };
+        }
         return { kind: "unreadable", path: filePath, error: error instanceof Error ? error : new Error(String(error)) };
     }
-    if (!stat.isFile) {
+    if (!stat.isFile()) {
         return { kind: "not_file", path: filePath, message: `Plan path is not a regular file: ${filePath}` };
     }
     try {
-        const markdown = await Deno.readTextFile(filePath);
+        const markdown = await fsReadFile(filePath, "utf8");
         const revision = await getPlanRevisionForText(markdown);
         let parsed;
         try {
@@ -2325,7 +2332,7 @@ export async function saveChildFeaturePlans(cwd, epicPlanName, children, options
             metadata.tickets = normalizeTicketReferences(child.tickets);
         } else if (action === "updated") {
             try {
-                const existing = parsePlanFrontMatter(await Deno.readTextFile(filePath)).attrs;
+                const existing = parsePlanFrontMatter(await fsReadFile(filePath, "utf8")).attrs;
                 const tickets = normalizeTicketReferences(existing.tickets);
                 if (tickets) metadata.tickets = tickets;
             } catch {
@@ -2375,7 +2382,7 @@ export async function savePlan(cwd, planName, content, fmOverrides = {}, options
                 );
             }
             if (segments.length > 1) {
-                await Deno.mkdir(join(dir, ...segments.slice(0, -1)), { recursive: true });
+                await fsMkdir(join(dir, ...segments.slice(0, -1)), { recursive: true });
             }
             if (existing.kind === "loaded" && options.expectedRevision === undefined) {
                 throw new StalePlanWriteError("required", existing.revision);
@@ -2477,7 +2484,7 @@ export async function loadPlan(cwd, planName) {
  * @returns {Promise<{ path: string, markdown: string, attrs: PlanFrontMatter, body: string, revision: string }>}
  */
 export async function loadExternalPlan(absolutePath) {
-    const markdown = await Deno.readTextFile(absolutePath);
+    const markdown = await fsReadFile(absolutePath, "utf8");
     const { attrs, body } = parsePlanFrontMatter(markdown, {
         missingOrigin: "external",
     });
@@ -2731,10 +2738,10 @@ export async function clearPlanCollaborationMetadata(cwd, planName, collaboratio
  * @returns {Promise<void>}
  */
 async function collectPlans(dir, prefix, results, parseIssues, documentOnly = false) {
-    for await (const entry of Deno.readDir(dir)) {
+    for await (const entry of await fsReaddir(dir, { withFileTypes: true })) {
         const entryPath = join(dir, entry.name);
         const name = [...prefix, entry.name.replace(/\.md$/, "")].join("/");
-        if (entry.isDirectory) {
+        if (entry.isDirectory()) {
             if (entry.name.endsWith(".md")) {
                 parseIssues?.push({
                     name,
@@ -2754,7 +2761,7 @@ async function collectPlans(dir, prefix, results, parseIssues, documentOnly = fa
         }
         if (!entry.name.endsWith(".md")) continue;
         if (isEpicArtifactPlanName(name)) continue;
-        if (!entry.isFile) {
+        if (!entry.isFile()) {
             parseIssues?.push({
                 name,
                 path: entryPath,
@@ -2768,7 +2775,7 @@ async function collectPlans(dir, prefix, results, parseIssues, documentOnly = fa
             continue;
         }
         try {
-            const markdown = await Deno.readTextFile(entryPath);
+            const markdown = await fsReadFile(entryPath, "utf8");
             try {
                 const { attrs } = parsePlanFrontMatter(markdown);
                 const current = documentOnly ? { attrs } : await withControllerMetadata(entryPath, attrs);
@@ -2836,7 +2843,7 @@ async function listPlansWithTargetChildren(cwd, onlyEpic) {
         try {
             await collectPlans(dir, [], results, parseIssues);
         } catch (error) {
-            if (!(error instanceof Deno.errors.NotFound)) throw error;
+            if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
         }
         for (const projectPlan of [...results]) {
             const targetBranch = typeof projectPlan.attrs.targetBranch === "string"
@@ -2932,7 +2939,7 @@ export async function listPlanDocuments(cwd) {
     try {
         await collectPlans(getPlansDir(cwd), [], plans, issues, true);
     } catch (error) {
-        if (!(error instanceof Deno.errors.NotFound)) throw error;
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     }
     for (const issue of issues) {
         if (issue.error instanceof Error) throw issue.error;
@@ -3020,8 +3027,8 @@ function getArchivedPlanLocation(cwd, planName) {
  */
 async function fileExists(path) {
     try {
-        const stat = await Deno.stat(path);
-        return stat.isFile;
+        const stat = await fsStat(path);
+        return stat.isFile();
     } catch {
         return false;
     }
@@ -3138,7 +3145,7 @@ export async function archivePlan(cwd, planNameOrId, options = {}) {
                     await getPlanRevisionForText(lockedSource.markdown),
                 );
             }
-            await Deno.mkdir(join(getArchivedPlansDir(cwd), ...destination.segments.slice(0, -1)), { recursive: true });
+            await fsMkdir(join(getArchivedPlansDir(cwd), ...destination.segments.slice(0, -1)), { recursive: true });
             await atomicWriteTextFileIfAbsent(destination.filePath, markdown);
             /** @type {MoveEpicArtifactResult[]} */
             let movedArtifacts = [];
@@ -3146,15 +3153,15 @@ export async function archivePlan(cwd, planNameOrId, options = {}) {
                 movedArtifacts = source.attrs.classification === "PROJECT" && source.name.split("/").length === 1
                     ? await moveEpicArtifactsToArchive(cwd, source.name)
                     : [];
-                await Deno.remove(source.path);
+                await fsRm(source.path);
                 await syncDirectory(dirname(source.path));
                 await syncDirectory(dirname(destination.filePath));
                 for (const artifact of movedArtifacts) await syncDirectory(dirname(artifact.toPath));
             } catch (error) {
                 for (const artifact of movedArtifacts.toReversed()) {
-                    await Deno.rename(artifact.toPath, artifact.fromPath).catch(() => {});
+                    await fsRename(artifact.toPath, artifact.fromPath).catch(() => {});
                 }
-                await Deno.remove(destination.filePath).catch(() => {});
+                await fsRm(destination.filePath).catch(() => {});
                 throw error;
             }
             return {
@@ -3276,7 +3283,7 @@ export async function listArchivedPlans(cwd) {
     try {
         await collectPlans(dir, [], results, parseIssues);
     } catch (error) {
-        if (!(error instanceof Deno.errors.NotFound)) throw error;
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     }
     const attempts = await listControllerDocumentWorktrees(cwd);
     for (const attempt of attempts) {
@@ -3323,22 +3330,22 @@ export async function deleteArchivedPlanUnit(cwd, archivedPlanName) {
         const removedPaths = [];
         let planStat;
         try {
-            planStat = await Deno.stat(location.filePath);
+            planStat = await fsStat(location.filePath);
         } catch (error) {
-            if (error instanceof Deno.errors.NotFound) {
+            if ((error instanceof Error && "code" in error && error.code === "ENOENT")) {
                 throw new Error(`Archived Plan not found: ${location.name}`);
             }
             throw error;
         }
-        if (!planStat.isFile) {
+        if (!planStat.isFile()) {
             throw new Error(`Archived Plan is not a file: ${projectRelativePath(cwd, location.filePath)}`);
         }
 
         let directoryExists = false;
         const directoryEntries = [];
         try {
-            const directoryStat = await Deno.stat(directoryPath);
-            if (!directoryStat.isDirectory) {
+            const directoryStat = await fsStat(directoryPath);
+            if (!directoryStat.isDirectory()) {
                 throw new Error(
                     `Refusing to prune ${location.name}: archived Plan directory path is not a directory ${
                         projectRelativePath(cwd, directoryPath)
@@ -3346,9 +3353,9 @@ export async function deleteArchivedPlanUnit(cwd, archivedPlanName) {
                 );
             }
             directoryExists = true;
-            for await (const entry of Deno.readDir(directoryPath)) {
+            for await (const entry of await fsReaddir(directoryPath, { withFileTypes: true })) {
                 const entryPath = join(directoryPath, entry.name);
-                if (!entry.isFile || !entry.name.endsWith(".md")) {
+                if (!entry.isFile() || !entry.name.endsWith(".md")) {
                     throw new Error(
                         `Refusing to prune ${location.name}: archived Plan directory contains non-markdown entry ${
                             projectRelativePath(cwd, entryPath)
@@ -3358,13 +3365,13 @@ export async function deleteArchivedPlanUnit(cwd, archivedPlanName) {
                 directoryEntries.push(entryPath);
             }
         } catch (error) {
-            if (!(error instanceof Deno.errors.NotFound)) throw error;
+            if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
         }
 
-        await Deno.remove(location.filePath);
+        await fsRm(location.filePath);
         removedPaths.push(projectRelativePath(cwd, location.filePath));
         if (directoryExists) {
-            await Deno.remove(directoryPath, { recursive: true });
+            await fsRm(directoryPath, { recursive: true });
             removedPaths.push(...directoryEntries.map((entryPath) => projectRelativePath(cwd, entryPath)));
         }
         await syncDirectory(dirname(location.filePath));
@@ -3382,9 +3389,9 @@ async function loadArchivedPlanByName(cwd, archivedPlanName) {
     const { name, filePath } = getArchivedPlanLocation(cwd, archivedPlanName);
     let markdown;
     try {
-        markdown = await Deno.readTextFile(filePath);
+        markdown = await fsReadFile(filePath, "utf8");
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) return null;
+        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return null;
         throw error;
     }
 
@@ -3497,7 +3504,7 @@ export async function restoreArchivedPlan(cwd, archivedPlanNameOrId, options = {
             if (await fileExists(destination.filePath)) {
                 throw new Error(`Active Plan already exists: ${projectRelativePath(cwd, destination.filePath)}`);
             }
-            await Deno.mkdir(join(getPlansDir(cwd), ...destination.segments.slice(0, -1)), { recursive: true });
+            await fsMkdir(join(getPlansDir(cwd), ...destination.segments.slice(0, -1)), { recursive: true });
             await atomicWriteTextFileIfAbsent(destination.filePath, markdown);
             /** @type {MoveEpicArtifactResult[]} */
             let movedArtifacts = [];
@@ -3512,7 +3519,7 @@ export async function restoreArchivedPlan(cwd, archivedPlanNameOrId, options = {
                     await renameRestoredPlanEntry(cwd, renamedAttempt.id, archived.name, destination.name);
                     renamed = true;
                 }
-                await Deno.remove(archived.path);
+                await fsRm(archived.path);
                 sourceRemoved = true;
                 await syncDirectory(dirname(archived.path));
                 await syncDirectory(dirname(destination.filePath));
@@ -3525,9 +3532,9 @@ export async function restoreArchivedPlan(cwd, archivedPlanNameOrId, options = {
                     await renameRestoredPlanEntry(cwd, renamedAttempt.id, destination.name, archived.name);
                 }
                 for (const artifact of movedArtifacts.toReversed()) {
-                    await Deno.rename(artifact.toPath, artifact.fromPath).catch(() => {});
+                    await fsRename(artifact.toPath, artifact.fromPath).catch(() => {});
                 }
-                await Deno.remove(destination.filePath).catch(() => {});
+                await fsRm(destination.filePath).catch(() => {});
                 throw error;
             }
             return {
@@ -3730,8 +3737,8 @@ export async function onboardExternalPlan(cwd, planName, options = {}) {
         };
     }
 
-    const fileCreatedAt = await Deno.stat(existing.path)
-        .then((info) => info.birthtime || info.mtime || null)
+    const fileCreatedAt = await fsStat(existing.path)
+        .then((info) => info.birthtimeMs > 0 ? info.birthtime : info.mtime)
         .catch(() => null);
     const now = options.now ? options.now() : new Date();
     return await withPlanCatalogLock(cwd, async () => {
@@ -3936,7 +3943,7 @@ export async function loadPlanBodyById(cwd, planId) {
     if (isProjectPlan(resource.attrs)) {
         throw new Error("Epic Plan bodies are not editable in the workspace body editor.");
     }
-    const markdown = await Deno.readTextFile(resource.path);
+    const markdown = await fsReadFile(resource.path, "utf8");
     parsePlanFrontMatter(markdown);
     const { body } = splitPlanMarkdownBody(markdown);
     return {

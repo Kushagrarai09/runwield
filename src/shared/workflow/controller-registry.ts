@@ -1,3 +1,13 @@
+import { open as fsOpen } from "node:fs/promises";
+import { openNativeFileLock } from "../native-file-lock.ts";
+import { realpathSync as fsRealpathSync } from "node:fs";
+import {
+    mkdir as fsMkdir,
+    readdir as fsReaddir,
+    readFile as fsReadFile,
+    rename as fsRename,
+    rm as fsRm,
+} from "node:fs/promises";
 /** File-backed controller state shared by all worktrees of one project. */
 import { dirname, join, resolve } from "@std/path";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -89,9 +99,9 @@ export class StaleControllerWriteError extends Error {
 
 function canonicalPath(path: string): string {
     try {
-        return Deno.realPathSync(path);
+        return fsRealpathSync(path);
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) return resolve(path);
+        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return resolve(path);
         throw error;
     }
 }
@@ -127,7 +137,7 @@ export async function readControllerRecordAtPath(
     const key = identity.planId || `name:${identity.planName}`;
     try {
         const record: ControllerRecord = JSON.parse(
-            await Deno.readTextFile(join(controllerPlansDir, `${encodeURIComponent(key)}.json`)),
+            await fsReadFile(join(controllerPlansDir, `${encodeURIComponent(key)}.json`), "utf8"),
         );
         if (record.version !== 1 || !Number.isInteger(record.revision) || !record.state) {
             throw new Error(
@@ -136,7 +146,7 @@ export async function readControllerRecordAtPath(
         }
         return record;
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) return null;
+        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return null;
         throw error;
     }
 }
@@ -155,8 +165,8 @@ export async function findRecordingControllerByName(cwd: string, planName: strin
     const directory = resolveProjectRuntimeLayout(projectRoot(cwd)).primary.controllerPlansDir;
     let match: ControllerRecord | null = null;
     try {
-        for await (const entry of Deno.readDir(directory)) {
-            if (!entry.isFile || !entry.name.endsWith(".json")) continue;
+        for await (const entry of await fsReaddir(directory, { withFileTypes: true })) {
+            if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
             const key = decodeURIComponent(entry.name.slice(0, -5));
             if (key.startsWith("name:")) continue;
             const record = await readControllerRecordAtPath(directory, { planId: key, planName });
@@ -165,7 +175,7 @@ export async function findRecordingControllerByName(cwd: string, planName: strin
             match = record;
         }
     } catch (error) {
-        if (!(error instanceof Deno.errors.NotFound)) throw error;
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     }
     return match;
 }
@@ -174,24 +184,23 @@ async function atomicWrite(path: string, record: ControllerRecord): Promise<void
     const temporary = `${path}.${crypto.randomUUID()}.tmp`;
     const data = new TextEncoder().encode(`${JSON.stringify(record, null, 2)}\n`);
     try {
-        const file = await Deno.open(temporary, { createNew: true, write: true });
+        const file = await fsOpen(temporary, "wx");
         try {
-            let offset = 0;
-            while (offset < data.length) offset += await file.write(data.subarray(offset));
+            await file.writeFile(data);
             await file.sync();
         } finally {
-            file.close();
+            await file.close();
         }
-        await Deno.rename(temporary, path);
-        const directory = await Deno.open(dirname(path), { read: true });
+        await fsRename(temporary, path);
+        const directory = await fsOpen(dirname(path), "r");
         try {
             await directory.sync();
         } finally {
-            directory.close();
+            await directory.close();
         }
     } finally {
-        await Deno.remove(temporary).catch((error) => {
-            if (!(error instanceof Deno.errors.NotFound)) throw error;
+        await fsRm(temporary).catch((error) => {
+            if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
         });
     }
 }
@@ -209,7 +218,7 @@ export async function bindControllerPlanIdentity(cwd: string, identity: Workflow
     const temporaryIdentity = { planName: identity.planName };
     if (!await readControllerRecord(cwd, temporaryIdentity)) return;
     const path = await enteredControllerRecordPath(cwd, temporaryIdentity);
-    const lock = await Deno.open(`${path}.lock`, { create: true, read: true, write: true });
+    const lock = openNativeFileLock(`${path}.lock`);
     try {
         await lock.lock(true);
         const unnamed = await readControllerRecord(cwd, temporaryIdentity);
@@ -224,8 +233,8 @@ export async function bindControllerPlanIdentity(cwd: string, identity: Workflow
 export async function finishControllerPlanIdentity(cwd: string, identity: WorkflowIdentity): Promise<void> {
     if (!identity.planId || !await readControllerRecord(cwd, identity)) return;
     const path = await enteredControllerRecordPath(cwd, { planName: identity.planName });
-    await Deno.remove(path).catch((error) => {
-        if (!(error instanceof Deno.errors.NotFound)) throw error;
+    await fsRm(path).catch((error) => {
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     });
 }
 
@@ -238,10 +247,10 @@ export async function writeControllerState(
     invalidateProjectRuntimeReadScope();
     try {
         const path = await enteredControllerRecordPath(cwd, identity);
-        await Deno.mkdir(dirname(path), { recursive: true });
+        await fsMkdir(dirname(path), { recursive: true });
         // Keep this inode: deleting a lock file lets a third process lock a different
         // inode while an existing waiter still owns the original one.
-        const lock = await Deno.open(`${path}.lock`, { create: true, read: true, write: true });
+        const lock = openNativeFileLock(`${path}.lock`);
         try {
             await lock.lock(true);
             // Runtime entry precedes the inode lock. Re-entering migration here

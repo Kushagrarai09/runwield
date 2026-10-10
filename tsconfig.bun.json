@@ -35,6 +35,13 @@
         "src/shared/http-server.ts",
         "src/shared/http-server.test.ts",
         "scripts/compile-bun.ts",
-        "scripts/check-bun-package.ts"
+        "scripts/check-bun-package.ts",
+        "src/shared/captured-process.ts",
+        "src/shared/lock-file-snapshot.ts",
+        "src/shared/primary-checkout.ts",
+        "src/shared/primary-checkout.test.ts",
+        "src/shared/git-evidence-cache.ts",
+        "src/shared/git-evidence-cache.test.ts",
+        "src/shared/git-test-fixture.ts"
     ]
 }

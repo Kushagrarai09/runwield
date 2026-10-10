@@ -526,7 +526,7 @@ export async function ensureExecutionPlanFile({
         try {
             await atomicWriteTextFileIfAbsent(targetPath, planDocumentMarkdown(canonicalSource.markdown));
         } catch (error) {
-            if (error instanceof Deno.errors.AlreadyExists) {
+            if (error instanceof Error && "code" in error && error.code === "EEXIST") {
                 const concurrent = await ensureExecutionPlanFile({ executionCwd, planName, canonicalSource });
                 return concurrent.kind === "present" ? { kind: "present", path: targetPath, relativePath } : concurrent;
             }

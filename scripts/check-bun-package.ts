@@ -68,13 +68,14 @@ export async function checkBunPackage(
             });
             return { child, finished, output: () => output };
         };
-        for (const args of [["--help"], ["--version"], ["package-smoke", "image-resize"]]) {
+        for (const args of [["--help"], ["--version"], ["plans"], ["package-smoke", "image-resize"]]) {
             const running = start(args);
             const timeout = setTimeout(() => running.child.kill("SIGKILL"), 30_000);
             try {
                 equal(await running.finished, 0, running.output());
                 if (args[0] === "--help") match(running.output(), /RunWield.*Plan-by-Default/s);
                 else if (args[0] === "--version") ok(running.output().includes(metadata.version));
+                else if (args[0] === "plans") match(running.output(), /No saved plans found/);
                 else match(running.output(), /Packaged image resize passed/);
             } finally {
                 clearTimeout(timeout);
@@ -129,7 +130,7 @@ export async function checkBunPackage(
             await running.finished;
         }
         console.log(
-            `Relocated Bun package passed: CLI, worker/WASM, image conversion, Workspace assets/auth, shutdown (${metadata.target}).`,
+            `Relocated Bun package passed: CLI and Plan entry, worker/WASM, image conversion, Workspace assets/auth, shutdown (${metadata.target}).`,
         );
     } finally {
         await rm(home, { recursive: true, force: true });

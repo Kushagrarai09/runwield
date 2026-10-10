@@ -1,7 +1,7 @@
 import { equal, match, ok, throws } from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execPath, platform, versions } from "node:process";
@@ -127,3 +127,57 @@ setInterval(() => {}, 1000);`;
         }
     });
 }
+
+test("exclusive lock creation and descriptor writes preserve complete metadata", () => {
+    const f = fixture();
+    const owner = openNativeFileLock(f.path, "exclusive");
+    try {
+        owner.lockSync(true);
+        const text = "λ守🔒".repeat(8192);
+        owner.replaceTextSync(text);
+        equal(owner.readSnapshotSync().text, text);
+        equal(readFileSync(f.path, "utf8"), text);
+        equal(owner.readSnapshotSync().size, new TextEncoder().encode(text).length);
+        equal(owner.readSnapshotSync().mtime, statSync(f.path).mtime.getTime());
+        throws(() => openNativeFileLock(f.path, "exclusive"), { code: "EEXIST" });
+        equal(readFileSync(f.path, "utf8"), text);
+        owner.replaceTextSync("short");
+        equal(owner.readSnapshotSync().text, "short");
+        equal(owner.readSnapshotSync().size, 5);
+        if (platform !== "win32") {
+            unlinkSync(f.path);
+            writeFileSync(f.path, "replacement inode");
+            equal(owner.readSnapshotSync().text, "short");
+            owner.replaceTextSync("original inode");
+            equal(readFileSync(f.path, "utf8"), "replacement inode");
+        }
+    } finally {
+        owner.close();
+        f.close();
+    }
+    throws(() => owner.replaceTextSync("closed"));
+    throws(() => owner.readSnapshotSync());
+});
+
+test("async native lock waits without blocking the owner from releasing", async () => {
+    const f = fixture();
+    const owner = openNativeFileLock(f.path);
+    const waiter = openNativeFileLock(f.path);
+    let acquired = false;
+    try {
+        owner.lockSync(true);
+        const waiting = waiter.lock(true).then(() => acquired = true);
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        equal(acquired, false);
+        owner.unlockSync();
+        await waiting;
+        equal(acquired, true);
+        equal(owner.tryLockSync(true), false);
+        waiter.unlockSync();
+        equal(owner.tryLockSync(true), true);
+    } finally {
+        owner.close();
+        waiter.close();
+        f.close();
+    }
+});

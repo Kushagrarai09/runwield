@@ -1,3 +1,6 @@
+import { type NativeFileLock, type NativeLockSnapshot, openNativeFileLock } from "./native-file-lock.ts";
+import { readFile as fsReadFile, rm as fsRm, stat as fsStat } from "node:fs/promises";
+import { platform } from "node:process";
 export type LockFileSnapshot = {
     text: string;
     mtime: number;
@@ -17,11 +20,11 @@ type LockFileDocument = {
 
 export async function readLockFileSnapshot(path: string): Promise<LockFileSnapshot | null> {
     try {
-        const text = await Deno.readTextFile(path);
-        const stat = await Deno.stat(path);
-        return lockFileSnapshotFromStat(text, stat);
+        const text = await fsReadFile(path, "utf8");
+        const stat = await fsStat(path);
+        return lockFileSnapshotFromStat({ text, size: stat.size, mtime: stat.mtime.getTime() });
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) return null;
+        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return null;
         throw error;
     }
 }
@@ -35,16 +38,16 @@ export async function removeLockFileIfSnapshotMatches(
     lockPath: string,
     snapshot: LockFileSnapshot,
 ): Promise<boolean> {
-    let file: Deno.FsFile;
+    let file: NativeFileLock;
     try {
-        file = await Deno.open(lockPath, { read: true, write: true });
+        file = openNativeFileLock(lockPath, false);
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) return true;
+        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return true;
         throw error;
     }
     let closed = false;
     try {
-        if (Deno.build.os !== "windows" && !file.tryLockSync(true)) return false;
+        if (platform !== "win32" && !file.tryLockSync(true)) return false;
         const current = await readLockFileSnapshotFromFile(file);
         const pathCurrent = await readLockFileSnapshot(lockPath);
         if (
@@ -53,12 +56,12 @@ export async function removeLockFileIfSnapshotMatches(
         ) {
             return false;
         }
-        if (Deno.build.os === "windows") {
+        if (platform === "win32") {
             file.close();
             closed = true;
         }
-        await Deno.remove(lockPath).catch((error) => {
-            if (!(error instanceof Deno.errors.NotFound)) throw error;
+        await fsRm(lockPath).catch((error) => {
+            if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
         });
         return true;
     } finally {
@@ -66,25 +69,16 @@ export async function removeLockFileIfSnapshotMatches(
     }
 }
 
-async function readLockFileSnapshotFromFile(file: Deno.FsFile): Promise<LockFileSnapshot> {
-    const stat = await file.stat();
-    await file.seek(0, Deno.SeekMode.Start);
-    const buffer = new Uint8Array(stat.size);
-    let offset = 0;
-    while (offset < buffer.length) {
-        const read = await file.read(buffer.subarray(offset));
-        if (read === null) break;
-        offset += read;
-    }
-    return lockFileSnapshotFromStat(new TextDecoder().decode(buffer.subarray(0, offset)), stat);
+function readLockFileSnapshotFromFile(file: NativeFileLock): LockFileSnapshot {
+    return lockFileSnapshotFromStat(file.readSnapshotSync());
 }
 
-function lockFileSnapshotFromStat(text: string, stat: Deno.FileInfo): LockFileSnapshot {
+function lockFileSnapshotFromStat({ text, size, mtime }: NativeLockSnapshot): LockFileSnapshot {
     const parsed = parseLockFileDocument(text);
     return {
         text,
-        mtime: stat.mtime?.getTime() ?? Date.now(),
-        size: stat.size,
+        mtime,
+        size,
         ...(typeof parsed?.token === "string" ? { token: parsed.token } : {}),
         ...(typeof parsed?.createdAt === "number" ? { createdAt: parsed.createdAt } : {}),
         ...(typeof parsed?.createdAtMs === "number" ? { createdAt: parsed.createdAtMs } : {}),
