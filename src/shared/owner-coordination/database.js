@@ -3,6 +3,7 @@
  * SQLite opener and migration runner for owner-only coordination state.
  */
 
+import { chmodSync, copyFileSync, mkdirSync, statSync, unlinkSync } from "node:fs";
 import { deleteProjectRegistration } from "./project-removal.ts";
 import { DatabaseSync } from "node:sqlite";
 import { dirname, extname } from "@std/path";
@@ -231,7 +232,7 @@ function assertSessionLocatorProjectConsistency(db) {
 /** @param {string} path */
 function fileExists(path) {
     try {
-        return Deno.statSync(path).isFile;
+        return statSync(path).isFile();
     } catch {
         return false;
     }
@@ -263,13 +264,13 @@ function backupOwnerDatabase(db, dbPath, sourceVersion, now) {
     const openedPath = db.prepare("SELECT file FROM pragma_database_list WHERE name = 'main'").get()?.file;
     if (typeof openedPath !== "string" || !openedPath) throw new Error("Cannot locate the owner database for backup.");
     const backupPath = backupPathFor(openedPath, sourceVersion, now);
-    Deno.mkdirSync(dirname(backupPath), { recursive: true, mode: 0o700 });
+    mkdirSync(dirname(backupPath), { recursive: true, mode: 0o700 });
     // node:sqlite cannot open a VACUUM INTO destination in this runtime. Checkpoint
     // WAL content before copying so the backup includes all committed data.
     db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-    Deno.copyFileSync(dbPath, backupPath);
+    copyFileSync(dbPath, backupPath);
     try {
-        Deno.chmodSync(backupPath, 0o600);
+        chmodSync(backupPath, 0o600);
     } catch {
         // Some filesystems do not support chmod; creation location is still owner-only best effort.
     }
@@ -292,7 +293,7 @@ function backupOwnerDatabase(db, dbPath, sourceVersion, now) {
         // backup read-only. They are inspection artifacts, not backup data.
         for (const suffix of ["-wal", "-shm"]) {
             try {
-                Deno.removeSync(`${backupPath}${suffix}`);
+                unlinkSync(`${backupPath}${suffix}`);
             } catch {
                 // The SQLite build did not create this sidecar.
             }

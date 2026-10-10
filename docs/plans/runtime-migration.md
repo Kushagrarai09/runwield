@@ -355,3 +355,29 @@ crash-event and installer process tests also passed through the Deno runner.
 All three review axes approved after independently confirming S2 (installer SIGTERM/SIGINT statuses retained) and T9/T10
 (exact restoration marker assertions and exercised helper failure cleanup). Workspace serving and complete application
 packaging are the next boundaries. CLI help success is not evidence that all interactive commands work yet.
+
+## Bun Workspace serving and persistent storage (2026-10-10)
+
+The real owner Workspace now serves through a native HTTP adapter, with an Astro Bun server entry and a separate
+`dist/workspace-bun` build. The existing Deno adapter/output remain available. Portable filesystem operations cover
+owner coordination, settings, root Sessions, remaining file Session reads, Workspace styles and search refresh. SQLite
+schema, Session formats, authentication, pairing cookies, CSRF and Host checks retain their existing contracts.
+
+The HTTP adapter preserves streaming, explicit errors, compression and graceful close. Bun abort also force-closes an
+open stream after graceful shutdown starts; Deno retains its native behavior. The safe default error response logs
+server-side details but returns only `Internal Server Error`. Review S3 caught Bun's unsafe development fallback and
+verified its replacement. T11/T12 added bounded active-stream shutdown and exact built-asset/MIME assertions.
+
+All eighteen registered Bun files passed: macOS ARM64 109 tests plus five platform skips, Linux ARM64 112 tests plus two
+Windows skips. Reports: `.ci-cache/bun-report-Wpv3Ph/run.json` and
+`.ci-cache/linux-bun-runner/bun-report-olhlAp/run.json`. These include 29 existing file Session store cases, seven real
+owner database cases, and the actual pairing/authentication/static-asset wire journey. Full Deno source types and the
+selected Bun type scope passed. Focused Deno storage/server checks passed after correcting the Node ENOENT expectation
+and using a real node:http client for an explicitly overridden Host. Standards, Spec and Tests reviewers all approved.
+The complete Deno CI gate is running separately (`.ci-cache/workspace-full-ci.log`).
+
+A disposable standalone packaging probe now runs actual CLI help and serves the pairing page from an unrelated working
+directory with embedded resources; SIGTERM exits zero. Bun's asset-directory embedding keeps only the supplied root
+directory name, so a staging tree preserves the application resource paths. This probe is not yet the repeatable build
+or evidence of complete interactive/remote command migration. Native Plan/controller locks, remaining runtime APIs,
+worker/WASM packaging and platform qualification still need completion. No release or production cutover occurred.

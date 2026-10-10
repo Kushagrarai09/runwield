@@ -28,7 +28,8 @@ Deno.test("Workspace stylesheet loading accepts packaged CSS and rejects missing
         await Deno.writeTextFile(path, packaged);
         assertEquals(await readWorkspaceStyles(path), packaged);
         await Deno.writeTextFile(path, '@import "./workspace-styles/missing.css";\n');
-        await assertRejects(() => readWorkspaceStyles(path), Deno.errors.NotFound);
+        const error = await assertRejects(() => readWorkspaceStyles(path), Error);
+        assertEquals(Reflect.get(error, "code"), "ENOENT");
     } finally {
         await Deno.remove(root, { recursive: true });
     }

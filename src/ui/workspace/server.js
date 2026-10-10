@@ -8,6 +8,10 @@ import { ownerPlanContinuationApi } from "./routes/owner-plan-continuation.ts";
  * delegate to the Astro Deno adapter output when it is available.
  */
 
+import { serveHttp } from "../../shared/http-server.ts";
+import { env, versions } from "node:process";
+import { readFile } from "node:fs/promises";
+import { getCwd } from "../../constants.js";
 import { readWorkspaceStyles } from "./workspace-styles.ts";
 import { sessionArtifactKindLabel } from "../../shared/session/session-sidebar.ts";
 import { basename, dirname, extname, join, toFileUrl } from "@std/path";
@@ -125,7 +129,7 @@ const COMPONENTS_CSS_PATH = join(DESIGN_SYSTEM_DIR, "components.css");
 const WORKSPACE_CSS_PATH = join(WORKSPACE_DIR, "static", "workspace.css");
 const WORKSPACE_SHELL_JS_PATH = join(WORKSPACE_DIR, "static", "workspace-shell.ts");
 const LOGO_PATH = join(ROOT_DIR, "brand", "logo.svg");
-const ASTRO_SOURCE_DIST_DIR = join(ROOT_DIR, "dist", "workspace");
+const ASTRO_SOURCE_DIST_DIR = join(ROOT_DIR, "dist", versions.bun ? "workspace-bun" : "workspace");
 const ASTRO_RUNTIME_DIR = join(ROOT_DIR, "dist", "workspace-runtime");
 const ASTRO_SOURCE_ENTRY_PATH = join(ASTRO_SOURCE_DIST_DIR, "server", "entry.mjs");
 const ASTRO_RUNTIME_ENTRY_PATH = join(ASTRO_RUNTIME_DIR, "server.mjs");
@@ -215,7 +219,7 @@ export function createRemoteWorkspaceApp(options = { mode: "remote" }) {
         }
     });
     app.get("/p/:spaceId", async (ctx) => {
-        const astroResponse = await renderAstroPage(ctx.req, Deno.cwd());
+        const astroResponse = await renderAstroPage(ctx.req, getCwd());
         if (astroResponse) return astroResponse;
         return workspaceBuildUnavailable();
     });
@@ -497,7 +501,7 @@ export function createDocumentReadWorkspaceApp({ cwd, token }) {
                     if (!file || extname(file.absolutePath).toLowerCase() !== ".md") {
                         return new Response("Document not found.", { status: 404, headers });
                     }
-                    const markdown = await Deno.readTextFile(file.absolutePath);
+                    const markdown = await readFile(file.absolutePath, "utf8");
                     const artifactKind = linkedDocumentKind(file.path);
                     let notices = [];
                     if (artifactKind === "work-record" && dirname(file.path) === "docs/work-records") {
@@ -526,9 +530,9 @@ export function createDocumentReadWorkspaceApp({ cwd, token }) {
                     response.headers.set("referrer-policy", "same-origin");
                     return response;
                 } catch (error) {
-                    const status = error instanceof Deno.errors.PermissionDenied
+                    const status = ["EACCES", "EPERM"].includes(error.code)
                         ? 403
-                        : error instanceof Deno.errors.NotFound || error instanceof Deno.errors.NotADirectory
+                        : ["ENOENT", "ENOTDIR"].includes(error.code)
                         ? 404
                         : 500;
                     return new Response(
@@ -768,10 +772,10 @@ let astroHandlePromise;
 let astroImportFailure = false;
 
 function loadAstroHandle() {
-    if (Deno.env.get("WLD_WORKSPACE_DISABLE_BUILT_SERVER") === "1") return null;
+    if (env.WLD_WORKSPACE_DISABLE_BUILT_SERVER === "1") return null;
     if (!astroHandlePromise) {
         astroHandlePromise = (async () => {
-            const entryPaths = Deno.build.standalone
+            const entryPaths = (versions.deno && Reflect.get(globalThis, "Deno").build.standalone)
                 ? [ASTRO_RUNTIME_ENTRY_PATH, ASTRO_SOURCE_ENTRY_PATH]
                 : [ASTRO_SOURCE_ENTRY_PATH, ASTRO_RUNTIME_ENTRY_PATH];
             for (const entryPath of entryPaths) {
@@ -802,7 +806,7 @@ function loadAstroHandle() {
 
 async function isAstroEntryImportable(entryPath) {
     try {
-        const source = await Deno.readTextFile(entryPath);
+        const source = await readFile(entryPath, "utf8");
         return source.includes('"key":');
     } catch {
         return false;
@@ -1007,7 +1011,7 @@ async function ownerInSituReviewFileContent(ctx) {
  * @param {any} ctx
  * @param {string} [cwd]
  */
-async function renderRequiredOwnerAstroPage(ctx, cwd = Deno.cwd()) {
+async function renderRequiredOwnerAstroPage(ctx, cwd = getCwd()) {
     const handle = await loadAstroHandle();
     if (!handle) return workspaceBuildUnavailable();
     return await handle(withWorkspaceCwdHeader(ctx.req, cwd));
@@ -1208,7 +1212,7 @@ async function handleAstroAsset(pathname) {
     }
 
     const runtimeAssetName = getOpaqueWorkspaceAssetName(assetName);
-    const assetPaths = Deno.build.standalone
+    const assetPaths = (versions.deno && Reflect.get(globalThis, "Deno").build.standalone)
         ? [
             join(ASTRO_RUNTIME_CLIENT_ASSET_DIR, runtimeAssetName),
             join(ASTRO_SOURCE_CLIENT_ASSET_DIR, assetName),
@@ -1219,7 +1223,7 @@ async function handleAstroAsset(pathname) {
         ];
     for (const assetPath of assetPaths) {
         try {
-            const body = await Deno.readFile(assetPath);
+            const body = await readFile(assetPath);
             return new Response(body, {
                 headers: {
                     "content-type": contentTypeForAsset(assetName),
@@ -1256,7 +1260,7 @@ function contentTypeForAsset(path) {
 /** @param {string} path @param {string} contentType */
 async function textFileResponse(path, contentType) {
     try {
-        const body = path === WORKSPACE_CSS_PATH ? await readWorkspaceStyles(path) : await Deno.readTextFile(path);
+        const body = path === WORKSPACE_CSS_PATH ? await readWorkspaceStyles(path) : await readFile(path, "utf8");
         return new Response(body, { headers: { "content-type": contentType } });
     } catch {
         return new Response("Not found", { status: 404 });
@@ -1345,11 +1349,11 @@ export function startWorkspaceServer(options) {
             publicOrigin: ownerPublicOrigin,
         })
         : createWorkspaceApp({
-            cwd: options.cwd ?? Deno.cwd(),
+            cwd: options.cwd ?? getCwd(),
             token: options.token ?? "",
             mnemotecaPort: SYSTEM_WORK_RECORD_MNEMOTECA_PORT,
         });
-    const server = Deno.serve(
+    const server = serveHttp(
         {
             hostname: options.host,
             port: options.port,
@@ -1357,8 +1361,8 @@ export function startWorkspaceServer(options) {
             automaticCompression: true,
         },
         withAccessLogger(app.handler(), {
-            mode: Deno.env.get("RUNWIELD_LOG_MODE")?.toLowerCase() === "prod" ||
-                    Deno.env.get("RUNWIELD_LOG_MODE")?.toLowerCase() === "production"
+            mode: env.RUNWIELD_LOG_MODE?.toLowerCase() === "prod" ||
+                    env.RUNWIELD_LOG_MODE?.toLowerCase() === "production"
                 ? "prod"
                 : "dev",
         }),
@@ -1386,12 +1390,12 @@ export function startWorkspaceServer(options) {
 export function startSessionQuestionWorkspaceServer(options) {
     const host = options.host ?? "127.0.0.1";
     const app = createSessionQuestionWorkspaceApp({
-        cwd: options.cwd ?? Deno.cwd(),
+        cwd: options.cwd ?? getCwd(),
         token: options.token,
         questionPayload: options.questionPayload,
         answerQuestion: options.answerQuestion,
     });
-    return Deno.serve({
+    return serveHttp({
         hostname: host,
         port: options.port ?? 0,
         signal: options.signal,
@@ -1404,7 +1408,7 @@ export function startSessionQuestionWorkspaceServer(options) {
  * @param {{ cwd?: string, token: string, reviewPayload: Record<string, unknown>, reviewType: "plan" | "code", reviewConversation?: { id: string, agentLabel: string, revision: number, events: Array<{ type: string, delta: string, messageId: string, agentName: string }> }, host?: string, port?: number, signal?: AbortSignal, onOutput?: ReviewServerOutputListener }} options
  */
 export function startReviewWorkspaceServer(options) {
-    const cwd = options.cwd ?? Deno.cwd();
+    const cwd = options.cwd ?? getCwd();
     const host = options.host ?? "127.0.0.1";
     let decision = registerReviewDecisionPromise(options.token);
     const app = createReviewWorkspaceApp({
@@ -1416,7 +1420,7 @@ export function startReviewWorkspaceServer(options) {
     });
     let server;
     try {
-        server = Deno.serve({
+        server = serveHttp({
             hostname: host,
             port: options.port ?? 0,
             automaticCompression: true,

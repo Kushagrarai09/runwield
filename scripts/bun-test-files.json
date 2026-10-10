@@ -12,5 +12,9 @@
     "src/shared/agent-browser-session.test.ts",
     "src/cli-startup.test.ts",
     "src/ui/tui/tui-crash-events.test.ts",
-    "src/cmd/update/installer-process.test.ts"
+    "src/cmd/update/installer-process.test.ts",
+    "src/shared/http-server.test.ts",
+    "src/ui/workspace/workspace-portable.test.ts",
+    "src/shared/session/file-session-store.test.js",
+    "src/shared/owner-coordination/database.test.js"
 ]

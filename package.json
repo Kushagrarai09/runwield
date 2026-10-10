@@ -11,7 +11,8 @@
         "check:bun": "node scripts/check-bun-runtime.ts && tsc --project tsconfig.bun.json",
         "test:bun": "node scripts/run-bun-tests.ts",
         "check:portable-json": "node scripts/check-portable-json.ts",
-        "ci:deno": "deno task ci"
+        "ci:deno": "deno task ci",
+        "workspace:build:bun": "node scripts/check-bun-runtime.ts && node node_modules/astro/bin/astro.mjs build --config src/ui/workspace/astro.config.mjs"
     },
     "dependencies": {
         "@agentclientprotocol/sdk": "1.4.0",

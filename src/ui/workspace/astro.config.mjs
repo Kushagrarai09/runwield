@@ -6,6 +6,8 @@ globalThis.module = globalThis.module || { exports: globalThis.exports };
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, passthroughImageService } from "astro/config";
+import { versions } from "node:process";
+import bunAdapter from "./integrations/bun-adapter.ts";
 import deno from "@deno/astro-adapter";
 import react from "./integrations/deno-react.mjs";
 import tailwindcss from "@tailwindcss/vite";
@@ -27,13 +29,13 @@ export default defineConfig({
     root: WORKSPACE_DIR,
     srcDir: WORKSPACE_DIR,
     publicDir: resolve(WORKSPACE_DIR, "static"),
-    outDir: resolve(ROOT_DIR, "dist/workspace"),
+    outDir: resolve(ROOT_DIR, versions.bun ? "dist/workspace-bun" : "dist/workspace"),
     output: "server",
     server: {
         host: "127.0.0.1",
         port: 5173,
     },
-    adapter: deno({
+    adapter: versions.bun ? bunAdapter() : deno({
         start: false,
         port: 8085,
         hostname: "0.0.0.0",

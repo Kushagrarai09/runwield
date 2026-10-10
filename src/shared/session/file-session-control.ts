@@ -3,6 +3,7 @@
  * Operation-scoped writer locks, generation publication, and explicit recovery.
  */
 
+import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { openNativeFileLock } from "../native-file-lock.ts";
 import { requestWorkspaceSearchRefresh } from "../workspace-search-refresh.ts";
@@ -195,7 +196,7 @@ export function createFileSessionControl(options: FileSessionControlOptions): Fi
                 }
                 const current = manifest.segments.find((segment) => segment.segmentId === manifest.currentSegmentId);
                 if (!current) throw new Error("Session transcript is unavailable");
-                const baselineBytes = Deno.readFileSync(current.transcriptPath);
+                const baselineBytes = readFileSync(current.transcriptPath);
                 manifest.fence += 1;
                 manifest.activation = {
                     state: "active",
@@ -380,7 +381,7 @@ export function createFileSessionControl(options: FileSessionControlOptions): Fi
                 const evidence = recoveryOptions.transcriptEvidence;
                 const current = manifest.segments.find((segment) => segment.segmentId === manifest.currentSegmentId);
                 if (!current) throw new Error("Session recovery transcript is unavailable");
-                const bytes = Deno.readFileSync(current.transcriptPath);
+                const bytes = readFileSync(current.transcriptPath);
                 if (recoveryOptions.expectedGeneration === null) {
                     const baselineByteLength = manifest.activation.baselineByteLength;
                     const baselineDigestHex = manifest.activation.baselineDigestHex;
@@ -521,7 +522,7 @@ export function createFileSessionControl(options: FileSessionControlOptions): Fi
                     throw new Error("Rollover predecessor is not current");
                 }
                 const supplied = rolloverOptions.predecessorEvidence;
-                const bytes = Deno.readFileSync(predecessor.transcriptPath);
+                const bytes = readFileSync(predecessor.transcriptPath);
                 if (
                     bytes.byteLength !== supplied.byteLength ||
                     createHash("sha256").update(bytes).digest("hex") !== supplied.digestHex
