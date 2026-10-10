@@ -47,8 +47,8 @@ replacing Deno-specific runtime dependencies. Follow [ADR-015](../adr/015-file-a
 Core [execution, validation and recovery requirements](../prd/runwield-core-prd.md#execution-validation-and-recovery).
 No current PRD requirement is added or removed by the first portable storage slice.
 
-The fundamental decision still open is whether to adopt Bun for production after feasibility qualification or retain
-Node + pnpm as the fallback. Portable `node:` filesystem work can proceed under either choice. Do not replace the
+Bun is the preferred target; Node + pnpm remains the fallback if compatibility evidence warrants it. No target-choice
+clarification is needed to continue. Production cutover still requires the acceptance gates below: do not replace the
 default runtime, installer, CI or package manager based solely on the POC recommendation.
 
 ## Implementation sequence and acceptance gates
@@ -168,7 +168,8 @@ complete gate.
 
 Verification includes clean frozen installation outside the checkout, direct dependency import-map version agreement,
 real Pi/MCP/JSR/SQLite imports, retained Session-store tests, and real subprocess tests proving isolation, failure
-handling and timeouts. Native Windows and Linux execution of the new runner have not yet been performed on this Mac.
+handling and timeouts. The runner was subsequently qualified on Linux ARM64 as recorded below; Windows execution remains
+pending.
 
 References: [Bun configuration](https://bun.com/docs/runtime/bunfig),
 [Bun lifecycle policy](https://bun.com/docs/pm/lifecycle), and
@@ -234,3 +235,28 @@ portable storage, Session store, owner coordination, reviews/rollover, root sess
 Full Deno type checking, targeted lint, formatting and zero-seam checks passed. Standards, Spec and Tests review
 approved after strengthening nested cache clone isolation and pinning legacy long-path encoding against same-basename
 roots.
+
+## Compiled storage qualification and activation evidence
+
+The manifest storage assertions are shared between the isolated suite and `scripts/check-portable-json.ts`, alongside
+the original atomic-write assertions. The qualification driver executes the same cases under Bun, Node and relocated
+compiled executables. Initial ten-case runs passed from Bun/Node source, a relocated macOS ARM64 executable, and a Linux
+ARM64 executable inside the existing cached Debian container with networking disabled and a read-only root filesystem.
+Only a temporary sandbox was writable; no build-machine node_modules or source tree was mounted.
+
+Activation-baseline and committed-transcript reads now use `node:fs`. Shared cases also check unchanged initial
+evidence, changed bytes, missing segments, same-length digest mismatch, appended bytes and missing transcripts. They
+preserve the existing idle/uninitialized, reconciliation-required and uncertain recovery distinctions. Actual
+writer-lock acquisition still requires the Deno runtime. Windows native locks and complete application packaging remain
+unqualified.
+
+The expanded twelve-case driver passed from Node source and compiled executables on macOS ARM64 and Linux ARM64. The
+activation baseline test also preserves byte length while changing content, so a length-only digest check cannot pass.
+Independent Standards/Spec/Tests reviews approved after this strengthening. The Bun CLI itself remains unported: a
+sandboxed `src/cli.ts --help` run stops at the entrypoint's `Deno.args` access. This is a concrete remaining startup
+dependency, not a claim that storage qualification makes the application runnable under Bun.
+
+All six migrated Bun test files also passed using the cached Bun 1.4.3 Linux ARM64 runtime in the network-disabled
+container. Source and dependencies were mounted read-only; runner sandboxes and reports were isolated writable paths.
+The report is `.ci-cache/linux-bun-runner/bun-report-9S56K5/run.json`. Final twelve-case compiled logs are
+`.ci-cache/portable-storage-darwin.log` and `.ci-cache/portable-storage-linux.log`.
