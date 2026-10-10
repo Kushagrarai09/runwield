@@ -2,6 +2,7 @@
 import { DatabaseSync as NodeDatabaseSync } from "node:sqlite";
 import type { SQLInputValue, SQLOutputValue } from "node:sqlite";
 import { versions } from "node:process";
+import { createRequire } from "node:module";
 
 export type SqliteRow = Record<string, SQLOutputValue>;
 interface SqliteRunResult {
@@ -29,7 +30,8 @@ interface BunSqliteModule {
 interface DatabaseOptions {
     readOnly?: boolean;
 }
-const bunSqlite: BunSqliteModule | null = versions.bun ? await import(String("bun:sqlite")) : null;
+// Keep this synchronous: top-level await makes Deno's bundled command graph stall on its import cycles.
+const bunSqlite: BunSqliteModule | null = versions.bun ? createRequire(import.meta.url)("bun:sqlite") : null;
 
 /** The shared synchronous subset used by RunWield's durable stores. */
 export class DatabaseSync {

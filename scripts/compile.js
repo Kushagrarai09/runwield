@@ -75,9 +75,10 @@ const STATIC_INCLUDE_PATHS = [
  * @param {string} cmd
  * @param {string[]} args
  * @param {Record<string, string>} [extraEnv]
+ * @param {AbortSignal} [signal]
  * @returns {Promise<CommandResult>}
  */
-async function runCmd(cmd, args, extraEnv = {}) {
+async function runCmd(cmd, args, extraEnv = {}, signal) {
     // Vite embeds the environment object's insertion order into server.mjs.
     // Preserve the build environment in a stable order and exclude `_`,
     // which shells change to the previous command path between builds.
@@ -85,7 +86,7 @@ async function runCmd(cmd, args, extraEnv = {}) {
         Object.entries({ ...{ ...process.env }, ...extraEnv }).filter(([key]) => key !== "_")
             .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0),
     );
-    const output = await captureScriptProcess(cmd, { args, env, clearEnv: true, stdout: "piped", stderr: "piped" });
+    const output = await captureScriptProcess(cmd, { args, env, clearEnv: true, signal, stdout: "piped", stderr: "piped" });
     const { success, stdout, stderr } = output;
     return {
         success,
@@ -304,6 +305,11 @@ export async function main(args = process.argv.slice(2)) {
         const smokeTest = await runCmd(resolve(output), ["--version"]);
         if (!smokeTest.success) {
             throw new Error(smokeTest.stderr || "Compiled RunWield binary failed its startup smoke test.");
+        }
+        // Version and image smoke entries bypass the command graph; help exercises its bundled import cycles.
+        const helpSmokeTest = await runCmd(resolve(output), ["--help"], {}, AbortSignal.timeout(30_000));
+        if (!helpSmokeTest.success || !helpSmokeTest.stdout.includes("Plan-by-Default")) {
+            throw new Error(helpSmokeTest.stderr || "Compiled RunWield binary failed its command graph smoke test.");
         }
         const imageSmokeTest = await runCmd(resolve(output), ["package-smoke", "image-resize"], {
             WLD_INTERNAL_PACKAGE_CHECK: "1",
