@@ -36,92 +36,171 @@
     "jsr:@std/testing@^1.0.21": "1.0.21",
     "jsr:@std/toml@^1.0.3": "1.0.11",
     "jsr:@std/yaml@^1.0.5": "1.1.2",
+    "npm:@agentclientprotocol/sdk@1.4.0": "1.4.0_zod@4.4.3",
     "npm:@agentclientprotocol/sdk@^1.4.0": "1.4.0_zod@4.4.3",
+    "npm:@astrojs/check@0.9.10": "0.9.10_typescript@5.9.3",
     "npm:@astrojs/check@~0.9.10": "0.9.10_typescript@5.9.3",
-    "npm:@astrojs/react@^6.0.1": "6.0.1_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0",
+    "npm:@astrojs/react@6.0.1": "6.0.1_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0_@types+node@26.6.4",
+    "npm:@astrojs/react@^6.0.1": "6.0.1_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0_@types+node@26.6.4",
+    "npm:@base-ui/react@1.7.0": "1.7.0_@types+react@19.2.18_react@19.3.0_react-dom@19.3.0",
     "npm:@base-ui/react@^1.7.0": "1.7.0_@types+react@19.2.18_react@19.3.0_react-dom@19.3.0",
+    "npm:@codemirror/autocomplete@6.20.3": "6.20.3",
     "npm:@codemirror/autocomplete@^6.20.3": "6.20.3",
+    "npm:@codemirror/commands@6.11.1": "6.11.1",
     "npm:@codemirror/commands@^6.11.0": "6.11.1",
+    "npm:@codemirror/lang-javascript@6.2.5": "6.2.5",
     "npm:@codemirror/lang-javascript@^6.2.5": "6.2.5",
+    "npm:@codemirror/lang-json@6.0.2": "6.0.2",
     "npm:@codemirror/lang-json@^6.0.2": "6.0.2",
+    "npm:@codemirror/lang-markdown@6.5.0": "6.5.0",
     "npm:@codemirror/lang-markdown@^6.5.0": "6.5.0",
+    "npm:@codemirror/lang-python@6.2.1": "6.2.1",
     "npm:@codemirror/lang-python@^6.2.1": "6.2.1",
+    "npm:@codemirror/lang-yaml@6.1.3": "6.1.3",
     "npm:@codemirror/lang-yaml@^6.1.3": "6.1.3",
+    "npm:@codemirror/language@6.12.4": "6.12.4",
     "npm:@codemirror/language@^6.12.4": "6.12.4",
+    "npm:@codemirror/legacy-modes@6.5.3": "6.5.3",
     "npm:@codemirror/legacy-modes@^6.5.3": "6.5.3",
+    "npm:@codemirror/state@6.7.5": "6.7.5",
     "npm:@codemirror/state@^6.7.5": "6.7.5",
+    "npm:@codemirror/view@6.43.11": "6.43.11",
     "npm:@codemirror/view@^6.43.11": "6.43.11",
-    "npm:@deno/astro-adapter@0.6": "0.6.0_astro@7.3.5",
+    "npm:@deno/astro-adapter@0.6": "0.6.0_astro@7.3.5_@types+node@26.6.4",
+    "npm:@deno/astro-adapter@0.6.0": "0.6.0_astro@7.3.5_@types+node@26.6.4",
     "npm:@earendil-works/pi-agent-core@1": "1.0.0_@modelcontextprotocol+sdk@1.30.0_undici@8.10.2",
+    "npm:@earendil-works/pi-agent-core@1.0.0": "1.0.0_@modelcontextprotocol+sdk@1.30.0_undici@8.10.2",
     "npm:@earendil-works/pi-ai@1": "1.0.0_@modelcontextprotocol+sdk@1.30.0_undici@8.10.2",
+    "npm:@earendil-works/pi-ai@1.0.0": "1.0.0_@modelcontextprotocol+sdk@1.30.0_undici@8.10.2",
     "npm:@earendil-works/pi-coding-agent@1": "1.0.0_@modelcontextprotocol+sdk@1.30.0",
+    "npm:@earendil-works/pi-coding-agent@1.0.0": "1.0.0_@modelcontextprotocol+sdk@1.30.0",
     "npm:@earendil-works/pi-mcp@1": "1.0.0",
+    "npm:@earendil-works/pi-mcp@1.0.0": "1.0.0",
     "npm:@earendil-works/pi-tui@1": "1.0.0",
+    "npm:@earendil-works/pi-tui@1.0.0": "1.0.0",
+    "npm:@jsr/std__assert@1.0.19": "1.0.19",
+    "npm:@jsr/std__cli@1.0.32": "1.0.32",
+    "npm:@jsr/std__front-matter@1.0.9": "1.0.9",
+    "npm:@jsr/std__jsonc@1.0.2": "1.0.2",
+    "npm:@jsr/std__path@1.1.6": "1.1.6",
+    "npm:@jsr/std__testing@1.0.21": "1.0.21",
+    "npm:@lezer/common@1.5.2": "1.5.2",
     "npm:@lezer/common@^1.5.2": "1.5.2",
+    "npm:@lezer/highlight@1.2.3": "1.2.3",
     "npm:@lezer/highlight@^1.2.3": "1.2.3",
     "npm:@modelcontextprotocol/sdk@1.30.0": "1.30.0_zod@4.4.3",
     "npm:@modelcontextprotocol/sdk@^1.30.0": "1.30.0_zod@4.4.3",
     "npm:@pierre/diffs@1.4.2": "1.4.2_react@19.3.0_react-dom@19.3.0",
     "npm:@plannotator/atomic-editor@0.8": "0.8.0_@codemirror+autocomplete@6.20.3_@codemirror+commands@6.11.1_@codemirror+lang-javascript@6.2.5_@codemirror+lang-json@6.0.2_@codemirror+lang-markdown@6.5.0_@codemirror+lang-python@6.2.1_@codemirror+lang-yaml@6.1.3_@codemirror+language@6.12.4_@codemirror+legacy-modes@6.5.3_@codemirror+state@6.7.5_@codemirror+view@6.43.11_@lezer+common@1.5.2_@lezer+highlight@1.2.3_react@19.3.0_react-dom@19.3.0_typescript@5.9.3",
+    "npm:@plannotator/atomic-editor@0.8.0": "0.8.0_@codemirror+autocomplete@6.20.3_@codemirror+commands@6.11.1_@codemirror+lang-javascript@6.2.5_@codemirror+lang-json@6.0.2_@codemirror+lang-markdown@6.5.0_@codemirror+lang-python@6.2.1_@codemirror+lang-yaml@6.1.3_@codemirror+language@6.12.4_@codemirror+legacy-modes@6.5.3_@codemirror+state@6.7.5_@codemirror+view@6.43.11_@lezer+common@1.5.2_@lezer+highlight@1.2.3_react@19.3.0_react-dom@19.3.0_typescript@5.9.3",
     "npm:@plannotator/markdown-editor@0.4": "0.4.0_@codemirror+lang-javascript@6.2.5_@codemirror+lang-json@6.0.2_@codemirror+lang-python@6.2.1_@codemirror+lang-yaml@6.1.3_@codemirror+language@6.12.4_@codemirror+legacy-modes@6.5.3_@codemirror+state@6.7.5_@plannotator+atomic-editor@0.8.0_react@19.3.0_react-dom@19.3.0",
+    "npm:@plannotator/markdown-editor@0.4.0": "0.4.0_@codemirror+lang-javascript@6.2.5_@codemirror+lang-json@6.0.2_@codemirror+lang-python@6.2.1_@codemirror+lang-yaml@6.1.3_@codemirror+language@6.12.4_@codemirror+legacy-modes@6.5.3_@codemirror+state@6.7.5_@plannotator+atomic-editor@0.8.0_react@19.3.0_react-dom@19.3.0",
+    "npm:@plannotator/web-highlighter@0.8.1": "0.8.1",
     "npm:@plannotator/web-highlighter@~0.8.1": "0.8.1",
+    "npm:@preact/signals@2.11.3": "2.11.3_preact@10.29.8",
     "npm:@preact/signals@^2.11.2": "2.11.3_preact@10.29.8",
+    "npm:@radix-ui/react-checkbox@1.3.11": "1.3.11_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0",
     "npm:@radix-ui/react-checkbox@^1.3.11": "1.3.11_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0",
+    "npm:@radix-ui/react-collapsible@1.1.20": "1.1.20_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0",
     "npm:@radix-ui/react-collapsible@^1.1.20": "1.1.20_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0",
+    "npm:@radix-ui/react-context-menu@2.3.5": "2.3.5_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0",
     "npm:@radix-ui/react-context-menu@^2.3.3": "2.3.5_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0",
+    "npm:@radix-ui/react-dialog@1.1.23": "1.1.23_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0",
     "npm:@radix-ui/react-dialog@^1.1.23": "1.1.23_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0",
+    "npm:@radix-ui/react-dropdown-menu@2.1.24": "2.1.24_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0",
     "npm:@radix-ui/react-dropdown-menu@^2.1.24": "2.1.24_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0",
+    "npm:@radix-ui/react-popover@1.1.23": "1.1.23_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0",
     "npm:@radix-ui/react-popover@^1.1.23": "1.1.23_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0",
+    "npm:@radix-ui/react-slot@1.3.3": "1.3.3_@types+react@19.2.18_react@19.3.0",
     "npm:@radix-ui/react-slot@^1.3.3": "1.3.3_@types+react@19.2.18_react@19.3.0",
+    "npm:@radix-ui/react-tabs@1.1.21": "1.1.21_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0",
     "npm:@radix-ui/react-tabs@^1.1.21": "1.1.21_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0",
+    "npm:@radix-ui/react-tooltip@1.2.16": "1.2.16_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0",
     "npm:@radix-ui/react-tooltip@^1.2.16": "1.2.16_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0",
     "npm:@silvia-odwyer/photon-node@0.3.4": "0.3.4",
-    "npm:@tailwindcss/vite@^4.3.3": "4.3.3_vite@8.3.1_esbuild@0.28.2",
+    "npm:@tailwindcss/vite@4.3.3": "4.3.3_vite@8.3.1_@types+node@26.6.4",
+    "npm:@tailwindcss/vite@^4.3.3": "4.3.3_vite@8.3.1_@types+node@26.6.4",
+    "npm:@tanstack/react-table@8.21.3": "8.21.3_react@19.3.0_react-dom@19.3.0",
     "npm:@tanstack/react-table@^8.21.3": "8.21.3_react@19.3.0_react-dom@19.3.0",
+    "npm:@types/bun@1.3.12": "1.3.12",
+    "npm:@types/node@26.6.4": "26.6.4",
+    "npm:@types/react-dom@19.2.3": "19.2.3_@types+react@19.2.18",
     "npm:@types/react-dom@^19.2.3": "19.2.3_@types+react@19.2.18",
+    "npm:@types/react@19.2.18": "19.2.18",
     "npm:@types/react@^19.2.18": "19.2.18",
-    "npm:@vitejs/plugin-react@^6.0.5": "6.1.0_vite@8.3.1_esbuild@0.28.2",
+    "npm:@vitejs/plugin-react@6.1.0": "6.1.0_vite@8.3.1_@types+node@26.6.4",
+    "npm:@vitejs/plugin-react@^6.0.5": "6.1.0_vite@8.3.1_@types+node@26.6.4",
+    "npm:@viz-js/viz@3.29.0": "3.29.0",
     "npm:@viz-js/viz@^3.29.0": "3.29.0",
     "npm:@xterm/headless@6.0.0": "6.0.0",
+    "npm:@zag-js/dialog@1.42.0": "1.42.0",
     "npm:@zag-js/dialog@^1.42.0": "1.42.0",
+    "npm:@zag-js/preact@1.43.3": "1.43.3_preact@10.29.8",
     "npm:@zag-js/preact@^1.43.0": "1.43.3_preact@10.29.8",
-    "npm:astro@*": "7.3.5",
-    "npm:astro@^7.3.5": "7.3.5",
+    "npm:astro@*": "7.3.5_@types+node@26.6.4",
+    "npm:astro@7.3.5": "7.3.5_@types+node@26.6.4",
+    "npm:astro@^7.3.5": "7.3.5_@types+node@26.6.4",
     "npm:beautiful-mermaid@1.1.3": "1.1.3",
     "npm:beautiful-mermaid@^1.1.3": "1.1.3",
     "npm:chalk@6": "6.0.0",
+    "npm:chalk@6.0.0": "6.0.0",
+    "npm:class-variance-authority@0.7.1": "0.7.1",
     "npm:class-variance-authority@~0.7.1": "0.7.1",
+    "npm:clsx@2.1.1": "2.1.1",
     "npm:clsx@^2.1.1": "2.1.1",
+    "npm:codemirror@6.0.2": "6.0.2",
     "npm:codemirror@^6.0.2": "6.0.2",
-    "npm:diff@8.0.4": "8.0.4",
     "npm:diff@9": "9.0.0",
+    "npm:diff@9.0.0": "9.0.0",
+    "npm:dockview-react@8.2.0": "8.2.0_react@19.3.0_react-dom@19.3.0",
     "npm:dockview-react@^8.2.0": "8.2.0_react@19.3.0_react-dom@19.3.0",
     "npm:dompurify@*": "3.4.15",
+    "npm:dompurify@3.4.15": "3.4.15",
     "npm:dompurify@^3.4.11": "3.4.15",
+    "npm:esbuild@0.28.2": "0.28.2",
     "npm:esbuild@~0.28.2": "0.28.2",
+    "npm:fuse.js@7.5.0": "7.5.0",
     "npm:fuse.js@^7.5.0": "7.5.0",
     "npm:happy-dom@20.8.4": "20.8.4",
+    "npm:highlight.js@11.11.1": "11.11.1",
     "npm:highlight.js@^11.11.1": "11.11.1",
+    "npm:katex@0.18.5": "0.18.5",
     "npm:katex@~0.18.4": "0.18.5",
+    "npm:lucide-react@1.45.0": "1.45.0_react@19.3.0",
     "npm:lucide-react@^1.41.0": "1.45.0_react@19.3.0",
+    "npm:marked@18.0.11": "18.0.11",
     "npm:marked@^18.0.11": "18.0.11",
     "npm:mermaid@12": "12.0.0",
+    "npm:mermaid@12.0.0": "12.0.0",
+    "npm:motion@13.2.0": "13.2.0_react@19.3.0_react-dom@19.3.0",
     "npm:motion@^13.1.1": "13.2.0_react@19.3.0_react-dom@19.3.0",
+    "npm:perfect-freehand@1.2.3": "1.2.3",
     "npm:perfect-freehand@^1.2.3": "1.2.3",
+    "npm:preact@10.29.8": "10.29.8",
     "npm:preact@^10.29.8": "10.29.8",
+    "npm:proper-lockfile@4.1.2": "4.1.2",
     "npm:proper-lockfile@^4.1.2": "4.1.2",
+    "npm:quikdown@1.2.21": "1.2.21",
     "npm:quikdown@^1.2.21": "1.2.21",
+    "npm:react-dom@19.3.0": "19.3.0_react@19.3.0",
     "npm:react-dom@^19.3.0": "19.3.0_react@19.3.0",
     "npm:react-test-renderer@19.2.7": "19.2.7_react@19.3.0",
     "npm:react-test-renderer@^19.2.7": "19.2.7_react@19.3.0",
+    "npm:react@19.3.0": "19.3.0",
     "npm:react@^19.3.0": "19.3.0",
     "npm:shiki@3": "3.23.0",
+    "npm:strip-ansi@7.2.0": "7.2.0",
     "npm:strip-ansi@^7.2.0": "7.2.0",
+    "npm:tailwind-merge@3.7.0": "3.7.0",
     "npm:tailwind-merge@^3.7.0": "3.7.0",
+    "npm:tailwindcss@4.3.3": "4.3.3",
     "npm:tailwindcss@^4.3.3": "4.3.3",
+    "npm:typescript@5.9.3": "5.9.3",
     "npm:typescript@^5.9.3": "5.9.3",
+    "npm:unique-username-generator@1.5.1": "1.5.1",
     "npm:unique-username-generator@^1.5.1": "1.5.1",
-    "npm:vite@^8.3.0": "8.3.1_esbuild@0.28.2"
+    "npm:vite@8.3.1": "8.3.1_@types+node@26.6.4_esbuild@0.28.2",
+    "npm:vite@^8.3.0": "8.3.1_@types+node@26.6.4_esbuild@0.28.2"
   },
   "jsr": {
     "@std/assert@1.0.19": {
@@ -415,13 +494,13 @@
         "prismjs"
       ]
     },
-    "@astrojs/react@6.0.1_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0": {
+    "@astrojs/react@6.0.1_@types+react@19.2.18_@types+react-dom@19.2.3_react@19.3.0_react-dom@19.3.0_@types+node@26.6.4": {
       "integrity": "sha512-Afs1sEm72P2plDnrOGxmIteJ7bjx/VqxlcaQLNip5eHJ5tIvKUORQetC9UKcvgwKnj51t60HWl5mOANkOsWs4w==",
       "dependencies": [
         "@astrojs/internal-helpers@0.10.1",
         "@types/react",
         "@types/react-dom",
-        "@vitejs/plugin-react@5.2.0_vite@8.3.1_esbuild@0.28.2",
+        "@vitejs/plugin-react@5.2.0_vite@8.3.1_@types+node@26.6.4",
         "devalue",
         "react",
         "react-dom",
@@ -1085,7 +1164,7 @@
         "w3c-keyname"
       ]
     },
-    "@deno/astro-adapter@0.6.0_astro@7.3.5": {
+    "@deno/astro-adapter@0.6.0_astro@7.3.5_@types+node@26.6.4": {
       "integrity": "sha512-zltNm5I7MME7Udb5TtAGIfLrfOHiuDG1FrKWDqYbFQ+AurmwxHvfwVCca4f+jfGQY3DnwYLDvb0tnmeI8aUWfg==",
       "dependencies": [
         "astro"
@@ -1621,6 +1700,118 @@
         "@jridgewell/resolve-uri",
         "@jridgewell/sourcemap-codec"
       ]
+    },
+    "@jsr/std__assert@1.0.19": {
+      "integrity": "sha512-pEj6RPkGbqlgRmyKwATp4cUs6+ijxtdrv3bq8v1d2I2CEcMEyPaO8cVKro61wGRDH4cNg8Zx6haztvK/9m7gkA==",
+      "dependencies": [
+        "@jsr/std__internal"
+      ],
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__assert/1.0.19.tgz"
+    },
+    "@jsr/std__async@1.5.1": {
+      "integrity": "sha512-L6CfoI0FsWWTdnR6tWej3mcRObhmz7dthGj577uLwbDXpA1jZQTnIOL2PRdqgzqHzz9Q6Y8xvfOcEUpDNp8Wkw==",
+      "dependencies": [
+        "@jsr/std__data-structures"
+      ],
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__async/1.5.1.tgz"
+    },
+    "@jsr/std__bytes@1.0.6": {
+      "integrity": "sha512-St6yKggjFGhxS52IFLJWvkchRFbAKg2Xh8UxA4S1EGz7GJ2Ui+ssDDldj/w2c8vCxvl6qgR0HaYbKeFJNqujmA==",
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__bytes/1.0.6.tgz"
+    },
+    "@jsr/std__cli@1.0.32": {
+      "integrity": "sha512-piaFso6urosCHGLkmy49pXXBJrW8zf1FlXXF4Zj0R2FGQdOGeoDDIfBejMzh+5W/GfJy3kbZGKqP8V2XHzZobQ==",
+      "dependencies": [
+        "@jsr/std__fmt",
+        "@jsr/std__internal"
+      ],
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__cli/1.0.32.tgz"
+    },
+    "@jsr/std__collections@1.4.0": {
+      "integrity": "sha512-Px3STXCAB/zjWh2xpV0C1vyTVlJe8IVmzktBP+9WZFAJ6ihE9jG4mz0+stRdFC8ksf5bHP2b/dc2qADD9jJTKg==",
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__collections/1.4.0.tgz"
+    },
+    "@jsr/std__data-structures@1.1.3": {
+      "integrity": "sha512-crPd/DvrElv0WDxCuDIlA4PDLvBgVbo+Ry3/XgOFKQTnWTNnpi/XC4znW6awQQZ0nbJLpWoo9AYc/+CxTYfUpQ==",
+      "dependencies": [
+        "@jsr/std__assert"
+      ],
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__data-structures/1.1.3.tgz"
+    },
+    "@jsr/std__fmt@1.0.10": {
+      "integrity": "sha512-Q2N8XDNkh/c1IKTi+sO4Vm64M5m4W0o47qTURmMX0vgHm9AJ6jL7jEQ2kw0M1T2rBZiwAY78eUbYzFyOYWaCqQ==",
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__fmt/1.0.10.tgz"
+    },
+    "@jsr/std__front-matter@1.0.9": {
+      "integrity": "sha512-CSz8B8ABdHk9O1sbeIhR+hwIfrIImhTzCMxPWnFmwtuoIHoOAqHQJKmKFl0r2MYD5TZlN+t+Z+0wlp0dfU0TaA==",
+      "dependencies": [
+        "@jsr/std__toml",
+        "@jsr/std__yaml"
+      ],
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__front-matter/1.0.9.tgz"
+    },
+    "@jsr/std__fs@1.0.24": {
+      "integrity": "sha512-UunW2Rg++9sA74NJnYMGTsMVQgoFRAwPP02wRRohL0PQBNorbyxHiyCMRaxYQCtLepTLkC4nUyMtcwrGKqTR6g==",
+      "dependencies": [
+        "@jsr/std__internal",
+        "@jsr/std__path"
+      ],
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__fs/1.0.24.tgz"
+    },
+    "@jsr/std__internal@1.0.14": {
+      "integrity": "sha512-JT8b/t40WcR9q0GDwRZUooY7aXeXnFal8iidE/5TckdAFtvpVAsaJ71/Xgf1SfoChs41s6CZkuCYM8toaNgdvA==",
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__internal/1.0.14.tgz"
+    },
+    "@jsr/std__json@1.1.0": {
+      "integrity": "sha512-a9Eylh7ox33tFn5RxhESnvI4akpefQP5Qn+ePz3Ih4IJ/EPA8p0SKq0aztRfN1sGDhfyWMPWwlUcwNxONt+Ncg==",
+      "dependencies": [
+        "@jsr/std__streams"
+      ],
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__json/1.1.0.tgz"
+    },
+    "@jsr/std__jsonc@1.0.2": {
+      "integrity": "sha512-Lva9lY0UPvvgmS8INUHU8Tqijq2SPfdlnSAvofOYUBiB6ALPxo0rTMznRlY5Wt30nMW+rhMTha1x5RGpMBKUoQ==",
+      "dependencies": [
+        "@jsr/std__json"
+      ],
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__jsonc/1.0.2.tgz"
+    },
+    "@jsr/std__path@1.1.6": {
+      "integrity": "sha512-H1Cmg6z8jFyIsQbVV+vZB4eOx4k6Qg8lyUM6l7nZysj5MZumg89kb0M1bsPBTGQis3fw6mJFkJELo5+AK6oCFA==",
+      "dependencies": [
+        "@jsr/std__internal"
+      ],
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__path/1.1.6.tgz"
+    },
+    "@jsr/std__streams@1.1.2": {
+      "integrity": "sha512-TNg+Mr/vE2Wg+JDdZpVj9umEyzcmSAOtcp0ildlyVCjHy0/fJ2BJZgO8PQXA/SwJOchvKLaMafZzfFkm9PO13A==",
+      "dependencies": [
+        "@jsr/std__bytes"
+      ],
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__streams/1.1.2.tgz"
+    },
+    "@jsr/std__testing@1.0.21": {
+      "integrity": "sha512-co+fpkfJIthVk8XP9tJOrkOIBjKac2ubY7FtCOM9zWj53OxXhP7XiOb6pRQZKWVcdH3byf9+kMAKYe+Ar9YaVQ==",
+      "dependencies": [
+        "@jsr/std__assert",
+        "@jsr/std__async",
+        "@jsr/std__data-structures",
+        "@jsr/std__fs",
+        "@jsr/std__internal",
+        "@jsr/std__path"
+      ],
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__testing/1.0.21.tgz"
+    },
+    "@jsr/std__toml@1.0.11": {
+      "integrity": "sha512-+LZAizoPAPwMDmRZr86/xPrbO8E0Oq0BJ70mr1fNMobJ/6X6v15Jk16ZClFGukWgzBMd8ggiMWnzp24+N3VNZg==",
+      "dependencies": [
+        "@jsr/std__collections"
+      ],
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__toml/1.0.11.tgz"
+    },
+    "@jsr/std__yaml@1.3.0": {
+      "integrity": "sha512-TuFbXlSy3nRuQuR8co2t7yzhv53ObdYZZidn8M958Glj6vBp5b7nxg7wTN8VTyCwC3vpbr6Mfdx9auNe/BMAVA==",
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__yaml/1.3.0.tgz"
     },
     "@lezer/common@1.5.2": {
       "integrity": "sha512-sxQE460fPZyU3sdc8lafxiPwJHBzZRy/udNFynGQky1SePYBdhkBl1kOagA9uT3pxR8K09bOrmTUqA9wb/PjSQ=="
@@ -3076,7 +3267,7 @@
         "@tailwindcss/oxide-win32-x64-msvc"
       ]
     },
-    "@tailwindcss/vite@4.3.3_vite@8.3.1_esbuild@0.28.2": {
+    "@tailwindcss/vite@4.3.3_vite@8.3.1_@types+node@26.6.4": {
       "integrity": "sha512-yYU8cogLeSh/ms2jh8Fj7jaba/EWa7Ja6GoUqYZaraEuCI5YS6ms6ObZgjjedm+jm6XZjdNRWBpPP6Z86oOxcw==",
       "dependencies": [
         "@tailwindcss/node",
@@ -3129,6 +3320,12 @@
       "integrity": "sha512-8PvcXf70gTDZBgt9ptxJ8elBeBjcLOAcOtoO/mPJjtji1+CdGbHgm77om1GrsPxsiE+uXIpNSK64UYaIwQXd4Q==",
       "dependencies": [
         "@babel/types"
+      ]
+    },
+    "@types/bun@1.3.12": {
+      "integrity": "sha512-DBv81elK+/VSwXHDlnH3Qduw+KxkTIWi7TXkAeh24zpi5l0B2kUg9Ga3tb4nJaPcOFswflgi/yAvMVBPrxMB+A==",
+      "dependencies": [
+        "bun-types"
       ]
     },
     "@types/d3-array@3.2.2": {
@@ -3321,8 +3518,8 @@
         "@types/unist"
       ]
     },
-    "@types/node@26.4.1": {
-      "integrity": "sha512-k97ENvZWtvA6yqz5/FS6a7duDgOPEeOQOc2iKS/nY6mX6qJUKtLnWzQS+Xj6tXweyj6ZcTAK2Qecetnvi9nCLA==",
+    "@types/node@26.6.4": {
+      "integrity": "sha512-ldVPDCzj7fsaGZrLB0NuHuTvJcsNasysBAqMolr/cgxrLd1xbqxIr3XJiPnHHJUCxj5sNF1vnRj9aWnrVh5Jcg==",
       "dependencies": [
         "undici-types"
       ]
@@ -3367,7 +3564,7 @@
         "d3-transition"
       ]
     },
-    "@vitejs/plugin-react@5.2.0_vite@8.3.1_esbuild@0.28.2": {
+    "@vitejs/plugin-react@5.2.0_vite@8.3.1_@types+node@26.6.4": {
       "integrity": "sha512-YmKkfhOAi3wsB1PhJq5Scj3GXMn3WvtQ/JC0xoopuHoXSdmtdStOpFrYaT1kie2YgFBcIe64ROzMYRjCrYOdYw==",
       "dependencies": [
         "@babel/core",
@@ -3379,7 +3576,7 @@
         "vite"
       ]
     },
-    "@vitejs/plugin-react@6.1.0_vite@8.3.1_esbuild@0.28.2": {
+    "@vitejs/plugin-react@6.1.0_vite@8.3.1_@types+node@26.6.4": {
       "integrity": "sha512-qd2BzUBehkov86WFhg0JkEFEYyCLG9uPCe6qWTY/kRlss9OvJrOF2UbIWT7p+8IzZHkEu0DNGHc4HSv+JdDLsw==",
       "dependencies": [
         "@rolldown/pluginutils@1.0.1",
@@ -3644,7 +3841,7 @@
     "aria-query@5.3.2": {
       "integrity": "sha512-COROpnaoap1E2F000S62r6A60uHZnmlvomhfyT2DlTcrY1OrBKn2UhH7qn5wTC9zMvD0AY7csdPSNwKP+7WiQw=="
     },
-    "astro@7.3.5": {
+    "astro@7.3.5_@types+node@26.6.4": {
       "integrity": "sha512-1p/ernaq/RuESbM5NMjWzbO6SiebMGrGcYlGjMfBhzzgM+n/X7AUmVyw8BqW2QYCdivpsHwJBcD1fqmlTZjZHg==",
       "dependencies": [
         "@astrojs/compiler-rs",
@@ -3771,6 +3968,12 @@
     },
     "buffer-equal-constant-time@1.0.1": {
       "integrity": "sha512-zRpUiDwd/xk6ADqPMATG8vc9VPrkck7T07OIx0gnjmJAnHnTVXNQG3vfvWNuiZIkwu9KrKdA1iJKfsfTVxE6NA=="
+    },
+    "bun-types@1.3.12": {
+      "integrity": "sha512-HqOLj5PoFajAQciOMRiIZGNoKxDJSr6qigAttOX40vJuSp6DN/CxWp9s3C1Xwm4oH7ybueITwiaOcWXoYVoRkA==",
+      "dependencies": [
+        "@types/node"
+      ]
     },
     "bytes@3.1.2": {
       "integrity": "sha512-/Nf7TyzTx6S3yRJObOAV7956r8cr2+Oj8AC5dt8wSP3BQAoeX58NoHyCU8P8zGkNXStjTSi6fzO6F0pBdcYbEg=="
@@ -6009,8 +6212,8 @@
     "uncrypto@0.1.3": {
       "integrity": "sha512-Ql87qFHB3s/De2ClA9e0gsnS6zXG27SkTiSJwjCc9MebbfapQfuPzumMIUMi38ezPZVNFcHI9sUIepeQfw8J8Q=="
     },
-    "undici-types@8.3.0": {
-      "integrity": "sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ=="
+    "undici-types@8.9.0": {
+      "integrity": "sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg=="
     },
     "undici@8.10.2": {
       "integrity": "sha512-/y4/bH9YNU5hi9NIrpOuvGXFcxrj3CMrV+/AYpowAYTpHn8gX/XPFjNy766FPoYY0miQhdW977JFWKGNhBdwyQ=="
@@ -6150,9 +6353,10 @@
         "vfile-message"
       ]
     },
-    "vite@8.3.1_esbuild@0.28.2": {
+    "vite@8.3.1_@types+node@26.6.4_esbuild@0.28.2": {
       "integrity": "sha512-/bvH9E9tmCXRGp2uXY3WbOldqpTwFkbha/8ANaEQ6VkxhH60KyqLwgZq6lG2y+4uT55x9+9eUHMpQ7uGnOCKjA==",
       "dependencies": [
+        "@types/node",
         "esbuild",
         "lightningcss@1.33.0",
         "picomatch@4.0.7",
@@ -6164,11 +6368,12 @@
         "fsevents"
       ],
       "optionalPeers": [
+        "@types/node",
         "esbuild"
       ],
       "bin": true
     },
-    "vitefu@1.1.3_vite@8.3.1": {
+    "vitefu@1.1.3_vite@8.3.1_@types+node@26.6.4": {
       "integrity": "sha512-ub4okH7Z5KLjb6hDyjqrGXqWtWvoYdU3IGm/NorpgHncKoLTCfRIbvlhBm7r0YstIaQRYlp4yEbFqDcKSzXSSg==",
       "dependencies": [
         "vite"
@@ -6568,8 +6773,99 @@
     ],
     "packageJson": {
       "dependencies": [
-        "npm:diff@8.0.4"
-      ]
+        "npm:@agentclientprotocol/sdk@1.4.0",
+        "npm:@astrojs/check@0.9.10",
+        "npm:@astrojs/react@6.0.1",
+        "npm:@base-ui/react@1.7.0",
+        "npm:@codemirror/autocomplete@6.20.3",
+        "npm:@codemirror/commands@6.11.1",
+        "npm:@codemirror/lang-javascript@6.2.5",
+        "npm:@codemirror/lang-json@6.0.2",
+        "npm:@codemirror/lang-markdown@6.5.0",
+        "npm:@codemirror/lang-python@6.2.1",
+        "npm:@codemirror/lang-yaml@6.1.3",
+        "npm:@codemirror/language@6.12.4",
+        "npm:@codemirror/legacy-modes@6.5.3",
+        "npm:@codemirror/state@6.7.5",
+        "npm:@codemirror/view@6.43.11",
+        "npm:@deno/astro-adapter@0.6.0",
+        "npm:@earendil-works/pi-agent-core@1.0.0",
+        "npm:@earendil-works/pi-ai@1.0.0",
+        "npm:@earendil-works/pi-coding-agent@1.0.0",
+        "npm:@earendil-works/pi-mcp@1.0.0",
+        "npm:@earendil-works/pi-tui@1.0.0",
+        "npm:@jsr/std__assert@1.0.19",
+        "npm:@jsr/std__cli@1.0.32",
+        "npm:@jsr/std__front-matter@1.0.9",
+        "npm:@jsr/std__jsonc@1.0.2",
+        "npm:@jsr/std__path@1.1.6",
+        "npm:@jsr/std__testing@1.0.21",
+        "npm:@lezer/common@1.5.2",
+        "npm:@lezer/highlight@1.2.3",
+        "npm:@modelcontextprotocol/sdk@1.30.0",
+        "npm:@pierre/diffs@1.4.2",
+        "npm:@plannotator/atomic-editor@0.8.0",
+        "npm:@plannotator/markdown-editor@0.4.0",
+        "npm:@plannotator/web-highlighter@0.8.1",
+        "npm:@preact/signals@2.11.3",
+        "npm:@radix-ui/react-checkbox@1.3.11",
+        "npm:@radix-ui/react-collapsible@1.1.20",
+        "npm:@radix-ui/react-context-menu@2.3.5",
+        "npm:@radix-ui/react-dialog@1.1.23",
+        "npm:@radix-ui/react-dropdown-menu@2.1.24",
+        "npm:@radix-ui/react-popover@1.1.23",
+        "npm:@radix-ui/react-slot@1.3.3",
+        "npm:@radix-ui/react-tabs@1.1.21",
+        "npm:@radix-ui/react-tooltip@1.2.16",
+        "npm:@silvia-odwyer/photon-node@0.3.4",
+        "npm:@tailwindcss/vite@4.3.3",
+        "npm:@tanstack/react-table@8.21.3",
+        "npm:@types/bun@1.3.12",
+        "npm:@types/node@26.6.4",
+        "npm:@types/react-dom@19.2.3",
+        "npm:@types/react@19.2.18",
+        "npm:@vitejs/plugin-react@6.1.0",
+        "npm:@viz-js/viz@3.29.0",
+        "npm:@xterm/headless@6.0.0",
+        "npm:@zag-js/dialog@1.42.0",
+        "npm:@zag-js/preact@1.43.3",
+        "npm:astro@7.3.5",
+        "npm:beautiful-mermaid@1.1.3",
+        "npm:chalk@6.0.0",
+        "npm:class-variance-authority@0.7.1",
+        "npm:clsx@2.1.1",
+        "npm:codemirror@6.0.2",
+        "npm:diff@9.0.0",
+        "npm:dockview-react@8.2.0",
+        "npm:dompurify@3.4.15",
+        "npm:esbuild@0.28.2",
+        "npm:fuse.js@7.5.0",
+        "npm:happy-dom@20.8.4",
+        "npm:highlight.js@11.11.1",
+        "npm:katex@0.18.5",
+        "npm:lucide-react@1.45.0",
+        "npm:marked@18.0.11",
+        "npm:mermaid@12.0.0",
+        "npm:motion@13.2.0",
+        "npm:perfect-freehand@1.2.3",
+        "npm:preact@10.29.8",
+        "npm:proper-lockfile@4.1.2",
+        "npm:quikdown@1.2.21",
+        "npm:react-dom@19.3.0",
+        "npm:react-test-renderer@19.2.7",
+        "npm:react@19.3.0",
+        "npm:strip-ansi@7.2.0",
+        "npm:tailwind-merge@3.7.0",
+        "npm:tailwindcss@4.3.3",
+        "npm:typescript@5.9.3",
+        "npm:unique-username-generator@1.5.1",
+        "npm:vite@8.3.1"
+      ],
+      "overrides": {
+        "@earendil-works/chord": "1.0.0",
+        "@earendil-works/pi-codemode": "1.0.0",
+        "@earendil-works/pi-telemetry": "1.0.0"
+      }
     }
   }
 }

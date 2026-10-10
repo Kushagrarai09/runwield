@@ -1,0 +1,4 @@
+[
+    "src/shared/private-json-file.test.ts",
+    "scripts/run-bun-tests.test.ts"
+]

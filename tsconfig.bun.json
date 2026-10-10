@@ -1,0 +1,13 @@
+{
+    "extends": "./tsconfig.json",
+    "include": [
+        "scripts/check-bun-runtime.ts",
+        "scripts/bun-test-sandbox.ts",
+        "scripts/run-bun-tests.ts",
+        "scripts/check-portable-json.ts",
+        "src/shared/private-json-file.ts",
+        "src/shared/private-json-file.test.ts",
+        "src/shared/testing/private-json-file-cases.ts",
+        "scripts/run-bun-tests.test.ts"
+    ]
+}

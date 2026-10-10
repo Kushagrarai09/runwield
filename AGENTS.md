@@ -13,6 +13,11 @@ run `deno test` directly. It puts every test file in one process and uses the re
 `~/.wld` and Mnemoteca database. `scripts/run-tests.js` gives each file its own process and a sandboxed `HOME` and
 `MNEMOTECA_DB_PATH`.
 
+During the Bun migration, run migrated tests with `bun run test:bun` (Bun 1.4.3). Never run `bun test` directly: the
+preload guard requires the isolated runner. The migrated file list is `scripts/bun-test-files.json`; the Deno suite
+remains the complete regression gate. Run `bun install --frozen-lockfile` before Bun checks. Deno keeps its automatic
+installation mode while existing CI and release jobs still use Deno; reinstall with Bun before switching back.
+
 Two rules keep tests safe:
 
 - Resolve home and cwd through `getHomeDir()` and `getCwd()` in `src/constants.js`. Never read `Deno.env.get("HOME")` or

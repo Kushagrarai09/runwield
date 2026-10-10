@@ -134,3 +134,49 @@ replace owned storage machinery.
 
 The full application CI suite, Windows/x64 qualification and complete Bun application build are still pending future
 migration slices. This commit is local only; no branch was pushed, PR opened, release published or merge performed.
+
+## Dependency and test-runner migration slice
+
+Bun now has an exact `1.4.3` runtime pin, `package.json`, `bun.lock`, isolated installs, JSR npm aliases and the root
+TypeScript alias configuration. Direct runtime packages retain versions from the existing Deno graph. The three Pi
+transitive components (`chord`, `pi-codemode`, `pi-telemetry`) are explicitly kept at 1.0.0 to avoid pulling Pi 1.1
+behavior into a runtime migration. Other transitive resolutions are recorded in Bun's own lockfile; the two managers'
+lockfile formats are not interchangeable. Bun's package scripts force the selected Bun binary through its Node alias,
+avoiding accidental use of an older globally installed Bun.
+
+Install lifecycle scripts remain disabled. The release-age gate remains 86,400 seconds; the current eight Earendil
+packages are explicitly exempt, matching the current graph covered by Deno's scope exception. New packages in that scope
+must be added to the Bun exception list when the dependency graph changes. Runtime auto-install and implicit `.env`
+loading are disabled. Deno retains automatic node_modules mode so existing fresh-checkout CI and release jobs keep
+working. During this transition, run `bun install --frozen-lockfile` again before Bun checks after a Deno-managed
+install.
+
+`bun run test:bun` uses `scripts/run-bun-tests.ts`: one process and canonical disposable HOME, USERPROFILE, XDG, temp
+and database paths per file, including files reusing a worker slot. Only a small operating-system environment allowlist
+is inherited; provider keys and user database paths are not forwarded. The preload guard runs before test imports and
+rejects direct unsandboxed `bun test`. Successful sandboxes are removed; failed sandboxes and per-file output/run
+reports are retained. Per-file deadlines cover imports as well as tests; Bun's `--no-orphans` owns descendant cleanup
+and a forced kill follows an ignored termination signal. `WLD_TEST_CONCURRENCY` and `WLD_TEST_FILE_TIMEOUT_MS` accept
+positive integers.
+
+This is an incremental test migration. The default Bun list is explicit in `scripts/bun-test-files.json`; it is not a
+claim that all Deno tests run under Bun. Files may also be passed explicitly. Node-compatible `node:test` registration
+lets the portable filesystem cases run under both runtimes. Runner-specific checks skip under Deno and execute under
+Bun. TypeScript checks for migrated code use `tsconfig.bun.json`; Deno's full type checker, lint plugin, custom checks
+and suite remain required until their replacements cover the complete tree. `bun run ci:deno` retains the existing
+complete gate.
+
+Verification includes clean frozen installation outside the checkout, direct dependency import-map version agreement,
+real Pi/MCP/JSR/SQLite imports, retained Session-store tests, and real subprocess tests proving isolation, failure
+handling and timeouts. Native Windows and Linux execution of the new runner have not yet been performed on this Mac.
+
+References: [Bun configuration](https://bun.com/docs/runtime/bunfig),
+[Bun lifecycle policy](https://bun.com/docs/pm/lifecycle), and
+[JSR npm compatibility](https://jsr.io/docs/npm-compatibility).
+
+Tooling verification on macOS ARM64: all eleven CI pre-test tasks passed (full source type check, Workspace type check
+and build, docs, lint, submodules, skill sync and custom policies). Bun's two migrated test files passed, including
+reading retained failure evidence, and the migrated TypeScript gate passed. Independent Standards, Spec and Tests
+reviews approved with zero open issues after restoring Deno automatic installation and strengthening the failure
+retention assertion. The full source suite is being exercised separately; the first sandboxed attempt could not bind
+localhost HTTP fixtures, so the retry uses approved localhost access with the repository's isolated per-file runner.
