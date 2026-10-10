@@ -31,7 +31,7 @@ export async function verifyRemoteRuntimeArtifact(artifact, platform) {
     try {
         metadata = await verifyBuildArtifact(artifact);
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) {
+        if (error instanceof Error && Reflect.get(error, "code") === "ENOENT") {
             throw new Error(
                 `Missing ${target} artifact: build it with deno run -A scripts/compile.js --target ${target} --output ${artifact}`,
             );

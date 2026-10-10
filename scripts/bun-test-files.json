@@ -16,5 +16,6 @@
     "src/shared/http-server.test.ts",
     "src/ui/workspace/workspace-portable.test.ts",
     "src/shared/session/file-session-store.test.js",
-    "src/shared/owner-coordination/database.test.js"
+    "src/shared/owner-coordination/database.test.js",
+    "src/ui/review/document-link-host.test.ts"
 ]

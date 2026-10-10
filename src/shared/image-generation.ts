@@ -1,8 +1,6 @@
+import { loadPhoton } from "./photon-loader.ts";
 import { Buffer } from "node:buffer";
-import { createRequire } from "node:module";
-import { dirname, extname, isAbsolute, join, relative, resolve, toFileUrl } from "@std/path";
-import type { PhotonImage } from "@silvia-odwyer/photon-node";
-import { RUNWIELD_ROOT } from "../../runtime-root.js";
+import { dirname, extname, isAbsolute, join, relative, resolve } from "@std/path";
 import { getImageDimensions } from "@earendil-works/pi-tui";
 import { resizeImage } from "@earendil-works/pi-coding-agent";
 import type { SessionManager } from "@earendil-works/pi-coding-agent";
@@ -40,16 +38,6 @@ interface OpenRouterImagePayload {
     temperature?: number;
     reasoning?: { effort: string };
     provider?: { require_parameters: boolean };
-}
-
-interface PhotonModule {
-    PhotonImage: typeof PhotonImage;
-}
-
-/** Keep Photon's CommonJS/WASM loader outside Deno's ESM compile bundle. */
-function loadPhoton(): PhotonModule {
-    const entry = toFileUrl(join(RUNWIELD_ROOT, "node_modules", "@silvia-odwyer", "photon-node", "photon_rs.js"));
-    return createRequire(entry)("./photon_rs.js") as PhotonModule;
 }
 
 /** Verified mappings, not a claim that all image models accept chat options. */

@@ -3,6 +3,7 @@
  */
 
 import { join } from "@std/path";
+import process from "node:process";
 import { WORK_RECORDS_DIR_NAME } from "../../constants.js";
 import { publishExecutionWorktreeIsolated } from "../../shared/isolated-publication.ts";
 import { RUNWIELD_GITIGNORE_BLOCK } from "../../shared/runwield-owned-paths.ts";
@@ -190,7 +191,9 @@ async function checkPublicationFlow(env: Record<string, string>): Promise<void> 
 }
 
 export async function runPackageSmokeCommand(argv: string[]): Promise<void> {
-    const env = Deno.env.toObject();
+    const env = Object.fromEntries(
+        Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+    );
     const [subcommand] = argv;
     if (subcommand === "image-resize") {
         await checkPackagedImageResize();

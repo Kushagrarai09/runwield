@@ -33,6 +33,8 @@
         "src/ui/tui/tui-crash-events.test.ts",
         "src/ui/tui/tui-crash-guards.ts",
         "src/shared/http-server.ts",
-        "src/shared/http-server.test.ts"
+        "src/shared/http-server.test.ts",
+        "scripts/compile-bun.ts",
+        "scripts/check-bun-package.ts"
     ]
 }

@@ -381,3 +381,50 @@ directory with embedded resources; SIGTERM exits zero. Bun's asset-directory emb
 directory name, so a staging tree preserves the application resource paths. This probe is not yet the repeatable build
 or evidence of complete interactive/remote command migration. Native Plan/controller locks, remaining runtime APIs,
 worker/WASM packaging and platform qualification still need completion. No release or production cutover occurred.
+
+## Standalone Bun development packages and document readers (2026-10-10)
+
+`bun run ci:bun` now builds the Bun Workspace, checks the migrated source graph, and runs the isolated Bun suite.
+`bun run compile:bun .ci-cache/wld-bun` builds a development executable; `bun run check:package:bun .ci-cache/wld-bun`
+qualifies it. The Bun builder stages only approved passive resources, collapses Astro's renderer, embeds the real Pi
+image worker and Photon WASM, disables ambient dotenv/Bun configuration loading, and writes checksummed build metadata.
+It reuses the existing version policy through portable build helpers. Deno release and installer tooling stay in place.
+
+Bun's compiler substitutes the external Photon loader boundary with the real npm module as an ESM import, avoiding Bun's
+interpretation of passive CommonJS assets. The packaged image check explicitly starts the embedded worker before
+checking Pi resize and JPEG/WebP conversion, so fallback execution cannot hide a missing worker.
+
+Build identity includes Bun's compiler version, lock/package inputs, source identity and a deterministic manifest of
+**every staged path and its content hash**, including generated browser CSS/JS and renderer/WASM outputs. Review S4
+caught the omitted client-asset contribution. A real two-build probe changed only a same-path CSS asset, proved the
+renderer unchanged, observed different build IDs, and restored the original bytes
+(`.ci-cache/bun-payload-identity-check.log`). macOS and Linux outputs from unchanged inputs have the same build ID and
+different executable checksums.
+
+The standalone qualifier copies the executable into a disposable HOME/cwd. On macOS its children run under a filesystem
+sandbox denying reads from the complete checkout, including node_modules. Linux qualification mounts only the compiled
+binary/metadata, bundled verifier and expected public asset bytes into a restricted disposable container: no checkout or
+dependency tree is mounted. Both passed actual CLI help/version, worker/WASM, image conversion, Workspace pairing page,
+exact referenced JS/CSS bytes and MIME types, unauthenticated rejection, generic error response and SIGTERM shutdown.
+Deliberately conflicting `.env` and Bun preload files in the working directory did not affect execution. This addresses
+review T13. Logs: `.ci-cache/bun-development-package-check.log` and `.ci-cache/bun-linux-package-check.log`.
+
+Markdown/image document readers now use portable filesystem and HTTP APIs. All thirteen existing document-host cases run
+under both runtimes, preserving current-file reads, token revocation, canonical path and symlink containment, image
+upload restrictions and listener disposal. The complete migrated Bun suite passes nineteen files: macOS 122 cases with
+five platform skips; Linux 125 cases with two Windows skips. Reports: `.ci-cache/bun-report-udVuAQ/run.json` and
+`.ci-cache/linux-bun-runner/bun-report-1rEn6n/run.json`. All three independent review axes approved the implementation.
+
+The first complete Deno regression attempt passed 631 files and found three failures. Remote artifact errors and
+review-document errors still expected Deno error classes after their filesystem dependencies moved to Node. The affected
+callers and review file/image handlers now classify Node errors correctly, and focused tests passed. The complete Deno
+CI rerun passed all 634 files in 736.9 seconds (`.ci-cache/packaging-full-ci.log`). Full source types, selected Bun
+types, formatting, lint and the zero-seam gate passed.
+
+These are qualified development packages for the exercised journeys, not a production runtime cutover. Remaining major
+boundaries are native Plan/controller and project-layout locks, Plan persistence, normal interactive agent execution,
+remote runtime/SFTP/supervisor paths, and Windows/x64 qualification. The lexical inventory records 184 production files
+with 1,168 Deno references (including compatibility backends and fixture helpers), so help/pairing/package success must
+not be read as complete command coverage. The next implementation should start at `project-runtime-layout.ts`,
+`plan-store.js`, `lock-file-snapshot.ts`, `controller-registry.ts` and their real contention/recovery tests. No
+publication, merge, release, installation, credential change or study cohort occurred.
