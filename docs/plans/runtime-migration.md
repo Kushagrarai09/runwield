@@ -132,8 +132,9 @@ replace owned storage machinery.
 - Independent Review-skill Standards, Spec and Tests passes approved all six original changed files with zero issues and
   zero advisories. Durability ordering was reviewed directly; power-loss and Windows execution remain untested.
 
-The full application CI suite, Windows/x64 qualification and complete Bun application build are still pending future
-migration slices. This commit is local only; no branch was pushed, PR opened, release published or merge performed.
+At that first checkpoint, the full CI suite was still pending; it subsequently passed as recorded below. Windows/x64
+qualification and the complete Bun application build remain pending. This commit is local only; no branch was pushed, PR
+opened, release published or merge performed.
 
 ## Dependency and test-runner migration slice
 
@@ -196,9 +197,10 @@ filesystem exclusion, heartbeat, stale cleanup and synchronous exit cleanup usin
 concurrency and heartbeat tests now run under both test runners. New environment tests verify post-import HOME/cwd
 changes, source resource readability and rejection before an unsandboxed test entrypoint's body runs.
 
-Foreground command spawning, remote Linux process-group termination and runtime packaging still require separate
-migration. In particular, Node's asynchronous spawn-error delivery differs from current synchronous `Deno.Command`
-callers; this cannot be changed by a mechanical rename without adjusting the callers and failure tests.
+Foreground command spawning and runtime packaging still require separate migration. Remote Linux process-group
+termination was subsequently migrated and qualified as recorded below. In particular, Node's asynchronous spawn-error
+delivery differs from current synchronous `Deno.Command` callers; this cannot be changed by a mechanical rename without
+adjusting the callers and failure tests.
 
 Process utility verification: five Bun test files and the migrated TypeScript gate passed. Deno passed the new liveness,
 portable constants and lock tests plus existing constants, Plan doctor and worktree-registry tests. Full Deno type
@@ -278,3 +280,24 @@ that returns uncertainty and leaves its surviving descendant unsignaled. The for
 SIGTERM-resistant processes alive during the grace window before confirming their eventual exit. Report:
 `.ci-cache/linux-bun-runner/bun-report-AxPtbP/run.json`. Deno targeted type/lint and zero-seam checks passed; all three
 review axes approved after strengthening the grace-period observation.
+
+## Final verification checkpoint (2026-10-10)
+
+The complete existing `deno task ci` gate passed in **538.5 seconds**: all eleven pre-test tasks and `test:all:suite`,
+including the golden TUI portfolio. The isolated runner reports **628 files completed, zero failed, zero skipped
+files**. Evidence: `.ci-cache/migration-full-ci.log`, `.ci-cache/ci-timings.json`, and `.ci-cache/tests-report/run.json`
+plus per-file JUnit reports. The earlier image-cancellation assertion did not recur in this complete rerun. Full Deno
+type checking was rerun after the Linux extraction and passed.
+
+Final Bun type checking passed. All seven registered Bun files passed on macOS ARM64 (26 tests, three Linux-only skips)
+and Linux ARM64 (29 tests). Both relocated compiled storage probes passed all twelve assertions. Formatting of all 31
+supported changed source/config/doc files and `git diff --check` passed. Independent Standards, Spec and Tests reviews
+approved every implementation slice; all six test-review findings were fixed and independently confirmed.
+
+This is a checked local migration checkpoint, not a production Bun cutover. Next work is the native Session/Plan lock
+backend (including errno and Windows semantics), foreground spawn startup-error contracts across its callers, the
+remaining filesystem/process/HTTP/terminal uses, and complete application packaging. The currently available Mac and
+Linux ARM64 container cannot qualify Windows native locks or Windows/x64 runtime execution. Bun CLI startup still fails
+on unported entrypoint usage. No further target preference is needed from Carlos, but those acceptance gates must pass
+before production runtime/installer changes. Original main and the POC checkout remain preserved; all commits stay in
+the isolated migration clone and no push, PR publication, merge, release, credential change or study cohort occurred.
