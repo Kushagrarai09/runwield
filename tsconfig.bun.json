@@ -14,6 +14,9 @@
         "src/testing/process-global-lock.ts",
         "src/testing/process-global-lock.test.ts",
         "src/constants.js",
-        "src/constants-portable.test.ts"
+        "src/constants-portable.test.ts",
+        "src/shared/session/file-session-storage.ts",
+        "src/shared/session/session-directory-name.ts",
+        "src/shared/session/file-session-storage.test.ts"
     ]
 }

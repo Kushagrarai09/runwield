@@ -204,3 +204,33 @@ portable constants and lock tests plus existing constants, Plan doctor and workt
 checking, targeted lint, formatting and the zero-seam check passed. Independent Standards/Spec/Tests reviews approved
 with zero open issues after making the HOME/cwd regression test use distinct directories. These utilities are verified
 on macOS ARM64; Windows and Linux runtime execution remain qualification work.
+
+## Portable Session manifest readers and recovery
+
+Session Project/manifest reads, directory scans, canonical paths, fingerprints and recovery renames now use `node:fs`
+and `node:path`. Missing-path handling checks `ENOENT`; invalid JSON and other filesystem errors retain their existing
+propagation. All consumers of the exported readers were audited: external typed NotFound catches in the store apply to
+its own Deno stat/remove calls, not the converted readers. Writer exclusion, lock acquisition and activation fencing
+remain on the existing Deno implementation.
+
+The unchanged directory-name encoder now has a small portable module, re-exported from its old location. The two
+transcript domain types live with the Session-store contracts and are aliased from their previous JSDoc location. The
+held-lock resource contract names only its existing release/close operations; this permits type-checking portable
+storage without importing the complete Deno application. It does not add a lock factory or injection seam.
+
+Real-filesystem cases cover canonical Project identity, transcript aliases, bounded directory names, missing paths,
+invalid JSON, non-directory failures, broken symlinks, cache clone isolation, same-size/same-mtime atomic replacement,
+recovery after deletion and preservation of damaged manifest bytes. Bun's selected type gate now covers the complete
+storage module and its reachable domain types.
+
+Broader regression evidence: the source run passed 446 files before an image-adapter cancellation assertion failed. That
+file passed on an isolated rerun; the 131 skipped files plus two newly added files all passed in a separate run. The
+intermittent cancellation failure is retained as qualification evidence, not silently counted as a clean full run. The
+original log is `.ci-cache/bun-migration-suite.log`; rerun reports are in `.ci-cache/image-regression-report/` and
+`.ci-cache/remaining-suite-report/`. None of these tests invokes a real image provider.
+
+Storage verification: all six selected Bun files and their TypeScript gate passed; eight isolated Deno files covering
+portable storage, Session store, owner coordination, reviews/rollover, root sessions and transcript projection passed.
+Full Deno type checking, targeted lint, formatting and zero-seam checks passed. Standards, Spec and Tests review
+approved after strengthening nested cache clone isolation and pinning legacy long-path encoding against same-basename
+roots.

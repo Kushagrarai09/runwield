@@ -4,23 +4,10 @@
  */
 
 import { basename, dirname, isAbsolute, join, relative, resolve, SEPARATOR } from "@std/path";
-import { createHash } from "node:crypto";
+import { encodeCwdForSessionDir } from "./session-directory-name.ts";
+export { encodeCwdForSessionDir } from "./session-directory-name.ts";
 import { requireLocalSessionWriter } from "../remote/personal-resources.ts";
 import { getHomeDir } from "../../constants.js";
-
-/**
- * Encode cwd into a filesystem-safe directory segment (Pi-style).
- *
- * @param {string} cwd
- * @returns {string}
- */
-export function encodeCwdForSessionDir(cwd) {
-    const encoded = `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
-    if (encoded.length <= 120) return encoded;
-    const digest = createHash("sha256").update(cwd).digest("hex").slice(0, 32);
-    const readableTail = basename(cwd).replace(/[/\\:]/g, "-").slice(0, 40) || "root";
-    return `--${readableTail}-${digest}--`;
-}
 
 /**
  * Resolve the root RunWield sessions base directory.

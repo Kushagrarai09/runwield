@@ -3,5 +3,6 @@
     "scripts/run-bun-tests.test.ts",
     "src/shared/process-liveness.test.ts",
     "src/testing/process-global-lock.test.ts",
-    "src/constants-portable.test.ts"
+    "src/constants-portable.test.ts",
+    "src/shared/session/file-session-storage.test.ts"
 ]

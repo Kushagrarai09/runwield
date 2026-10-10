@@ -3,11 +3,12 @@
  * Durable paths, Project identity, and atomic manifest persistence.
  */
 
-import { basename, dirname, isAbsolute, join, resolve } from "@std/path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { createHash } from "node:crypto";
+import { lstatSync, readdirSync, readFileSync, realpathSync, renameSync, statSync } from "node:fs";
 import { ensurePrivateDir, writeJsonAtomically } from "../private-json-file.ts";
 export { ensurePrivateDir, writeJsonAtomically } from "../private-json-file.ts";
-import { encodeCwdForSessionDir } from "./root-session.js";
+import { encodeCwdForSessionDir } from "./session-directory-name.ts";
 import type { FileSessionManifest, FileSessionProject } from "./file-session-store-types.ts";
 
 export const FILE_SESSION_STORE_VERSION = 1;
@@ -24,15 +25,15 @@ function deterministicProjectId(root: string): string {
 }
 
 export function readJson<Value>(path: string): Value {
-    return JSON.parse(Deno.readTextFileSync(path));
+    return JSON.parse(readFileSync(path, "utf8"));
 }
 
 export function pathExists(path: string): boolean {
     try {
-        Deno.lstatSync(path);
+        lstatSync(path);
         return true;
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) return false;
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
         throw error;
     }
 }
@@ -64,7 +65,7 @@ export function lockPath(sessionDir: string, runwieldSessionId: string): string 
 export function catalogLockPath(sessionDir: string, transcriptPath: string): string {
     const directory = join(metadataDir(sessionDir), "catalog-locks");
     ensurePrivateDir(directory);
-    const canonicalPath = Deno.realPathSync(transcriptPath);
+    const canonicalPath = realpathSync(transcriptPath);
     const key = createHash("sha256").update(canonicalPath).digest("hex");
     return join(directory, `${key}.lock`);
 }
@@ -72,7 +73,7 @@ export function catalogLockPath(sessionDir: string, transcriptPath: string): str
 export function sessionDirForRoot(baseDir: string, root: string): string {
     let canonicalRoot = resolve(root);
     try {
-        canonicalRoot = Deno.realPathSync(canonicalRoot);
+        canonicalRoot = realpathSync(canonicalRoot);
     } catch {
         // A not-yet-created root still gets a stable absolute locator.
     }
@@ -91,9 +92,9 @@ export function ensureProject(
 ): FileSessionProject {
     if (!root || !isAbsolute(root)) throw new Error("Project root must be absolute");
     const enteredRoot = resolve(root);
-    const stat = Deno.statSync(enteredRoot);
-    if (!stat.isDirectory) throw new Error("Project root must be a directory");
-    const canonicalRoot = Deno.realPathSync(enteredRoot);
+    const stat = statSync(enteredRoot);
+    if (!stat.isDirectory()) throw new Error("Project root must be a directory");
+    const canonicalRoot = realpathSync(enteredRoot);
     const existing = listProjectsFromDisk(baseDir).find((project) =>
         resolve(project.currentRoot) === resolve(canonicalRoot) || resolve(project.registeredRoot) === enteredRoot
     );
@@ -130,8 +131,8 @@ export function ensureProject(
 export function listProjectsFromDisk(baseDir: string): FileSessionProject[] {
     const projects: FileSessionProject[] = [];
     try {
-        for (const entry of Deno.readDirSync(baseDir)) {
-            if (!entry.isDirectory) continue;
+        for (const entry of readdirSync(baseDir, { withFileTypes: true })) {
+            if (!entry.isDirectory()) continue;
             const path = projectPath(join(baseDir, entry.name));
             if (!pathExists(path)) continue;
             try {
@@ -141,7 +142,7 @@ export function listProjectsFromDisk(baseDir: string): FileSessionProject[] {
             }
         }
     } catch (error) {
-        if (!(error instanceof Deno.errors.NotFound)) throw error;
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     }
     return projects.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 }
@@ -200,8 +201,8 @@ function writeRecoveryDescriptors(manifest: FileSessionManifest): void {
 function restoreManifestsFromRecoveryDescriptors(sessionDir: string): void {
     const recoverable = new Map<string, FileSessionManifest>();
     try {
-        for (const entry of Deno.readDirSync(sessionDir)) {
-            if (!entry.isFile || !entry.name.endsWith(".jsonl.runwield.json")) continue;
+        for (const entry of readdirSync(sessionDir, { withFileTypes: true })) {
+            if (!entry.isFile() || !entry.name.endsWith(".jsonl.runwield.json")) continue;
             try {
                 const candidate = readJson<FileSessionManifest>(join(sessionDir, entry.name));
                 if (candidate.version !== FILE_SESSION_STORE_VERSION || !candidate.runwieldSessionId) continue;
@@ -214,7 +215,7 @@ function restoreManifestsFromRecoveryDescriptors(sessionDir: string): void {
             }
         }
     } catch (error) {
-        if (!(error instanceof Deno.errors.NotFound)) throw error;
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     }
     for (const [runwieldSessionId, candidate] of recoverable) {
         const path = manifestPath(sessionDir, runwieldSessionId);
@@ -225,7 +226,7 @@ function restoreManifestsFromRecoveryDescriptors(sessionDir: string): void {
             } catch {
                 const damagedPath = `${path}.damaged-${Date.now()}`;
                 try {
-                    Deno.renameSync(path, damagedPath);
+                    renameSync(path, damagedPath);
                 } catch {
                     continue;
                 }
@@ -239,8 +240,8 @@ export function listManifests(sessionDir: string): Array<{ path: string; manifes
     restoreManifestsFromRecoveryDescriptors(sessionDir);
     const manifests: Array<{ path: string; manifest: FileSessionManifest }> = [];
     try {
-        for (const entry of Deno.readDirSync(bundlesDir(sessionDir))) {
-            if (!entry.isDirectory) continue;
+        for (const entry of readdirSync(bundlesDir(sessionDir), { withFileTypes: true })) {
+            if (!entry.isDirectory()) continue;
             const path = manifestPath(sessionDir, entry.name);
             try {
                 const manifest = readJson<FileSessionManifest>(path);
@@ -254,7 +255,7 @@ export function listManifests(sessionDir: string): Array<{ path: string; manifes
             }
         }
     } catch (error) {
-        if (!(error instanceof Deno.errors.NotFound)) throw error;
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     }
     return manifests;
 }
@@ -284,7 +285,7 @@ interface CachedManifest {
 }
 
 function manifestFingerprint(path: string): ManifestFingerprint {
-    const stat = Deno.statSync(path);
+    const stat = statSync(path);
     return {
         inode: stat.ino,
         modifiedAt: stat.mtime?.getTime() ?? null,
@@ -340,7 +341,7 @@ export class FileSessionManifestCache {
         try {
             fingerprint = manifestFingerprint(path);
         } catch (error) {
-            if (error instanceof Deno.errors.NotFound) return null;
+            if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
             throw error;
         }
         const cachedId = this.#manifestIdsByPath.get(path);
@@ -370,7 +371,7 @@ export class FileSessionManifestCache {
         try {
             recovery = readJson<FileSessionManifest>(recoveryDescriptorPath(resolvedTranscriptPath));
         } catch (error) {
-            if (error instanceof Deno.errors.NotFound) return null;
+            if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
             throw error;
         }
         if (
