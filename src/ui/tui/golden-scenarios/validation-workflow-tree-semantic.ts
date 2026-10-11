@@ -1090,7 +1090,7 @@ export const validationTreeSemanticRoundLimitFollowUpScenario = {
                 JSON.stringify({
                     verification_command:
                         process.platform === "win32"
-                            ? 'findstr /x /c:"followup" semantic-round-limit-stop.txt >nul && (<nul set /p "=checked followup">followup-ci.txt) & exit /b 0'
+                            ? `"${process.execPath}" ${process.versions.deno ? "eval" : "-e"} "import fs from 'node:fs'; if (fs.readFileSync('semantic-round-limit-stop.txt', 'utf8') === 'followup\\n') fs.writeFileSync('followup-ci.txt', 'checked followup');"`
                             : "if test \"$(cat semantic-round-limit-stop.txt)\" = followup; then printf 'checked followup' > followup-ci.txt; fi",
                 }) + "\n",
         },

@@ -41,7 +41,8 @@ export async function checkSnipFilters(): Promise<void> {
         );
         const result = await captureScriptProcess("snip", {
             args: ["verify"],
-            env: { ...{ ...process.env }, HOME: tempHome, SNIP_CONFIG: configPath },
+            // Go resolves the Windows home from USERPROFILE, including Snip's trust root.
+            env: { ...process.env, HOME: tempHome, USERPROFILE: tempHome, SNIP_CONFIG: configPath },
             stdout: "piped",
             stderr: "piped",
         });

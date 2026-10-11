@@ -7,6 +7,7 @@ import { git } from "../git-test-fixture.ts";
 import { withWorkflowMetricsFixture } from "../../testing/workflow-metrics-fixture.ts";
 import {
     classifyToolSubUsage,
+    drainWorkflowMetrics,
     getWorkflowMetricsFilePath,
     isWorkflowMetricsEnabled,
     recordToolCallFinished,
@@ -50,8 +51,12 @@ test("recordWorkflowMetric writes worktree events under the primary project", as
             await setCustomSetting("workflowMetrics", true, "project", primaryRoot);
             await recordWorkflowMetric({ category: "execution", event: "task_completed" }, worktreePath);
 
+            await drainWorkflowMetrics();
             const contents = await fsReadFile(getWorkflowMetricsFilePath(primaryRoot), "utf8");
-            const metrics = contents.trim().split("\n").map((line) => JSON.parse(line));
+            const metrics = contents
+                .trim()
+                .split("\n")
+                .map((line) => JSON.parse(line));
             assertEquals(metrics.length, 1);
             assertEquals(metrics[0].category, "execution");
         } finally {
@@ -111,12 +116,14 @@ test("recordWorkflowMetric swallows write failures", async () => {
 
 test("sanitizeMetricDetails redacts sensitive keys, paths, and long strings", () => {
     const long = "x".repeat(400);
-    const sanitized = /** @type {any} */ (sanitizeMetricDetails({
-        prompt: "secret prompt",
-        token: "abc",
-        cwd: "/Users/example/project",
-        nested: { diffText: "patch", value: long },
-    }));
+    const sanitized = /** @type {any} */ (
+        sanitizeMetricDetails({
+            prompt: "secret prompt",
+            token: "abc",
+            cwd: "/Users/example/project",
+            nested: { diffText: "patch", value: long },
+        })
+    );
     assertEquals(sanitized.prompt, "[redacted]");
     assertEquals(sanitized.token, "[redacted]");
     assertEquals(sanitized.cwd, "[path-redacted]");
@@ -125,23 +132,27 @@ test("sanitizeMetricDetails redacts sensitive keys, paths, and long strings", ()
 });
 
 test("sanitizeMetricDetails redacts generic relative paths but preserves affectedPaths metadata", () => {
-    const sanitized = /** @type {any} */ (sanitizeMetricDetails({
-        path: "src/private/file.js",
-        file: "docs/plans/secret.md",
-        affectedPaths: ["src/visible.js", "docs/visible.md", "/Users/example/project/secret.js"],
-    }));
+    const sanitized = /** @type {any} */ (
+        sanitizeMetricDetails({
+            path: "src/private/file.js",
+            file: "docs/plans/secret.md",
+            affectedPaths: ["src/visible.js", "docs/visible.md", "/Users/example/project/secret.js"],
+        })
+    );
     assertEquals(sanitized.path, "[path-redacted]");
     assertEquals(sanitized.file, "[path-redacted]");
     assertEquals(sanitized.affectedPaths, ["src/visible.js", "docs/visible.md", "[path-redacted]"]);
 });
 
 test("sanitizeMetricDetails omits non-plain objects instead of stringifying them", () => {
-    const sanitized = /** @type {any} */ (sanitizeMetricDetails({
-        ok: true,
-        error: new Error("/Users/example/project/secret.js failed with private output"),
-        url: new URL("file:///Users/example/project/secret.js"),
-        items: ["safe", new Error("unsafe output")],
-    }));
+    const sanitized = /** @type {any} */ (
+        sanitizeMetricDetails({
+            ok: true,
+            error: new Error("/Users/example/project/secret.js failed with private output"),
+            url: new URL("file:///Users/example/project/secret.js"),
+            items: ["safe", new Error("unsafe output")],
+        })
+    );
     assertEquals(sanitized.ok, true);
     assertEquals("error" in sanitized, false);
     assertEquals("url" in sanitized, false);
@@ -167,7 +178,10 @@ test("recordWorkflowMetric accepts each workflow metric category", async () => {
         }
         const metrics = await readMetrics();
         assertEquals(metrics.length, categories.length);
-        assertEquals(metrics.map((metric) => metric.category), categories);
+        assertEquals(
+            metrics.map((metric) => metric.category),
+            categories,
+        );
     });
 });
 
@@ -217,66 +231,74 @@ test("tool usage metrics omit raw commands, queries, file contents, messages, an
 
 test("dedicated Frontend Engineer metrics strip identity and content", async () => {
     await withWorkflowMetricsFixture(async ({ projectRoot, readMetrics }) => {
-        await recordWorkflowMetric({
-            category: "execution",
-            event: "frontend_runtime_style_resolved",
-            sessionId: "session-secret",
-            planName: "private-plan",
-            agentName: "frontend-engineer",
-            details: {
-                policySource: "canonical",
-                recommendation: "pair",
-                runtimeStyle: "autonomous",
-                pairCapable: false,
-                resolutionReason: "canonical_pair_unavailable",
-                route: "https://example.test/path?token=secret",
-                summary: "Rendered user profile",
-                evidence: ["/tmp/screenshot.png"],
-                diagnostics: { console: "error output" },
-                source: "function secret() {}",
-                report: "- final report",
+        await recordWorkflowMetric(
+            {
+                category: "execution",
+                event: "frontend_runtime_style_resolved",
+                sessionId: "session-secret",
+                planName: "private-plan",
+                agentName: "frontend-engineer",
+                details: {
+                    policySource: "canonical",
+                    recommendation: "pair",
+                    runtimeStyle: "autonomous",
+                    pairCapable: false,
+                    resolutionReason: "canonical_pair_unavailable",
+                    route: "https://example.test/path?token=secret",
+                    summary: "Rendered user profile",
+                    evidence: ["/tmp/screenshot.png"],
+                    diagnostics: { console: "error output" },
+                    source: "function secret() {}",
+                    report: "- final report",
+                },
             },
-        }, projectRoot);
-        await recordWorkflowMetric({
-            category: "execution",
-            event: "pair_checkpoint_decided",
-            sessionId: "session-secret",
-            planName: "private-plan",
-            agentName: "frontend-engineer",
-            details: {
-                checkpointNumber: 2,
-                decision: "revise",
-                reason: "revision_feedback_required",
-                feedback: "make the dashboard calmer",
-                screenshotPath: "/Users/me/project/shot.png",
-                browserPayload: { url: "http://localhost:3000?token=abc" },
+            projectRoot,
+        );
+        await recordWorkflowMetric(
+            {
+                category: "execution",
+                event: "pair_checkpoint_decided",
+                sessionId: "session-secret",
+                planName: "private-plan",
+                agentName: "frontend-engineer",
+                details: {
+                    checkpointNumber: 2,
+                    decision: "revise",
+                    reason: "revision_feedback_required",
+                    feedback: "make the dashboard calmer",
+                    screenshotPath: "/Users/me/project/shot.png",
+                    browserPayload: { url: "http://localhost:3000?token=abc" },
+                },
             },
-        }, projectRoot);
-        await recordWorkflowMetric({
-            category: "execution",
-            event: "frontend_execution_completed",
-            sessionId: "session-secret",
-            planName: "private-plan",
-            agentName: "frontend-engineer",
-            details: {
-                phase: "validation_repair",
-                runtimeStyle: "pair",
-                checkpointCount: 3,
-                switchedToAutonomous: true,
-                capabilityLost: false,
-                browserPreflightOutcome: "externally_blocked",
-                elapsedMs: 1234,
-                message: "- report with URL http://localhost:5173/secret",
-                file: "src/private/file.js",
+            projectRoot,
+        );
+        await recordWorkflowMetric(
+            {
+                category: "execution",
+                event: "frontend_execution_completed",
+                sessionId: "session-secret",
+                planName: "private-plan",
+                agentName: "frontend-engineer",
+                details: {
+                    phase: "validation_repair",
+                    runtimeStyle: "pair",
+                    checkpointCount: 3,
+                    switchedToAutonomous: true,
+                    capabilityLost: false,
+                    browserPreflightOutcome: "externally_blocked",
+                    elapsedMs: 1234,
+                    message: "- report with URL http://localhost:5173/secret",
+                    file: "src/private/file.js",
+                },
             },
-        }, projectRoot);
+            projectRoot,
+        );
 
         const lines = await readMetrics();
-        assertEquals(lines.map((line) => line.event), [
-            "frontend_runtime_style_resolved",
-            "pair_checkpoint_decided",
-            "frontend_execution_completed",
-        ]);
+        assertEquals(
+            lines.map((line) => line.event),
+            ["frontend_runtime_style_resolved", "pair_checkpoint_decided", "frontend_execution_completed"],
+        );
         assertEquals(lines[0].details, {
             policySource: "canonical",
             recommendation: "pair",
@@ -299,21 +321,19 @@ test("dedicated Frontend Engineer metrics strip identity and content", async () 
             elapsedMs: 1234,
         });
         const serialized = JSON.stringify(lines);
-        for (
-            const forbidden of [
-                "session-secret",
-                "private-plan",
-                "frontend-engineer",
-                "dashboard",
-                "localhost",
-                "token",
-                "screenshot",
-                "browserPayload",
-                "function secret",
-                "final report",
-                "src/private",
-            ]
-        ) {
+        for (const forbidden of [
+            "session-secret",
+            "private-plan",
+            "frontend-engineer",
+            "dashboard",
+            "localhost",
+            "token",
+            "screenshot",
+            "browserPayload",
+            "function secret",
+            "final report",
+            "src/private",
+        ]) {
             assertEquals(serialized.includes(forbidden), false, forbidden);
         }
     });
@@ -321,19 +341,22 @@ test("dedicated Frontend Engineer metrics strip identity and content", async () 
 
 test("dedicated Frontend Engineer metrics omit invalid values", async () => {
     await withWorkflowMetricsFixture(async ({ projectRoot }) => {
-        const record = await recordWorkflowMetric({
-            category: "execution",
-            event: "frontend_execution_completed",
-            details: {
-                phase: "free text",
-                runtimeStyle: "pair",
-                checkpointCount: -1,
-                switchedToAutonomous: "yes",
-                capabilityLost: true,
-                browserPreflightOutcome: "succeeded",
-                elapsedMs: Infinity,
+        const record = await recordWorkflowMetric(
+            {
+                category: "execution",
+                event: "frontend_execution_completed",
+                details: {
+                    phase: "free text",
+                    runtimeStyle: "pair",
+                    checkpointCount: -1,
+                    switchedToAutonomous: "yes",
+                    capabilityLost: true,
+                    browserPreflightOutcome: "succeeded",
+                    elapsedMs: Infinity,
+                },
             },
-        }, projectRoot);
+            projectRoot,
+        );
         assertEquals(record?.details, {
             runtimeStyle: "pair",
             capabilityLost: true,

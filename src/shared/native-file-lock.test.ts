@@ -1,4 +1,5 @@
 import { equal, match, ok, throws } from "node:assert/strict";
+import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import {
@@ -13,9 +14,10 @@ import {
 } from "node:fs";
 import { open } from "node:fs/promises";
 import { readLockFileSnapshot, removeLockFileIfSnapshotMatches } from "./lock-file-snapshot.ts";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { execPath, platform, versions } from "node:process";
+import { join, toNamespacedPath } from "node:path";
+import { execPath, pid, platform, versions } from "node:process";
 import { test } from "node:test";
 import { openNativeFileLock } from "./native-file-lock.ts";
 
@@ -247,5 +249,196 @@ test("async native lock waits without blocking the owner from releasing", async 
         owner.close();
         waiter.close();
         f.close();
+    }
+});
+
+interface NativeFunction {
+    args: string[];
+    returns: string;
+}
+interface FileTimeSymbols {
+    CreateFileW(
+        path: Uint8Array,
+        access: number,
+        share: number,
+        security: number,
+        disposition: number,
+        flags: number,
+        template: bigint,
+    ): bigint;
+    SetFileTime(handle: bigint, creation: number, access: number, modified: Uint8Array): number;
+    GetFileTime(handle: bigint, creation: number, access: number, modified: Uint8Array): number;
+    CloseHandle(handle: bigint): number;
+    GetLastError(): number;
+}
+interface FileTimeLibrary {
+    symbols: FileTimeSymbols;
+    close(): void;
+}
+interface FileTimeFFI {
+    dlopen(path: string, functions: Record<string, NativeFunction>): FileTimeLibrary;
+}
+
+function fileTimeAPI(): FileTimeLibrary {
+    const ffi: FileTimeFFI = createRequire(import.meta.url)("bun:ffi");
+    return ffi.dlopen("kernel32.dll", {
+        CreateFileW: {
+            args: ["buffer", "u32", "u32", "ptr", "u32", "u32", "u64"],
+            returns: "u64",
+        },
+        SetFileTime: { args: ["u64", "ptr", "ptr", "buffer"], returns: "i32" },
+        GetFileTime: { args: ["u64", "ptr", "ptr", "buffer"], returns: "i32" },
+        CloseHandle: { args: ["u64"], returns: "i32" },
+        GetLastError: { args: [], returns: "u32" },
+    });
+}
+
+// Avoid utimes' floating seconds input. Set and verify the actual 100ns FILETIME bits.
+function setExactFileTime(api: FileTimeSymbols, path: string, ticks: bigint): void {
+    const handle = api.CreateFileW(Buffer.from(toNamespacedPath(path) + "\0", "utf16le"), 0x180, 7, 0, 3, 0x80, 0n); // FILE_READ_ATTRIBUTES | FILE_WRITE_ATTRIBUTES; OPEN_EXISTING.
+    ok(handle !== 0n && handle !== 0xffffffffffffffffn, `CreateFileW: ${api.GetLastError()}`);
+    try {
+        const requested = new Uint8Array(8);
+        new DataView(requested.buffer).setBigUint64(0, ticks, true);
+        ok(api.SetFileTime(handle, 0, 0, requested), `SetFileTime: ${api.GetLastError()}`);
+        const observed = new Uint8Array(8);
+        ok(api.GetFileTime(handle, 0, 0, observed), `GetFileTime: ${api.GetLastError()}`);
+        equal(
+            new DataView(observed.buffer).getBigUint64(0, true),
+            ticks,
+            "Filesystem must preserve exact 100ns fixture time",
+        );
+    } finally {
+        ok(api.CloseHandle(handle), `CloseHandle: ${api.GetLastError()}`);
+    }
+}
+
+const windowsBunOnly = { skip: platform !== "win32" || !versions.bun };
+const epochTicks = 116444736000000000n;
+
+test(
+    "Windows lock retirement preserves exact identity at dense 100ns timestamp boundaries",
+    windowsBunOnly,
+    async () => {
+        const directory = mkdtempSync(join(tmpdir(), "rw-lock-time-"));
+        const path = join(directory, "owner-λ.lock");
+        const library = fileTimeAPI();
+        let checked = 0;
+        const failures: string[] = [];
+        try {
+            // Exercise 100ns increments around zero, half-ms, and integer-ms boundaries.
+            // The final ticks below an integer ms are absent from the coarser utimes probe.
+            const offsets = [
+                ...Array.from({ length: 41 }, (_, index) => index),
+                ...Array.from({ length: 81 }, (_, index) => 4960 + index),
+                ...Array.from({ length: 81 }, (_, index) => 9960 + index),
+            ];
+            for (const writer of ["native", "node"]) {
+                for (const baseMs of [1700000000000n, 1791676800123n, 2200000000999n]) {
+                    for (const offset of offsets) {
+                        const text = JSON.stringify({
+                            token: `${writer}-${baseMs}-${offset}`,
+                            pid,
+                        });
+                        if (writer === "native") {
+                            const owner = openNativeFileLock(path, "exclusive");
+                            try {
+                                owner.lockSync(true);
+                                owner.replaceTextSync(text);
+                            } finally {
+                                owner.close();
+                            }
+                        } else {
+                            const owner = await open(path, "wx");
+                            try {
+                                await owner.writeFile(text);
+                                await owner.sync();
+                            } finally {
+                                await owner.close();
+                            }
+                        }
+                        try {
+                            const ticks = epochTicks + baseMs * 10000n + BigInt(offset);
+                            setExactFileTime(library.symbols, path, ticks);
+                            const snapshot = await readLockFileSnapshot(path);
+                            ok(snapshot);
+                            const reader = openNativeFileLock(path, false);
+                            const nativeSnapshot = (() => {
+                                try {
+                                    return reader.readSnapshotSync();
+                                } finally {
+                                    reader.close();
+                                }
+                            })();
+                            const stat = statSync(path);
+                            const mtimeNs = statSync(path, {
+                                bigint: true,
+                            }).mtimeNs.toString();
+                            const removed = await removeLockFileIfSnapshotMatches(path, snapshot);
+                            const expectedFloorMs = Number((ticks - epochTicks) / 10000n);
+                            const diagnostic = JSON.stringify({
+                                writer,
+                                baseMs: String(baseMs),
+                                offset,
+                                fileTime: String(ticks),
+                                expectedFloorMs,
+                                snapshot,
+                                nativeSnapshot,
+                                mtimeMs: stat.mtimeMs,
+                                mtimeNs,
+                                removed,
+                            });
+                            checked++;
+                            if (
+                                !removed ||
+                                existsSync(path) ||
+                                nativeSnapshot.mtime !== expectedFloorMs ||
+                                snapshot.mtime !== expectedFloorMs
+                            )
+                                failures.push(diagnostic);
+                        } finally {
+                            // Only our disposable fixture path, after all owned descriptors have closed.
+                            rmSync(path, { force: true });
+                        }
+                    }
+                }
+            }
+            equal(checked, 1218);
+            equal(failures.length, 0, `Timestamp failures (${failures.length}/${checked}):\n${failures.join("\n")}`);
+        } finally {
+            library.close();
+            rmSync(directory, { recursive: true, force: true });
+        }
+    },
+);
+
+test("Windows retirement still refuses changed timestamp and changed owner evidence", windowsBunOnly, async () => {
+    const directory = mkdtempSync(join(tmpdir(), "rw-lock-stale-"));
+    const path = join(directory, "owner.lock");
+    const library = fileTimeAPI();
+    const original = JSON.stringify({ token: "original", pid });
+    const replacement = JSON.stringify({ token: "replaced", pid });
+    const ticks = epochTicks + 1791676800123n * 10000n;
+    try {
+        writeFileSync(path, original, { flag: "wx" });
+        setExactFileTime(library.symbols, path, ticks);
+        const snapshot = await readLockFileSnapshot(path);
+        ok(snapshot);
+        setExactFileTime(library.symbols, path, ticks + 20000n);
+        equal(await removeLockFileIfSnapshotMatches(path, snapshot), false);
+        equal(readFileSync(path, "utf8"), original);
+        // Same length and timestamp, different token/text; the live PID is unchanged.
+        equal(Buffer.byteLength(replacement), Buffer.byteLength(original));
+        writeFileSync(path, replacement);
+        setExactFileTime(library.symbols, path, ticks);
+        equal(await removeLockFileIfSnapshotMatches(path, snapshot), false);
+        equal(readFileSync(path, "utf8"), replacement);
+        const fresh = await readLockFileSnapshot(path);
+        ok(fresh);
+        equal(await removeLockFileIfSnapshotMatches(path, fresh), true);
+        equal(existsSync(path), false);
+    } finally {
+        library.close();
+        rmSync(directory, { recursive: true, force: true });
     }
 });

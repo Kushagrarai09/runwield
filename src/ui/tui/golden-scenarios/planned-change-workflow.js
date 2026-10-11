@@ -918,7 +918,7 @@ export const plannedChangeValidationFailureRetryScenario = {
                 {
                     verification_command:
                         process.platform === "win32"
-                            ? 'findstr /x /c:"repaired" golden-validation-retry.txt >nul'
+                            ? `"${process.execPath}" ${process.versions.deno ? "eval" : "-e"} "import fs from 'node:fs'; import process from 'node:process'; if (fs.readFileSync('golden-validation-retry.txt', 'utf8') !== 'repaired') process.exit(1);"`
                             : 'test "$(cat golden-validation-retry.txt)" = repaired',
                 },
                 null,

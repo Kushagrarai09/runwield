@@ -46,7 +46,13 @@ import {
 } from "./scripted-review-surface.js";
 import { normalizeScreenText, VirtualTerminal } from "./virtual-terminal.js";
 import { NO_OPEN_BROWSER_PORT } from "../../../shared/browser-port.ts";
-import { getCwd, getHomeDir } from "../../../constants.js";
+import {
+    getCwd,
+    getHomeDir,
+    getRunWieldRuntimeDir,
+    PROJECT_INTERNAL_RUNTIME_DIR_NAME,
+    WORKTREE_REGISTRY_FILE,
+} from "../../../constants.js";
 import { getWorktreeRegistryPath } from "../../../shared/worktree-registry.js";
 import { enterProjectRuntime } from "../../../shared/project-runtime-layout.ts";
 import { isCurrentProjectRuntimePath } from "../../../shared/runwield-owned-paths.ts";
@@ -735,6 +741,43 @@ async function seedGoldenCorruptSession(fauxProvider) {
     } finally {
         sessionStore.close?.();
     }
+}
+
+/** Failure-only reads of real fixture evidence; never acquire a registry lock or repair state.
+ * @param {string} projectRoot
+ * @param {string} home
+ */
+async function captureNativeFailureEvidence(projectRoot, home) {
+    /** @param {string[]} args */
+    const git = async (args) => {
+        try {
+            const result = await captureForegroundProcess("git", {
+                cwd: projectRoot,
+                args: ["--no-optional-locks", ...args],
+                timeoutMs: 1000,
+            });
+            return {
+                code: result.code,
+                stdout: new TextDecoder().decode(result.stdout).slice(-16384),
+                stderr: new TextDecoder().decode(result.stderr).slice(-4096),
+            };
+        } catch (error) {
+            return { error: String(error) };
+        }
+    };
+    /** @param {string} path */
+    const tail = (path) =>
+        fsReadFile(path, "utf8")
+            .then((text) => text.slice(-16384))
+            .catch((error) => String(error));
+    const [status, planDiff, registry, externalCalls, unsupportedCalls] = await Promise.all([
+        git(["status", "--porcelain=v1", "--untracked-files=all"]),
+        git(["diff", "--no-ext-diff", "--no-textconv", "HEAD", "--", "docs/plans"]),
+        tail(join(getRunWieldRuntimeDir(projectRoot), PROJECT_INTERNAL_RUNTIME_DIR_NAME, WORKTREE_REGISTRY_FILE)),
+        tail(join(dirname(home), "bin", "calls.log")),
+        tail(join(dirname(home), "bin", "unexpected.log")),
+    ]);
+    return { projectRoot, status, planDiff, registry, externalCalls, unsupportedCalls };
 }
 
 /**
@@ -2921,6 +2964,9 @@ async function runComposedTuiScenario(scenario, options) {
                         {
                             scenario: scenario.name,
                             error: error instanceof Error ? error.message : String(error),
+                            nativeFailureEvidence: env
+                                ? await captureNativeFailureEvidence(env.projectRoot, getHomeDir())
+                                : null,
                             screenText: terminal.getScreenText(),
                             scrollback: terminal.getScrollbackText?.(),
                             events,

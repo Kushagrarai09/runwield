@@ -958,8 +958,36 @@ Open-reader regressions retain the old handle's bytes and verify complete new co
 Golden evidence now retains the validation error JSONL before disposable HOME cleanup.
 Native confirmation of these corrections remains pending.
 
-Native Windows qualification requires Git for Windows with `core.longpaths=true` for
-nested worktrees. Each isolated runner writes that setting only in its disposable Git
-configuration and pins `GIT_CONFIG_GLOBAL` to that file across Golden HOME changes.
-The user's Git settings are untouched. A real >260-character worktree fixture verifies
-this prerequisite; results do not claim support with Git's long-path opt-in disabled.
+Native Windows qualification enables Git for Windows `core.longpaths=true` for tracked
+file paths longer than 260 characters. Each isolated runner writes that setting only
+in its disposable Git configuration and pins `GIT_CONFIG_GLOBAL` to that file across
+Golden HOME changes. The user's Git settings are untouched.
+
+The initial qualification fixture put the worktree root itself beyond 260 characters;
+native x64 rejected it with `'$GIT_DIR' too big` even with the opt-in enabled. Git has a
+separate repository-setup path guard before resolving the `.git` pointer
+([Git for Windows setup source](https://github.com/git-for-windows/git/blob/v2.51.1.windows.1/setup.c#L951)).
+The corrected fixture keeps repository and worktree roots short, commits a nested file,
+and requires its checked-out absolute path to exceed 260 characters, exact preserved
+bytes, and a clean Git status. Native confirmation of this corrected fixture is pending.
+This qualifies the intended long-file-path prerequisite only when the native test passes;
+it does not claim support for arbitrarily deep repository/worktree roots or for Git's
+long-path opt-in being disabled. Product worktree naming remains unchanged.
+
+
+At integrated `10321fc8c`, Linux ARM64 passes all 649 source files and relocated-package
+provider/terminal checks. Both native Windows package lanes and ordinary PR CI pass.
+Complete Windows source results are x64 638/649 and ARM64 637/649. macOS Bun and Deno
+each pass 647/649: Bun exposed an already-removed private directory and a queued-metrics
+assertion race; Deno child CLI fixtures contended on dependency installation. The follow-up
+uses idempotent private-directory cleanup, a metrics drain, and the preinstalled Deno graph.
+
+Native fixture corrections cover Snip's Windows USERPROFILE trust root, exact verification
+file bytes, real Git Bash commands, repeated cache-warming calls, background completion
+ordering and settled search responses. Publication test portfolios are split across three
+additional isolated files, preserving all 69 cases and the existing per-file timeout; the
+complete inventory is now 652 files. Dense real Win32 timestamp cases retain all ownership
+checks and are intended to distinguish a suspected timestamp-rounding cause of intermittent
+lock retirement. That cause is not yet proven. Two local-publication Golden scenarios remain
+unresolved; bounded failure-only Git, registry and external-helper evidence is retained for
+the next native run. No dirty-work protection, lifecycle proof or assertion is relaxed.

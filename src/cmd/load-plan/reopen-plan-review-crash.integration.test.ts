@@ -17,6 +17,13 @@ import { createOwnerWorkspaceApp } from "../../ui/workspace/server.js";
 
 type OwnerApp = ReturnType<typeof createOwnerWorkspaceApp> & { close(): Promise<void> };
 
+type ReviewCrashLiveState = {
+    state?: string;
+    status?: string;
+    interactionType?: string;
+    hasReviewUrl: boolean;
+};
+
 test("a Session reopens the current saved Plan after its pending review process is killed", async () => {
     await withRuntimeCommandFixture(
         "reopen-review-crash-",
@@ -34,22 +41,22 @@ test("a Session reopens the current saved Plan after its pending review process 
             // never closes the runtime or settles the operation before SIGKILL.
             const script = `
             import { writeFileSync, renameSync } from "node:fs";
-            import { createSessionRuntime } from ${
-                JSON.stringify(import.meta.resolve("../../shared/session/session-runtime.ts"))
-            };
-            import { openOwnerCoordinationStore } from ${
-                JSON.stringify(import.meta.resolve("../../shared/owner-coordination/index.js"))
-            };
-            import { RuntimeInteractionTypes } from ${
-                JSON.stringify(import.meta.resolve("../../shared/session/session-runtime-interactions.js"))
-            };
-            const ownerStore = openOwnerCoordinationStore({ dbPath: ${
-                JSON.stringify(join(homeDir, "owner.sqlite3"))
-            } });
+            import { createSessionRuntime } from ${JSON.stringify(
+                import.meta.resolve("../../shared/session/session-runtime.ts"),
+            )};
+            import { openOwnerCoordinationStore } from ${JSON.stringify(
+                import.meta.resolve("../../shared/owner-coordination/index.js"),
+            )};
+            import { RuntimeInteractionTypes } from ${JSON.stringify(
+                import.meta.resolve("../../shared/session/session-runtime-interactions.js"),
+            )};
+            const ownerStore = openOwnerCoordinationStore({ dbPath: ${JSON.stringify(
+                join(homeDir, "owner.sqlite3"),
+            )} });
             const runtime = createSessionRuntime({ sessionStore: ownerStore, ownerProcessKind: "test" });
-            const { sessionId } = await runtime.createInteractiveSession({ cwd: ${
-                JSON.stringify(projectRoot)
-            }, mode: "new" });
+            const { sessionId } = await runtime.createInteractiveSession({ cwd: ${JSON.stringify(
+                projectRoot,
+            )}, mode: "new" });
             runtime.setInteractionAdapter(sessionId, {
                 requestInteraction(request) {
                     if (request.type !== RuntimeInteractionTypes.PLAN_REVIEW) throw new Error("Unexpected interaction");
@@ -62,9 +69,9 @@ test("a Session reopens the current saved Plan after its pending review process 
             void runtime.requestInteraction(sessionId, {
                 type: RuntimeInteractionTypes.PLAN_REVIEW,
                 prompt: "Review target",
-                _meta: { planId: ${
-                JSON.stringify(plan.attrs.planId)
-            }, planName: "target", planningAgentName: "planner" },
+                _meta: { planId: ${JSON.stringify(
+                    plan.attrs.planId,
+                )}, planName: "target", planningAgentName: "planner" },
             });
             setInterval(() => {}, 1000);
         `;
@@ -95,7 +102,9 @@ test("a Session reopens the current saved Plan after its pending review process 
                 if (!persistentId) {
                     try {
                         worker.kill("SIGKILL");
-                    } catch { /* Already stopped. */ }
+                    } catch {
+                        /* Already stopped. */
+                    }
                     const output = await collectProcessOutput(worker);
                     throw new Error(`Review did not become pending: ${new TextDecoder().decode(output.stderr)}`);
                 }
@@ -106,10 +115,16 @@ test("a Session reopens the current saved Plan after its pending review process 
                 // A newer saved version, not the pending request's original text, must be reviewed.
                 const savedBeforeEdit = await loadPlan(projectRoot, "target");
                 assert(savedBeforeEdit);
-                await savePlan(projectRoot, "target", "# Target\n\n## Context\n\nUpdated after crash.\n", {
-                    ...savedBeforeEdit.attrs,
-                    status: "approved",
-                }, { expectedRevision: savedBeforeEdit.revision });
+                await savePlan(
+                    projectRoot,
+                    "target",
+                    "# Target\n\n## Context\n\nUpdated after crash.\n",
+                    {
+                        ...savedBeforeEdit.attrs,
+                        status: "approved",
+                    },
+                    { expectedRevision: savedBeforeEdit.revision },
+                );
                 let modelTurns = 0;
                 setModelResponseFactory(() => {
                     modelTurns++;
@@ -147,7 +162,9 @@ test("a Session reopens the current saved Plan after its pending review process 
             } finally {
                 try {
                     worker.kill("SIGKILL");
-                } catch { /* Already stopped. */ }
+                } catch {
+                    /* Already stopped. */
+                }
                 await worker.status;
             }
         },
@@ -169,20 +186,20 @@ test("Workspace opens and approves a saved Plan review after its owner is SIGKIL
             const readyPath = join(homeDir, "workspace-review-pending.json");
             const script = `
             import { writeFileSync, renameSync } from "node:fs";
-            import { createSessionRuntime } from ${
-                JSON.stringify(import.meta.resolve("../../shared/session/session-runtime.ts"))
-            };
-            import { openOwnerCoordinationStore } from ${
-                JSON.stringify(import.meta.resolve("../../shared/owner-coordination/index.js"))
-            };
-            import { RuntimeInteractionTypes } from ${
-                JSON.stringify(import.meta.resolve("../../shared/session/session-runtime-interactions.js"))
-            };
+            import { createSessionRuntime } from ${JSON.stringify(
+                import.meta.resolve("../../shared/session/session-runtime.ts"),
+            )};
+            import { openOwnerCoordinationStore } from ${JSON.stringify(
+                import.meta.resolve("../../shared/owner-coordination/index.js"),
+            )};
+            import { RuntimeInteractionTypes } from ${JSON.stringify(
+                import.meta.resolve("../../shared/session/session-runtime-interactions.js"),
+            )};
             const store = openOwnerCoordinationStore({ dbPath: ${JSON.stringify(join(homeDir, "owner.sqlite3"))} });
             const runtime = createSessionRuntime({ sessionStore: store, ownerProcessKind: "test" });
-            const { sessionId } = await runtime.createInteractiveSession({ cwd: ${
-                JSON.stringify(projectRoot)
-            }, mode: "new" });
+            const { sessionId } = await runtime.createInteractiveSession({ cwd: ${JSON.stringify(
+                projectRoot,
+            )}, mode: "new" });
             const persistentId = runtime.getSessionSnapshot(sessionId).managed.runwieldSessionId;
             const projectId = store.getSessionById(persistentId).projectId;
             store.registerProject({ root: ${JSON.stringify(projectRoot)}, idFactory: () => projectId });
@@ -232,7 +249,8 @@ test("Workspace opens and approves a saved Plan review after its owner is SIGKIL
                         if (
                             !(error instanceof Error && "code" in error && error.code === "ENOENT") &&
                             !(error instanceof SyntaxError)
-                        ) throw error;
+                        )
+                            throw error;
                     }
                     await new Promise((resolve) => setTimeout(resolve, 25));
                 }
@@ -246,10 +264,16 @@ test("Workspace opens and approves a saved Plan review after its owner is SIGKIL
 
                 const previous = await loadPlan(projectRoot, "target");
                 assert(previous);
-                await savePlan(projectRoot, "target", "# Target\n\n## Context\n\nUpdated after crash.\n", {
-                    ...previous.attrs,
-                    status: "approved",
-                }, { expectedRevision: previous.revision });
+                await savePlan(
+                    projectRoot,
+                    "target",
+                    "# Target\n\n## Context\n\nUpdated after crash.\n",
+                    {
+                        ...previous.attrs,
+                        status: "approved",
+                    },
+                    { expectedRevision: previous.revision },
+                );
                 const updated = await loadPlan(projectRoot, "target");
                 assert(updated);
                 let modelTurns = 0;
@@ -259,6 +283,12 @@ test("Workspace opens and approves a saved Plan review after its owner is SIGKIL
                 });
                 const store = openOwnerCoordinationStore({ dbPath: join(homeDir, "owner.sqlite3") });
                 let app: OwnerApp | undefined;
+                let phase = "inspect recovered Session";
+                let cleanupOperationId = "";
+                let cleanupBase = "";
+                let cleanupHeaders: Record<string, string> = {};
+                let latestLive: ReviewCrashLiveState | undefined;
+                let latestOperationStatus: string | undefined;
                 try {
                     const session = store.getSessionById(persistentId);
                     assert(session);
@@ -275,6 +305,7 @@ test("Workspace opens and approves a saved Plan review after its owner is SIGKIL
                         credentialFactory: () => "killed-credential",
                         csrfFactory: () => "killed-csrf",
                     });
+                    phase = "create Workspace app";
                     app = createOwnerWorkspaceApp({
                         mode: "owner",
                         publicOrigin: "http://127.0.0.1:8787",
@@ -284,6 +315,9 @@ test("Workspace opens and approves a saved Plan review after its owner is SIGKIL
                     const sessionBase = `${base}/sessions/${persistentId}`;
                     const cookie = `rw_owner_device=${device.credential}; rw_owner_csrf=killed-csrf`;
                     const headers = { origin: "http://127.0.0.1:8787", cookie, "x-runwield-csrf": "killed-csrf" };
+                    cleanupBase = "http://127.0.0.1:8787/api/owner/session-operations";
+                    cleanupHeaders = headers;
+                    phase = "POST reopened review";
                     // Do not call the manual recovery route or resume the Runtime in the test.
                     const opened = await app.handler()(
                         new Request(`${sessionBase}/plan-review`, {
@@ -297,7 +331,9 @@ test("Workspace opens and approves a saved Plan review after its owner is SIGKIL
                     );
                     assertEquals(opened.status, 202, await opened.clone().text());
                     const { operationId, kind } = await opened.json();
+                    cleanupOperationId = operationId;
                     assertEquals(kind, "starting");
+                    phase = "wait for live review";
                     let review;
                     for (let index = 0; index < 300; index++) {
                         const response = await app.handler()(
@@ -306,6 +342,12 @@ test("Workspace opens and approves a saved Plan review after its owner is SIGKIL
                         assertEquals(response.status, 200, await response.clone().text());
                         const live = await response.json();
                         review = live.operation?.liveInteraction?.request;
+                        latestLive = {
+                            state: live.state,
+                            status: live.operation?.status,
+                            interactionType: review?.type,
+                            hasReviewUrl: Boolean(review?.reviewUrl),
+                        };
                         if (review?.reviewUrl) break;
                         if (live.operation?.status === "failed") throw new Error(live.operation.error);
                         await new Promise((resolve) => setTimeout(resolve, 10));
@@ -314,34 +356,35 @@ test("Workspace opens and approves a saved Plan review after its owner is SIGKIL
                     assertEquals(review.type, "plan_review");
                     assertStringIncludes(review.reviewUrl, `/projects/${projectId}/plans/${plan.attrs.planId}?`);
                     assertEquals(review.planReview.expectedRevision, updated.revision);
+                    phase = "POST review answer";
                     const answer = await app.handler()(
-                        new Request(
-                            `${base}/session-operations/${operationId}/interactions/${review.id}/answer`,
-                            {
-                                method: "POST",
-                                headers,
-                                body: JSON.stringify({
-                                    runwieldSessionId: persistentId,
-                                    requestId: "approve-killed-review",
-                                    response: {
-                                        approved: true,
-                                        approvalAction: "later",
-                                        executionAgent: "engineer",
-                                        collaborationRecommendation: "autonomous",
-                                    },
-                                }),
-                            },
-                        ),
+                        new Request(`${base}/session-operations/${operationId}/interactions/${review.id}/answer`, {
+                            method: "POST",
+                            headers,
+                            body: JSON.stringify({
+                                runwieldSessionId: persistentId,
+                                requestId: "approve-killed-review",
+                                response: {
+                                    approved: true,
+                                    approvalAction: "later",
+                                    executionAgent: "engineer",
+                                    collaborationRecommendation: "autonomous",
+                                },
+                            }),
+                        }),
                     );
                     assertEquals(answer.status, 202, await answer.clone().text());
+                    phase = "wait for review completion";
                     let completed = false;
                     for (let index = 0; index < 300; index++) {
-                        const operation = await (await app.handler()(
-                            new Request(
-                                `http://127.0.0.1:8787/api/owner/session-operations/${operationId}`,
-                                { headers: { cookie } },
-                            ),
-                        )).json();
+                        const operation = await (
+                            await app.handler()(
+                                new Request(`http://127.0.0.1:8787/api/owner/session-operations/${operationId}`, {
+                                    headers: { cookie },
+                                }),
+                            )
+                        ).json();
+                        latestOperationStatus = operation.status;
                         if (operation.status === "completed") {
                             completed = true;
                             break;
@@ -350,16 +393,64 @@ test("Workspace opens and approves a saved Plan review after its owner is SIGKIL
                         await new Promise((resolve) => setTimeout(resolve, 10));
                     }
                     assert(completed, "Workspace review did not complete");
+                    phase = "verify approved Plan";
                     assertEquals((await loadPlan(projectRoot, "target"))?.attrs.status, "ready_for_work");
                     assertEquals(modelTurns, 0);
+                } catch (error) {
+                    // Report before shutdown: a failed poll may leave a review awaiting
+                    // an answer, and app.close() waits for that managed operation.
+                    // Record only state summaries; never headers, cookies, or review URLs.
+                    const message = error instanceof Error ? error.message : String(error);
+                    console.error(
+                        "[reopen-review-crash]",
+                        JSON.stringify({
+                            phase,
+                            latestLive,
+                            latestOperationStatus,
+                            error: message
+                                .replaceAll("killed-credential", "[credential]")
+                                .replaceAll("killed-csrf", "[csrf]")
+                                .replaceAll("killed-proof", "[proof]"),
+                        }),
+                    );
+                    if (app && cleanupOperationId && latestOperationStatus !== "completed") {
+                        try {
+                            const canceled = await app.handler()(
+                                new Request(`${cleanupBase}/${cleanupOperationId}/cancel`, {
+                                    method: "POST",
+                                    headers: cleanupHeaders,
+                                }),
+                            );
+                            console.error(
+                                "[reopen-review-crash]",
+                                JSON.stringify({
+                                    phase: "cancel failed review before shutdown",
+                                    status: canceled.status,
+                                }),
+                            );
+                        } catch (cancelError) {
+                            console.error(
+                                "[reopen-review-crash]",
+                                JSON.stringify({
+                                    phase: "cancel failed review before shutdown",
+                                    errorName: cancelError instanceof Error ? cancelError.name : "non-Error rejection",
+                                }),
+                            );
+                        }
+                    }
+                    throw error;
                 } finally {
+                    console.error("[reopen-review-crash]", JSON.stringify({ phase: "Workspace shutdown started" }));
                     await app?.close();
                     store.close();
+                    console.error("[reopen-review-crash]", JSON.stringify({ phase: "Workspace shutdown finished" }));
                 }
             } finally {
                 try {
                     worker.kill("SIGKILL");
-                } catch { /* Already stopped. */ }
+                } catch {
+                    /* Already stopped. */
+                }
                 await worker.status;
             }
         },

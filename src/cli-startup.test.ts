@@ -10,27 +10,34 @@ import { test } from "node:test";
 function invoke(args: string[]) {
     const directory = mkdtempSync(join(tmpdir(), "runwield-cli-startup-"));
     try {
-        const result = spawnSync(execPath, [
-            ...(versions.deno ? ["run", "-A"] : ["--no-env-file", "--no-install"]),
-            fileURLToPath(new URL("./cli.ts", import.meta.url)),
-            ...args,
-        ], {
-            cwd: directory,
-            env: {
-                PATH: env.PATH,
-                HOME: directory,
-                USERPROFILE: directory,
-                TMPDIR: directory,
-                DENO_DIR: env.DENO_DIR,
-                SystemRoot: env.SystemRoot,
+        const result = spawnSync(
+            execPath,
+            [
+                ...(versions.deno ? ["run", "-A", "--node-modules-dir=manual"] : ["--no-env-file", "--no-install"]),
+                fileURLToPath(new URL("./cli.ts", import.meta.url)),
+                ...args,
+            ],
+            {
+                cwd: directory,
+                env: {
+                    PATH: env.PATH,
+                    HOME: directory,
+                    USERPROFILE: directory,
+                    TMPDIR: directory,
+                    DENO_DIR: env.DENO_DIR,
+                    SystemRoot: env.SystemRoot,
+                },
+                timeout: 30_000,
+                encoding: "utf8",
             },
-            timeout: 30_000,
-            encoding: "utf8",
-        });
+        );
         if (result.error) throw result.error;
         equal(result.signal, null);
         // Help and version must not bootstrap personal state or a project.
-        equal(readdirSync(directory).some((name) => name === ".wld" || name === ".agents"), false);
+        equal(
+            readdirSync(directory).some((name) => name === ".wld" || name === ".agents"),
+            false,
+        );
         return result;
     } finally {
         rmSync(directory, { recursive: true, force: true });

@@ -2,6 +2,7 @@ import process from "node:process";
 import { readdir } from "node:fs/promises";
 import { captureForegroundProcess } from "./captured-process.ts";
 import {
+    mkdir as fsMkdir,
     mkdtemp as fsMkdtemp,
     readFile as fsReadFile,
     realpath as fsRealpath,
@@ -455,17 +456,31 @@ test("createTestWorktreeAttempt records supplied target branch independent of cu
     }
 });
 
-test("disposable Git configuration supports deeply nested execution worktrees", async () => {
+test("disposable Git configuration checks out long tracked paths beneath a short worktree root", async () => {
     const projectRoot = await makeRepo();
-    const parent = await fsMkdtemp(join(tmpdir(), "runwield-long-worktree-"));
+    const parent = await fsMkdtemp(join(tmpdir(), "rwlp-"));
     let attempt;
     try {
         if (process.platform === "win32") {
             assertEquals((await git(projectRoot, ["config", "--get", "core.longpaths"])).trim(), "true");
         }
-        const worktreeRoot = join(parent, "nested-" + "a".repeat(100), "nested-" + "b".repeat(100));
-        attempt = await createTestWorktreeAttempt({ projectRoot, planName: "deep-plan", worktreeRoot });
-        assertEquals(attempt.path.length > 260, true);
+        // Git's explicit GIT_DIR setup has a separate PATH_MAX - 40 guard even
+        // with core.longpaths enabled. Exercise long tracked files, not an
+        // unsupported oversized repository root; keep ordinary product naming.
+        const relativeFile = join("a".repeat(80), "b".repeat(80), "c".repeat(80), "proof.bin");
+        const sourceFile = join(projectRoot, relativeFile);
+        const contents = "long tracked file from committed primary";
+        await fsMkdir(dirname(sourceFile), { recursive: true });
+        await fsWriteFile(sourceFile, contents);
+        await git(projectRoot, ["add", "--", relativeFile]);
+        await git(projectRoot, ["commit", "-m", "Add nested tracked file"]);
+        attempt = await createTestWorktreeAttempt({ projectRoot, planName: "long-file", worktreeRoot: parent });
+        if (process.platform === "win32") {
+            assertEquals(join(attempt.path, ".git").length <= 220, true, "fixture Git root must remain short");
+        }
+        const checkedOutFile = join(attempt.path, relativeFile);
+        assertEquals(checkedOutFile.length > 260, true);
+        assertEquals(await fsReadFile(checkedOutFile, "utf8"), contents);
         assertEquals(
             await fsReadFile(join(attempt.path, "README.md"), "utf8"),
             await fsReadFile(join(projectRoot, "README.md"), "utf8"),

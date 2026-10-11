@@ -19,24 +19,28 @@ test(
         await Promise.all([mkdir(home), mkdir(project)]);
         try {
             const bin = await writeWorkflowBinaryFixtures(root);
-            const child = spawn(execPath, [
-                ...(versions.deno ? ["run", "-A"] : ["--no-env-file", "--no-install"]),
-                fileURLToPath(new URL("./cli.ts", import.meta.url)),
-                "Runtime migration startup qualification",
-            ], {
-                cwd: project,
-                env: {
-                    HOME: home,
-                    USERPROFILE: home,
-                    WLD_TEST_SANDBOX_HOME: home,
-                    MNEMOTECA_DB_PATH: join(home, "mnemoteca.db"),
-                    TMPDIR: root,
-                    PATH: `${bin}${delimiter}${env.PATH || ""}`,
-                    DENO_DIR: env.DENO_DIR,
-                    NO_COLOR: "1",
+            const child = spawn(
+                execPath,
+                [
+                    ...(versions.deno ? ["run", "-A", "--node-modules-dir=manual"] : ["--no-env-file", "--no-install"]),
+                    fileURLToPath(new URL("./cli.ts", import.meta.url)),
+                    "Runtime migration startup qualification",
+                ],
+                {
+                    cwd: project,
+                    env: {
+                        HOME: home,
+                        USERPROFILE: home,
+                        WLD_TEST_SANDBOX_HOME: home,
+                        MNEMOTECA_DB_PATH: join(home, "mnemoteca.db"),
+                        TMPDIR: root,
+                        PATH: `${bin}${delimiter}${env.PATH || ""}`,
+                        DENO_DIR: env.DENO_DIR,
+                        NO_COLOR: "1",
+                    },
+                    stdio: ["pipe", "pipe", "pipe"],
                 },
-                stdio: ["pipe", "pipe", "pipe"],
-            });
+            );
             let output = "";
             let reachedPicker = false;
             let timedOut = false;

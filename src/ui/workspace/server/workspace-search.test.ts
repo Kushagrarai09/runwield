@@ -103,10 +103,16 @@ test("Workspace search keeps deterministic order across Projects and applies the
         await fixture.search.refresh();
         const all = await fixture.search.search({ query: "Shared exact" });
         const repeated = await fixture.search.search({ query: "Shared exact" });
-        assertEquals(all.results.map((result) => result.id), repeated.results.map((result) => result.id));
+        assertEquals(
+            all.results.map((result) => result.id),
+            repeated.results.map((result) => result.id),
+        );
         assertEquals(all.total, 2);
         const filtered = await fixture.search.search({ query: "Shared exact", projectId: second.projectId });
-        assertEquals(filtered.results.map((result) => result.projectName), ["Second Project"]);
+        assertEquals(
+            filtered.results.map((result) => result.projectName),
+            ["Second Project"],
+        );
     } finally {
         await fixture.close();
     }
@@ -239,7 +245,10 @@ test("Workspace search quarantines a newer database and rebuilds recoverable res
         await search.refresh();
         assertEquals((await search.search({ query: "Recovery needle" })).total, 1);
         const names = [...fsReaddirSync(dir, { withFileTypes: true })].map((entry) => entry.name);
-        assertEquals(names.some((name) => name.startsWith("search.sqlite3.quarantine-")), true);
+        assertEquals(
+            names.some((name) => name.startsWith("search.sqlite3.quarantine-")),
+            true,
+        );
         await search.close();
         store.close();
         const restartedStore = openOwnerCoordinationStore({ dbPath: ownerDbPath });
@@ -274,7 +283,10 @@ test("Workspace search quarantines a corrupt database and rebuilds recoverable r
         await search.refresh();
         assertEquals((await search.search({ query: "Corrupt recovery needle" })).total, 1);
         const names = [...fsReaddirSync(dir, { withFileTypes: true })].map((entry) => entry.name);
-        assertEquals(names.some((name) => name.startsWith("search.sqlite3.quarantine-")), true);
+        assertEquals(
+            names.some((name) => name.startsWith("search.sqlite3.quarantine-")),
+            true,
+        );
     } finally {
         await search.close();
         store.close();
@@ -385,8 +397,8 @@ test("Workspace search rescans external edits without manual refresh", async () 
         assertEquals(WORKSPACE_SEARCH_SCAN_INTERVAL_MS <= 30_000, true);
         const indexed = async () => (await fixture.search.search({ query: "Automatic needle" })).total;
         const ready = async () =>
-            (await fixture.search.search({ query: "Automatic needle" })).states.some((state) =>
-                state.state === "ready"
+            (await fixture.search.search({ query: "Automatic needle" })).states.some(
+                (state) => state.state === "ready",
             );
         assertEquals(await waitFor(ready), true);
         await fsMkdir(join(fixture.root, "docs", "prd"), { recursive: true });
@@ -428,15 +440,13 @@ test("Workspace search verifies committed Session evidence and reads every catal
             const piSessionId = `catalog-page-${index}`;
             const timestamp = new Date(Date.UTC(2026, 0, 2, 0, 0, index)).toISOString();
             const transcriptPath = join(fixture.sessionDir, `${timestamp.replace(/[:.]/g, "-")}_${piSessionId}.jsonl`);
-            const transcript = `${
-                JSON.stringify({
-                    type: "session",
-                    id: piSessionId,
-                    timestamp,
-                    cwd: fixture.projectRoot,
-                    name: `Catalog page Session ${index}`,
-                })
-            }\n`;
+            const transcript = `${JSON.stringify({
+                type: "session",
+                id: piSessionId,
+                timestamp,
+                cwd: fixture.projectRoot,
+                name: `Catalog page Session ${index}`,
+            })}\n`;
             await fsWriteFile(transcriptPath, transcript);
             let id = 0;
             const session = await fixture.store.ensureSessionCatalogRecord({
@@ -459,11 +469,16 @@ test("Workspace search verifies committed Session evidence and reads every catal
                 now: () => timestamp,
             });
             proof = fixture.store.changeSessionActivationPhase(proof, "checkpointing", { now: () => timestamp });
-            fixture.store.publishGenerationAndRelease(proof, {
-                generation: 0,
-                currentSegmentId: fixture.store.getCurrentSessionSegment(session.runwieldSessionId)?.segmentId ?? null,
-                ...await readTranscriptEvidence(transcriptPath),
-            }, { now: () => timestamp });
+            fixture.store.publishGenerationAndRelease(
+                proof,
+                {
+                    generation: 0,
+                    currentSegmentId:
+                        fixture.store.getCurrentSessionSegment(session.runwieldSessionId)?.segmentId ?? null,
+                    ...(await readTranscriptEvidence(transcriptPath)),
+                },
+                { now: () => timestamp },
+            );
         }
 
         await search.refresh();
@@ -528,10 +543,9 @@ test("Workspace search and Plan opens accept registered execution-worktree autho
         const primary = await fsReadFile(join(fixture.root, "docs", "plans", "authority.md"), "utf8");
         await fsWriteFile(
             join(executionRoot, "docs", "plans", "authority.md"),
-            primary.replaceAll("Primary authority", "Execution authority").replace(
-                "Old primary body",
-                "Execution needle",
-            ),
+            primary
+                .replaceAll("Primary authority", "Execution authority")
+                .replace("Old primary body", "Execution needle"),
         );
         const now = "2026-09-01T00:00:00.000Z";
         await addEntry(fixture.root, {
@@ -591,8 +605,8 @@ test("Workspace refresh requested during a scan includes files added after that 
         assertEquals(
             await waitFor(async () => {
                 const progress = await fixture.search.search({ query: "" });
-                return progress.states.some((state) =>
-                    state.projectId === second.projectId && state.state === "indexing"
+                return progress.states.some(
+                    (state) => state.projectId === second.projectId && state.state === "indexing",
                 );
             }),
             true,
@@ -669,8 +683,21 @@ test("Workspace search skips a Plan without an ID and keeps other results", asyn
         const markdown = "---\nclassification: PLANNED_CHANGE\nstatus: draft\n---\n# Missing ID\n\nShared needle.\n";
         await fsWriteFile(path, markdown);
         await fixture.search.refresh();
-        const payload = await fixture.search.search({ query: "Shared needle" });
-        assertEquals(payload.results.map((result) => result.sourceId), ["valid-id"]);
+        let payload = await fixture.search.search({ query: "Shared needle" });
+        // savePlan's refresh marker can start another scan while search hydrates
+        // candidates. Assert the settled response, not a valid interim indexing state.
+        assertEquals(
+            await waitFor(async () => {
+                payload = await fixture.search.search({ query: "Shared needle" });
+                return payload.states[0]?.state === "ready";
+            }),
+            true,
+            `Search did not settle: ${JSON.stringify(payload.states)}`,
+        );
+        assertEquals(
+            payload.results.map((result) => result.sourceId),
+            ["valid-id"],
+        );
         assertEquals(payload.states[0].state, "ready");
         assertEquals(await fsReadFile(path, "utf8"), markdown);
     } finally {
