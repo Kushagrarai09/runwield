@@ -108,7 +108,16 @@ test("record_plan_deviation confirms and appends one Plan-owned entry", async ()
         assertEquals(after.attrs.planDeviations?.[0].supersededRequirement, "Replace the old navigation.");
         assertEquals(after.attrs.planDeviations?.[0].replacementRequirement, "Keep the existing navigation.");
         assertStringIncludes(after.markdown, "planDeviations:");
-        assertStringIncludes(fixture.requests[0].prompt, "Confirmed text will be saved in the Plan and Work Record");
+        assertEquals(
+            fixture.requests[0].prompt,
+            [
+                "Confirm this Plan Deviation before I treat it as authority.",
+                "Superseded requirement: Replace the old navigation.",
+                "Replacement requirement: Keep the existing navigation.",
+                "Reason: The user chose continuity during Pair Execution.",
+                "Confirmed text will be saved in the Plan and Work Record.",
+            ].join("\n\n"),
+        );
     });
 });
 
