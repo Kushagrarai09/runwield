@@ -21,7 +21,8 @@ async function readPrivateHeader(): Promise<string> {
 /** Run the bounded proof outside the supervisor so stalled resource reads cannot stop supervision. */
 export async function runRemoteModelProofEntry(): Promise<void> {
     if (
-        !isStandaloneExecutable() || process.argv.slice(2).length !== 1 ||
+        !isStandaloneExecutable() ||
+        process.argv.slice(2).length !== 1 ||
         process.argv.slice(2)[0] !== "--remote-model-proof"
     ) {
         throw new Error("Remote model proof requires its own compiled process");
@@ -30,7 +31,10 @@ export async function runRemoteModelProofEntry(): Promise<void> {
     const { runRemoteModelProof } = await import("./model-proof.ts");
     const abort = new AbortController();
     // EOF means the supervising process ended, even when it could not signal us.
-    void readStreamInto(process.stdin, new Uint8Array(1)).then(() => abort.abort(), () => abort.abort());
+    void readStreamInto(process.stdin, new Uint8Array(1)).then(
+        () => abort.abort(),
+        () => abort.abort(),
+    );
     await runRemoteModelProof({
         proof: input.proof,
         connection: input.connection,
@@ -52,15 +56,22 @@ export async function runRemotePreflight(): Promise<void> {
     if (!/^[a-f0-9]{64}$/.test(BUILD_ID) || !Number.isInteger(REMOTE_PROTOCOL_VERSION)) {
         throw new Error("Invalid remote build identity");
     }
-    console.log(JSON.stringify({ buildId: BUILD_ID, protocol: REMOTE_PROTOCOL_VERSION, version: VERSION }));
+    console.log(
+        JSON.stringify({
+            buildId: BUILD_ID,
+            protocol: REMOTE_PROTOCOL_VERSION,
+            version: VERSION,
+            runtime: process.versions.bun ? "bun" : "deno",
+            runtimeVersion: process.versions.bun || process.versions.deno,
+        }),
+    );
 }
 
 /** Read the complete view configuration before starting ProcessTerminal. */
 export async function runRemoteView(): Promise<void> {
     const header = await readPrivateHeader();
-    const { parseRemoteConnectionViewConfig, showRemoteConnectionView } = await import(
-        "../../ui/tui/remote-connection-view.ts"
-    );
+    const { parseRemoteConnectionViewConfig, showRemoteConnectionView } =
+        await import("../../ui/tui/remote-connection-view.ts");
     const config = parseRemoteConnectionViewConfig(header);
     const { initRunWieldTheme } = await import("../../ui/theme/theme.js");
     initRunWieldTheme(); // Embedded theme only; no settings lookup or profile initialization.

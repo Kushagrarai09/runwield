@@ -10,6 +10,7 @@
   "scripts/check-skill-sync.test.ts",
   "scripts/ci-files.test.ts",
   "scripts/ci-policy.test.ts",
+  "scripts/compile-bun.test.ts",
   "scripts/compile.test.js",
   "scripts/curate-router-judgement-csv.test.js",
   "scripts/docs-branch-integration.test.ts",

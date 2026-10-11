@@ -315,21 +315,19 @@ jobs:
                   ref: ${{ needs.metadata.outputs.tag }}
                   submodules: recursive
 
-            - name: Setup Deno
-              uses: denoland/setup-deno@v2
+            - name: Setup Bun
+              uses: oven-sh/setup-bun@v2
               with:
-                  deno-version: v2.9.7
+                  bun-version-file: .bun-version
 
-            - name: Restore Deno dependency cache
-              uses: actions/cache@v4
-              with:
-                  path: /tmp/runwield-deno-dir
-                  key: deno-tests-${{ runner.os }}-${{ hashFiles('deno.lock') }}
+            - name: Install frozen Bun dependencies
+              run: bun run install:locked
 
             - name: Run release binary smoke checks
               env:
                   WLD_BUILD_VERSION: ${{ needs.metadata.outputs.build_version }}
-              run: deno task release:check --binary-only --build-version "${{ needs.metadata.outputs.build_version }}"
+                  ASTRO_KEY: ${{ needs.metadata.outputs.astro_key }}
+              run: bun scripts/release-check.js --runtime bun --binary-only --build-version "${{ needs.metadata.outputs.build_version }}"
 
     build:
         if: needs.metadata.outputs.published != 'true'
@@ -342,18 +340,23 @@ jobs:
             matrix:
                 include:
                     - target: aarch64-apple-darwin
+                      bun_target: bun-darwin-arm64
                       asset_suffix: darwin-arm64
                       binary_name: wld
                     - target: x86_64-apple-darwin
+                      bun_target: bun-darwin-x64
                       asset_suffix: darwin-x64
                       binary_name: wld
                     - target: x86_64-unknown-linux-gnu
+                      bun_target: bun-linux-x64
                       asset_suffix: linux-x64
                       binary_name: wld
                     - target: aarch64-unknown-linux-gnu
+                      bun_target: bun-linux-arm64
                       asset_suffix: linux-arm64
                       binary_name: wld
                     - target: x86_64-pc-windows-msvc
+                      bun_target: bun-windows-x64
                       asset_suffix: windows-x64
                       binary_name: wld.exe
 
@@ -364,24 +367,19 @@ jobs:
                   ref: ${{ needs.metadata.outputs.tag }}
                   submodules: recursive
 
-            - name: Setup Deno
-              uses: denoland/setup-deno@v2
+            - name: Setup Bun
+              uses: oven-sh/setup-bun@v2
               with:
-                  deno-version: v2.9.7
+                  bun-version-file: .bun-version
 
-            - name: Generate version file
-              env:
-                  WLD_BUILD_VERSION: ${{ needs.metadata.outputs.build_version }}
-              run: deno run -A scripts/write-version.js
-
-            - name: Cache dependencies
-              run: deno cache scripts/compile.js src/cli.ts
+            - name: Install frozen Bun dependencies
+              run: bun run install:locked
 
             - name: Compile binary
               env:
                   WLD_BUILD_VERSION: ${{ needs.metadata.outputs.build_version }}
                   ASTRO_KEY: ${{ needs.metadata.outputs.astro_key }}
-              run: deno run -A scripts/compile.js --target "${{ matrix.target }}" --output "${{ matrix.binary_name }}"
+              run: bun run compile:bun "${{ matrix.binary_name }}" "${{ matrix.bun_target }}"
 
             - name: Smoke test native binary
               if: matrix.target == 'x86_64-unknown-linux-gnu'
@@ -389,11 +387,12 @@ jobs:
                   ./wld --version | tee version.txt
                   grep -F "runwield ${{ needs.metadata.outputs.build_version }} (" version.txt
                   ./wld --remote-preflight > preflight.json
-                  deno eval '
-                    const embedded = JSON.parse(await Deno.readTextFile("preflight.json"));
-                    const artifact = JSON.parse(await Deno.readTextFile("wld.build.json"));
+                  bun -e '
+                    const embedded = JSON.parse(await Bun.file("preflight.json").text());
+                    const artifact = JSON.parse(await Bun.file("wld.build.json").text());
                     if (embedded.buildId !== artifact.buildId || embedded.protocol !== artifact.protocol ||
-                        embedded.version !== artifact.version) {
+                        embedded.version !== artifact.version || embedded.runtime !== "bun" ||
+                        embedded.runtimeVersion !== process.versions.bun) {
                       throw new Error("Linux runtime embedded build/protocol/VERSION differs from release metadata");
                     }
                   '
@@ -412,7 +411,7 @@ jobs:
                   sha256sum "${ASSET_BASE}.tar.gz" > "${ASSET_BASE}.tar.gz.sha256"
                   sha256sum "${ASSET_BASE}.tar.zst" > "${ASSET_BASE}.tar.zst.sha256"
                   if [[ "${{ matrix.asset_suffix }}" == "windows-x64" ]]; then
-                    deno task package:windows --tag "$VERSION" --binary "${{ matrix.binary_name }}" --output .
+                    bun scripts/package-windows.js --tag "$VERSION" --binary "${{ matrix.binary_name }}" --output .
                   fi
 
             - name: Upload build artifact

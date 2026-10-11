@@ -227,7 +227,7 @@ async function collectMarkdownFiles(rootDir, relativeDir = "") {
     const currentDir = relativeDir ? join(rootDir, ...relativeDir.split("/")) : rootDir;
     for await (const entry of await fsReaddir(currentDir, { withFileTypes: true })) {
         const relativePath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
-        if (entry.isDirectory()) files.push(...await collectMarkdownFiles(rootDir, relativePath));
+        if (entry.isDirectory()) files.push(...(await collectMarkdownFiles(rootDir, relativePath)));
         else if (entry.isFile() && entry.name.endsWith(".md")) files.push(relativePath);
     }
     return files.sort();
@@ -286,9 +286,7 @@ export async function assertExtractedBundledAgentReferenceFiles(homeDir) {
             extracted = await fsReadFile(extractedPath, "utf8");
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            throw new Error(
-                `Release binary did not extract ${label} markdown file: ${extractedPath}. ${message}`,
-            );
+            throw new Error(`Release binary did not extract ${label} markdown file: ${extractedPath}. ${message}`);
         }
         if (extracted !== source) {
             throw new Error(`Release binary extracted stale ${label} markdown file: ${extractedPath}`);
@@ -510,16 +508,20 @@ export async function smokeTestBinaryReviewSurface(binaryPath, root) {
 
 /**
  * @param {string[]} args
- * @returns {{ buildVersion: string | undefined, includeGolden: boolean }}
+ * @returns {{ buildVersion: string | undefined, includeGolden: boolean, runtime?: "bun" | "deno" }}
  */
 export function parseReleaseCheckOptions(args = []) {
-    /** @type {{ buildVersion: string | undefined, includeGolden: boolean }} */
+    /** @type {{ buildVersion: string | undefined, includeGolden: boolean, runtime?: "bun" | "deno" }} */
     const options = { buildVersion: undefined, includeGolden: true };
     for (let index = 0; index < args.length; index += 1) {
         const arg = args[index];
         if (arg === "--build-version") options.buildVersion = args[++index];
         else if (arg === "--binary-only") options.includeGolden = false;
-        else throw new Error(`Unknown release check argument: ${arg}`);
+        else if (arg === "--runtime") {
+            const runtime = args[++index];
+            if (runtime !== "bun" && runtime !== "deno") throw new Error("--runtime requires bun or deno.");
+            options.runtime = runtime;
+        } else throw new Error(`Unknown release check argument: ${arg}`);
     }
     if (options.buildVersion !== undefined && !options.buildVersion) {
         throw new Error("--build-version requires a value.");
@@ -540,6 +542,17 @@ export function assertBinaryVersionOutput(output, expectedVersion) {
 }
 
 /**
+ * @param {string} output
+ * @param {string} expectedVersion
+ */
+export function assertBunRuntimeIdentity(output, expectedVersion) {
+    const identity = JSON.parse(output);
+    if (identity.runtime !== "bun" || identity.runtimeVersion !== expectedVersion) {
+        throw new Error(`Release binary must execute Bun ${expectedVersion}.`);
+    }
+}
+
+/**
  * @param {string} path
  * @returns {Promise<{ exists: boolean, content: string }>}
  */
@@ -547,7 +560,7 @@ async function snapshotFile(path) {
     try {
         return { exists: true, content: await fsReadFile(path, "utf8") };
     } catch (error) {
-        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) {
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") {
             return { exists: false, content: "" };
         }
         throw error;
@@ -573,6 +586,7 @@ async function restoreFile(path, snapshot) {
  * @property {string} [buildVersion]
  * @property {string} [rootDir]
  * @property {boolean} [includeGolden]
+ * @property {"bun" | "deno"} [runtime]
  */
 
 /**
@@ -611,26 +625,56 @@ export async function runReleaseCheck(options, port) {
     try {
         assertRequiredBundledAssetsConfigured();
         const compileEnv = options.buildVersion ? { WLD_BUILD_VERSION: options.buildVersion } : undefined;
-        await mustRun("Compile release binary", "deno", ["run", "-A", "scripts/compile.js", "--output", output], {
-            cwd: rootDir,
-            env: compileEnv,
-        }, runner);
+        const bunRuntime = options.runtime === "bun";
+        await mustRun(
+            "Compile release binary",
+            bunRuntime ? "bun" : "deno",
+            bunRuntime ? ["run", "compile:bun", output] : ["run", "-A", "scripts/compile.js", "--output", output],
+            {
+                cwd: rootDir,
+                env: compileEnv,
+            },
+            runner,
+        );
         await mustRun(
             "Smoke test Workspace code and Plan review routes",
-            "deno",
+            bunRuntime ? "bun" : "deno",
             [
                 "run",
-                "-A",
+                ...(bunRuntime ? [] : ["-A"]),
                 "scripts/assert-workspace-review-runtime.js",
+                ...(bunRuntime ? ["--bun"] : []),
             ],
             { cwd: rootDir },
             runner,
         );
-        const smoke = await mustRun("Smoke test release binary", output, ["--version"], {
-            stdout: "piped",
-            stderr: "piped",
-        }, runner);
+        const smoke = await mustRun(
+            "Smoke test release binary",
+            output,
+            ["--version"],
+            {
+                stdout: "piped",
+                stderr: "piped",
+            },
+            runner,
+        );
         if (options.buildVersion) assertBinaryVersionOutput(`${smoke.stdout}${smoke.stderr}`, options.buildVersion);
+        if (bunRuntime) {
+            const identity = await mustRun(
+                "Verify Bun runtime identity",
+                output,
+                ["--remote-preflight"],
+                {
+                    cwd: tempDir,
+                    stdout: "piped",
+                    stderr: "piped",
+                    env: { HOME: tempDir, USERPROFILE: tempDir },
+                },
+                runner,
+            );
+            const expectedRuntime = (await fsReadFile(join(rootDir, ".bun-version"), "utf8")).trim();
+            assertBunRuntimeIdentity(identity.stdout, expectedRuntime);
+        }
         const imageSmoke = await mustRun(
             "Smoke test packaged image resize",
             output,

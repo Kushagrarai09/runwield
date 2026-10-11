@@ -1,4 +1,4 @@
-/** Development Bun executable builder. Does not publish or replace release tooling. */
+/** Pinned Bun executable builder for development and release qualification. */
 import { spawnSync } from "node:child_process";
 import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -70,7 +70,7 @@ async function stagedPayloadIdentity(root: string): Promise<string> {
     const entries: string[] = [];
     async function visit(directory: string, prefix: string): Promise<void> {
         const children = await readdir(directory, { withFileTypes: true });
-        children.sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
+        children.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
         for (const child of children) {
             const name = prefix ? `${prefix}/${child.name}` : child.name;
             const path = join(directory, child.name);
@@ -83,11 +83,26 @@ async function stagedPayloadIdentity(root: string): Promise<string> {
     return entries.join("\n");
 }
 
+const ARTIFACT_TARGETS: Record<string, string> = {
+    "bun-darwin-arm64": "aarch64-apple-darwin",
+    "bun-darwin-x64": "x86_64-apple-darwin",
+    "bun-linux-arm64": "aarch64-unknown-linux-gnu",
+    "bun-linux-x64": "x86_64-unknown-linux-gnu",
+    "bun-windows-arm64": "aarch64-pc-windows-msvc",
+    "bun-windows-x64": "x86_64-pc-windows-msvc",
+};
+
+export function bunArtifactTarget(target: string): string {
+    const canonical = ARTIFACT_TARGETS[target];
+    if (!canonical) throw new Error(`Unsupported Bun target: ${target}`);
+    return canonical;
+}
+
 export async function compileBun(output: string, target?: string, runtime?: string): Promise<void> {
     requirePinnedBun();
-    if (target && !/^bun-(darwin|linux|windows)-(arm64|x64)$/.test(target)) {
-        throw new Error(`Unsupported migration target: ${target}`);
-    }
+    const compileTarget =
+        target || `bun-${process.platform === "win32" ? "windows" : process.platform}-${process.arch}`;
+    const artifactTarget = bunArtifactTarget(compileTarget);
     const bun: BunBuildRuntime = createRequire(import.meta.url)("bun");
     await mkdir(join(ROOT, ".ci-cache"), { recursive: true });
     const staging = await mkdtemp(join(ROOT, ".ci-cache", "bun-package-"));
@@ -116,32 +131,35 @@ export async function compileBun(output: string, target?: string, runtime?: stri
             await mkdir(dirname(join(staging, path)), { recursive: true });
             await cp(join(ROOT, path), join(staging, path), { recursive: true, errorOnExist: true, force: false });
         }
-        const plugins: BuildPlugin[] = [{
-            name: "runwield-bun-runtime-assets",
-            setup(api) {
-                api.onLoad({ filter: /[\\/]src[\\/]shared[\\/]photon-loader\.ts$/ }, () => ({
-                    contents:
-                        'import photon from "@silvia-odwyer/photon-node"; export function loadPhoton() { return photon; }',
-                    loader: "js",
-                }));
-                api.onLoad({ filter: /[\\/]src[\\/]shared[\\/]version\.js$/ }, () => ({
-                    contents: `export const VERSION = ${JSON.stringify(version)};`,
-                    loader: "js",
-                }));
-                api.onLoad({ filter: /[\\/]src[\\/]shared[\\/]build-identity\.js$/ }, () => ({
-                    contents: `export const BUILD_ID = ${
-                        JSON.stringify(buildId)
-                    }; export const REMOTE_PROTOCOL_VERSION = ${REMOTE_PROTOCOL_VERSION};`,
-                    loader: "js",
-                }));
-                api.onLoad({ filter: /photon_rs\.js$/ }, async ({ path }) => {
-                    const source = await readFile(path, "utf8");
-                    const original = "require('path').join(__dirname, 'photon_rs_bg.wasm')";
-                    if (!source.includes(original)) throw new Error("Photon loader changed; revisit WASM embedding");
-                    return { contents: source.replace(original, 'require("./photon_rs_bg.wasm")'), loader: "js" };
-                });
+        const plugins: BuildPlugin[] = [
+            {
+                name: "runwield-bun-runtime-assets",
+                setup(api) {
+                    api.onLoad({ filter: /[\\/]src[\\/]shared[\\/]photon-loader\.ts$/ }, () => ({
+                        contents:
+                            'import photon from "@silvia-odwyer/photon-node"; export function loadPhoton() { return photon; }',
+                        loader: "js",
+                    }));
+                    api.onLoad({ filter: /[\\/]src[\\/]shared[\\/]version\.js$/ }, () => ({
+                        contents: `export const VERSION = ${JSON.stringify(version)};`,
+                        loader: "js",
+                    }));
+                    api.onLoad({ filter: /[\\/]src[\\/]shared[\\/]build-identity\.js$/ }, () => ({
+                        contents: `export const BUILD_ID = ${JSON.stringify(
+                            buildId,
+                        )}; export const REMOTE_PROTOCOL_VERSION = ${REMOTE_PROTOCOL_VERSION};`,
+                        loader: "js",
+                    }));
+                    api.onLoad({ filter: /photon_rs\.js$/ }, async ({ path }) => {
+                        const source = await readFile(path, "utf8");
+                        const original = "require('path').join(__dirname, 'photon_rs_bg.wasm')";
+                        if (!source.includes(original))
+                            throw new Error("Photon loader changed; revisit WASM embedding");
+                        return { contents: source.replace(original, 'require("./photon_rs_bg.wasm")'), loader: "js" };
+                    });
+                },
             },
-        }];
+        ];
         const serverDir = join(staging, "dist/workspace-bun/server");
         await build({
             entrypoints: [join(ROOT, "dist/workspace-bun/server/entry.mjs")],
@@ -158,13 +176,18 @@ export async function compileBun(output: string, target?: string, runtime?: stri
         });
         // Runtime/compiler and Bun lock contribute to identity; output path and
         // architecture do not. This cannot masquerade as the current Deno build.
-        buildId = await computeBuildIdentity(ROOT, `bun:${versions.bun}`, [
-            "bun-compile-v1",
-            `lock:${await sha256File(join(ROOT, "bun.lock"))}`,
-            `package:${await sha256File(join(ROOT, "package.json"))}`,
-            `payload:${await stagedPayloadIdentity(staging)}`,
-            ...PASSIVE_PATHS,
-        ], false);
+        buildId = await computeBuildIdentity(
+            ROOT,
+            `bun:${versions.bun}`,
+            [
+                "bun-compile-v1",
+                `lock:${await sha256File(join(ROOT, "bun.lock"))}`,
+                `package:${await sha256File(join(ROOT, "package.json"))}`,
+                `payload:${await stagedPayloadIdentity(staging)}`,
+                ...PASSIVE_PATHS,
+            ],
+            false,
+        );
         // Bun directory assets retain their top directory name. Staging only
         // approved passive paths preserves src/ and dist/ without embedding tests.
         // https://bun.com/docs/bundler/executables#embed-directories
@@ -180,11 +203,7 @@ export async function compileBun(output: string, target?: string, runtime?: stri
                 outfile,
                 ...(target ? { target } : {}),
                 ...(runtime ? { executablePath: resolve(runtime) } : {}),
-                assets: [
-                    join(staging, "src"),
-                    join(staging, "brand"),
-                    join(staging, "dist"),
-                ],
+                assets: [join(staging, "src"), join(staging, "brand"), join(staging, "dist")],
                 autoloadDotenv: false,
                 autoloadBunfig: false,
                 autoloadTsconfig: false,
@@ -198,8 +217,7 @@ export async function compileBun(output: string, target?: string, runtime?: stri
                     schema: BUILD_METADATA_SCHEMA,
                     protocol: REMOTE_PROTOCOL_VERSION,
                     buildId,
-                    target: target ||
-                        `bun-${process.platform === "win32" ? "windows" : process.platform}-${process.arch}`,
+                    target: artifactTarget,
                     version,
                     sha256: await sha256File(outfile),
                 },
@@ -207,15 +225,15 @@ export async function compileBun(output: string, target?: string, runtime?: stri
                 2,
             ) + "\n",
         );
-        console.log(`Bun development executable: ${outfile}`);
+        console.log(`Bun executable: ${outfile}`);
     } finally {
         await rm(staging, { recursive: true, force: true });
     }
 }
 
 if (import.meta.main) {
-    const [output = process.platform === "win32" ? "bin/wld-bun.exe" : "bin/wld-bun", target, runtime, ...extra] = argv
-        .slice(2);
+    const [output = process.platform === "win32" ? "bin/wld-bun.exe" : "bin/wld-bun", target, runtime, ...extra] =
+        argv.slice(2);
     if (extra.length) {
         throw new Error(
             "Usage: compile-bun.ts [output] [bun-darwin-arm64|bun-linux-arm64|bun-darwin-x64|bun-linux-x64|bun-windows-arm64|bun-windows-x64] [cached-runtime]",

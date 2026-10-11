@@ -13,6 +13,7 @@ import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { join } from "@std/path";
 import {
     assertBinaryVersionOutput,
+    assertBunRuntimeIdentity,
     assertBinaryWorkspaceHtml,
     assertExtractedBundledAgentReferenceFiles,
     assertRequiredBundledAssetsConfigured,
@@ -447,4 +448,107 @@ test("assertReviewAssetsLoad fails when a dynamic review chunk is missing", asyn
     } finally {
         await server.shutdown();
     }
+});
+
+test("Bun release identity rejects Deno and an unexpected compiler version", () => {
+    assertBunRuntimeIdentity(JSON.stringify({ runtime: "bun", runtimeVersion: "1.4.3" }), "1.4.3");
+    for (const identity of [
+        { runtime: "deno", runtimeVersion: "2.9.7" },
+        { runtime: "bun", runtimeVersion: "1.3.12" },
+        { runtime: "bun" },
+    ])
+        assertThrows(() => assertBunRuntimeIdentity(JSON.stringify(identity), "1.4.3"));
+    assertThrows(() => parseReleaseCheckOptions(["--runtime", "node"]));
+    assertThrows(() => parseReleaseCheckOptions(["--runtime"]));
+    assertEquals(parseReleaseCheckOptions(["--runtime", "bun", "--binary-only"]), {
+        buildVersion: undefined,
+        includeGolden: false,
+        runtime: "bun",
+    });
+});
+
+test("Bun release gate compiles and checks the Bun runtime without invoking the Deno compiler", async () => {
+    await withTemporaryVersionProject(async (root) => {
+        await fsWriteFile(join(root, ".bun-version"), "1.4.3\n");
+        /** @type {Array<{ command: string, args: string[] }>} */
+        const calls = [];
+        /** @type {string[]} */
+        const surfaces = [];
+        await runReleaseCheck(
+            { rootDir: root, runtime: "bun", includeGolden: false, buildVersion: "v1.2.3-rc.1" },
+            {
+                makeTempDir: () => Promise.resolve("release-temp"),
+                remove: () => Promise.resolve(),
+                run(command, args) {
+                    calls.push({ command, args });
+                    const stdout =
+                        args[0] === "--remote-preflight"
+                            ? JSON.stringify({ runtime: "bun", runtimeVersion: "1.4.3" })
+                            : args[0] === "--version"
+                              ? "runwield v1.2.3-rc.1 (arm64-darwin)\n"
+                              : "";
+                    return Promise.resolve({ success: true, code: 0, stdout, stderr: "" });
+                },
+                smokeTestBundledAgentReferenceExtraction: () => {
+                    surfaces.push("references");
+                    return Promise.resolve();
+                },
+                smokeTestBinaryPlansUiSurface: () => {
+                    surfaces.push("plans");
+                    return Promise.resolve();
+                },
+                smokeTestBinaryReviewSurface: () => {
+                    surfaces.push("review");
+                    return Promise.resolve();
+                },
+            },
+        );
+        assertEquals(calls[0].command, "bun");
+        assertEquals(calls[0].args.slice(0, 2), ["run", "compile:bun"]);
+        assertEquals(calls[1], {
+            command: "bun",
+            args: ["run", "scripts/assert-workspace-review-runtime.js", "--bun"],
+        });
+        assertEquals(
+            calls.some((call) => call.command === "deno"),
+            false,
+        );
+        assertEquals(
+            calls.some((call) => call.args[0] === "--remote-preflight"),
+            true,
+        );
+        assertEquals(
+            calls.some((call) => call.args[0] === "package-smoke"),
+            true,
+        );
+        assertEquals(surfaces, ["references", "plans", "review"]);
+        for (const identity of [
+            { runtime: "deno", runtimeVersion: "2.9.7" },
+            { runtime: "bun", runtimeVersion: "1.3.12" },
+        ]) {
+            await assertRejects(
+                () =>
+                    runReleaseCheck(
+                        { rootDir: root, runtime: "bun", includeGolden: false },
+                        {
+                            makeTempDir: () => Promise.resolve("release-temp"),
+                            remove: () => Promise.resolve(),
+                            run(_command, args) {
+                                return Promise.resolve({
+                                    success: true,
+                                    code: 0,
+                                    stdout: args[0] === "--remote-preflight" ? JSON.stringify(identity) : "",
+                                    stderr: "",
+                                });
+                            },
+                            smokeTestBundledAgentReferenceExtraction: () => Promise.resolve(),
+                            smokeTestBinaryPlansUiSurface: () => Promise.resolve(),
+                            smokeTestBinaryReviewSurface: () => Promise.resolve(),
+                        },
+                    ),
+                Error,
+                "Release binary must execute Bun 1.4.3.",
+            );
+        }
+    });
 });

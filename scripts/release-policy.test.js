@@ -23,10 +23,7 @@ test("release prompt starts with the three release choices before policy discove
     assertStringIncludes(prompt, "empty release");
     assertStringIncludes(prompt, "When the repository policy says CI creates the host release");
     assertStringIncludes(prompt, "source selected by the repository's policy");
-    assertStringIncludes(
-        prompt.replace(/\s+/g, " "),
-        "Do not introduce branch rules that its policy does not define",
-    );
+    assertStringIncludes(prompt.replace(/\s+/g, " "), "Do not introduce branch rules that its policy does not define");
     assertEquals(prompt.includes("release/vX.Y.Z"), false);
     assertEquals(prompt.includes("tools:"), false);
 });
@@ -50,10 +47,7 @@ test("wld release policy distinguishes repository-specific policy from generic w
     assertStringIncludes(policy, "`release/vMAJOR.MINOR.PATCH` as its Release Branch");
     assertStringIncludes(policy, "Later Candidates resolve the live pushed Release Branch from `origin`");
     assertStringIncludes(policy, "Never merge `main` into an active Release Branch");
-    assertStringIncludes(
-        policy.replace(/\s+/g, " "),
-        "explicitly forward-port the fix to `main`",
-    );
+    assertStringIncludes(policy.replace(/\s+/g, " "), "explicitly forward-port the fix to `main`");
     assertStringIncludes(policy, "This fixed list does not grow automatically");
 });
 
@@ -158,7 +152,7 @@ test("release workflow runs source, Golden, and binary qualification in parallel
     const workflow = await fsReadFile(".github/workflows/release.yml", "utf8");
 
     assertStringIncludes(releaseCheck, '["task", "test:golden-tui:extensive"]');
-    assertStringIncludes(workflow, "deno task release:check --binary-only --build-version");
+    assertStringIncludes(workflow, "bun scripts/release-check.js --runtime bun --binary-only --build-version");
     assertStringIncludes(workflow, "deno task test:golden-tui:extensive --fail-fast --timings-file");
     assertMatch(workflow, /golden-shards:\n[\s\S]*?needs: metadata/);
     assertMatch(workflow, /release-check:\n[\s\S]*?needs: metadata/);
@@ -257,4 +251,19 @@ test("manual recovery preserves workflow source checks and tagged product qualif
     assertEquals(ci.includes("ref: ${{ needs.metadata.outputs.tag }}"), false);
     const golden = workflow.slice(workflow.indexOf("    golden-shards:"), workflow.indexOf("    release-check:"));
     assertStringIncludes(golden, "ref: ${{ needs.metadata.outputs.tag }}");
+});
+
+test("release executables use pinned Bun while native package and Stable channel gates remain", async () => {
+    const workflow = await fsReadFile(".github/workflows/release.yml", "utf8");
+    const build = workflow.slice(workflow.indexOf("    build:"), workflow.indexOf("    assets:"));
+    const binaryGate = workflow.slice(workflow.indexOf("    release-check:"), workflow.indexOf("    build:"));
+    assertStringIncludes(build, "bun-version-file: .bun-version");
+    assertStringIncludes(build, "bun run install:locked");
+    assertStringIncludes(build, 'bun run compile:bun "${{ matrix.binary_name }}" "${{ matrix.bun_target }}"');
+    assertEquals(build.includes("scripts/compile.js"), false);
+    assertStringIncludes(build, 'embedded.runtime !== "bun"');
+    assertStringIncludes(binaryGate, "scripts/release-check.js --runtime bun --binary-only");
+    for (const target of ["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64", "windows-x64"]) {
+        assertStringIncludes(build, `bun_target: bun-${target}`);
+    }
 });
