@@ -741,7 +741,10 @@ async function publishToLocalTarget(
                 if (changed.code === 0 && tracked.code === 0) continue;
                 savedAuthoritativePlans.set(relativePath, bytes);
                 if (tracked.code === 0) {
-                    await runGit(args.projectRoot, ["restore", "--worktree", "--source=HEAD", "--", relativePath]);
+                    // The staged-change guard above proves this index entry matches
+                    // HEAD. Restoring from the index also refreshes Git's stat cache;
+                    // an explicit HEAD checkout can leave CRLF files falsely dirty.
+                    await runGit(args.projectRoot, ["restore", "--worktree", "--", relativePath]);
                 } else {
                     await fsRm(path);
                 }

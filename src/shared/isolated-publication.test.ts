@@ -867,3 +867,60 @@ test("off-checkout local publication preserves primary Plan, context, and unrela
         await fsRm(worktreeRoot, { recursive: true });
     }
 });
+
+for (const staged of [false, true]) {
+    test(`local CRLF publication preserves staged Plan protection: staged=${staged}`, async () => {
+        const projectRoot = await makeRepo();
+        const worktreeRoot = await fsMkdtemp(join(tmpdir(), "local-crlf-publication-"));
+        let worktree: Awaited<ReturnType<typeof createTestWorktreeAttempt>> | undefined;
+        try {
+            await git(projectRoot, ["config", "core.autocrlf", "true"]);
+            const path = "docs/plans/crlf.md";
+            const baseline =
+                '---\nplanId: "crlf"\nclassification: "PLANNED_CHANGE"\nstatus: "ready_for_work"\ntargetBranch: "main"\n---\n# CRLF delivery\n';
+            await fsMkdir(join(projectRoot, "docs/plans"), { recursive: true });
+            await fsWriteFile(join(projectRoot, path), baseline);
+            await git(projectRoot, ["add", path]);
+            await git(projectRoot, ["commit", "-m", "Baseline Plan"]);
+            worktree = await createTestWorktreeAttempt({ projectRoot, planName: "crlf", worktreeRoot });
+            await fsWriteFile(join(worktree.path, path), baseline.replace("ready_for_work", "validated"));
+            await fsWriteFile(join(worktree.path, "delivered.txt"), "implementation\n");
+            await git(worktree.path, ["add", path, "delivered.txt"]);
+            await git(worktree.path, ["commit", "-m", "Seal CRLF delivery"]);
+            const primaryPlan = baseline.replace("ready_for_work", "reviewed");
+            await fsWriteFile(join(projectRoot, path), primaryPlan);
+            await fsWriteFile(join(projectRoot, "untracked-user-note.txt"), "preserve me\n");
+            if (staged) await git(projectRoot, ["add", path]);
+            const head = await git(projectRoot, ["rev-parse", "HEAD"]);
+            const index = await git(projectRoot, ["write-tree"]);
+            const args = {
+                projectRoot,
+                executionCwd: worktree.path,
+                executionBranch: worktree.branch,
+                targetBranch: "main",
+                planName: "crlf",
+                sealedExecutionCommit: await git(worktree.path, ["rev-parse", "HEAD"]),
+                allowedPlanPaths: [path],
+            };
+            if (staged) {
+                await assertRejects(() => publishExecutionWorktreeIsolated(args), Error, "staged change");
+                assertEquals(await git(projectRoot, ["rev-parse", "HEAD"]), head);
+                assertEquals(await git(projectRoot, ["write-tree"]), index);
+                assertEquals(await fsReadFile(join(projectRoot, path), "utf8"), primaryPlan);
+            } else {
+                const published = await publishExecutionWorktreeIsolated(args);
+                assertEquals(published.publicationMode, "local");
+                assertEquals(published.updatedPrimaryCheckout, true);
+                await git(projectRoot, ["merge-base", "--is-ancestor", args.sealedExecutionCommit, "main"]);
+                assertStringIncludes(await git(projectRoot, ["show", `HEAD:${path}`]), 'status: "verified"');
+                assertEquals(await git(projectRoot, ["show", "HEAD:delivered.txt"]), "implementation");
+                assertEquals(await git(projectRoot, ["status", "--porcelain", "--untracked-files=no"]), "");
+            }
+            assertEquals(await fsReadFile(join(projectRoot, "untracked-user-note.txt"), "utf8"), "preserve me\n");
+        } finally {
+            if (worktree) await removeWorktreeGitArtifacts({ projectRoot, path: worktree.path, force: true });
+            await fsRm(projectRoot, { recursive: true });
+            await fsRm(worktreeRoot, { recursive: true });
+        }
+    });
+}

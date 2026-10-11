@@ -1012,3 +1012,37 @@ doctor snapshot read while another operation holds the native Windows byte-range
 read/lock contention as insufficient evidence to repair that particular file and continues scanning. A real native-lock
 regression holds one live file throughout report and repair, verifies an unrelated abandoned lock is diagnosed and
 removed, and verifies the original ownership and exact bytes remain intact.
+
+
+## Full qualification and CRLF publication correction (2026-10-11)
+
+At `0be434672`, macOS Bun, macOS Deno and Linux ARM64 Bun each pass all 656 source files.
+Both macOS and Linux compiled relocation/provider/terminal checks pass. Explicit non-root
+Linux SSHFS/FUSE tests pass with a short temporary root below the Unix-socket path limit.
+Ordinary CI run `38115460336` passes. Native run `38115460377` completes with Windows x64
+653/656 and ARM64 652/656 source files; both architectures pass all 22 package qualification
+files plus compile, relocation, provider and terminal checks. Both native dense FILETIME
+probes pass, confirming the exact timestamp correction and preserved ownership controls.
+
+Remaining native failures yielded focused corrections. Executable fixtures use explicit
+bounded Windows cleanup retries. The continuation probe uses Git Bash `cygpath` for its
+actual cwd. The ARM64 reopened-review test allows bounded time for readiness persistence
+and managed Session checkpoint completion after HTTP 202, retaining exact completion,
+Plan status and zero-model-turn assertions and recording fresh failure state.
+
+The two local-publication Golden failures reproduce on macOS with `core.autocrlf=true`.
+Guard-time evidence shows an unchanged filtered working-file hash, index and HEAD, and
+empty working/staged diffs, while porcelain still reports the explicitly restored HEAD
+file as modified. A minimal real Git repository reproduces this. After the existing staged
+Plan guard proves index/HEAD equivalence, restoring from the index refreshes Git metadata
+correctly. The dirty-work guard remains unchanged. A new two-case regression fails before
+the fix and passes afterward, including unchanged HEAD/index/bytes for rejected staged
+edits and preservation of unrelated untracked files. Both Bun and Deno pass the focused
+publication file. All nine Bun publication Goldens also pass with CRLF enabled; only the
+two asserted delivery fixtures declare LF checkout bytes through `.gitattributes`, while
+Plan files retain CRLF conversion. The global CRLF diagnostic setting is not shipped.
+
+Independent Spec and Standards reviews approve each corrective source/test batch. Required
+types, lint and zero-seam checks pass. Native confirmation of the latest corrections remains
+pending; this remains a draft qualification branch, with Deno production and the WinGet pause
+unchanged. No release, main-branch merge or credential change is included.

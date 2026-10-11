@@ -376,7 +376,10 @@ test("Workspace opens and approves a saved Plan review after its owner is SIGKIL
                     assertEquals(answer.status, 202, await answer.clone().text());
                     phase = "wait for review completion";
                     let completed = false;
-                    for (let index = 0; index < 300; index++) {
+                    // Approval returns before readiness persistence and the managed
+                    // Session checkpoint finish, especially on native Windows ARM64.
+                    const completionDeadline = Date.now() + 15_000;
+                    while (Date.now() < completionDeadline) {
                         const operation = await (
                             await app.handler()(
                                 new Request(`http://127.0.0.1:8787/api/owner/session-operations/${operationId}`, {
@@ -391,6 +394,26 @@ test("Workspace opens and approves a saved Plan review after its owner is SIGKIL
                         }
                         if (operation.status === "failed") throw new Error(operation.error);
                         await new Promise((resolve) => setTimeout(resolve, 10));
+                    }
+                    if (!completed) {
+                        const live = await (
+                            await app.handler()(new Request(`${sessionBase}/live`, { headers: { cookie } }))
+                        ).json();
+                        latestLive = {
+                            state: live.state,
+                            status: live.operation?.status,
+                            interactionType: live.operation?.liveInteraction?.request?.type,
+                            hasReviewUrl: Boolean(live.operation?.liveInteraction?.request?.reviewUrl),
+                        };
+                        const currentActivation = store.inspectSessionActivation(persistentId);
+                        console.error(
+                            "[reopen-review-crash] completion state",
+                            JSON.stringify({
+                                activationState: currentActivation.activation?.state,
+                                generation: currentActivation.generation?.generation,
+                                planStatus: (await loadPlan(projectRoot, "target"))?.attrs.status,
+                            }),
+                        );
                     }
                     assert(completed, "Workspace review did not complete");
                     phase = "verify approved Plan";

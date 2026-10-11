@@ -249,7 +249,7 @@ test("verified Epic-child publication leaves the removed worktree before continu
                         fauxToolCall("bash", {
                             command:
                                 process.platform === "win32"
-                                    ? "pwd -W && git branch --show-current && cat published-marker.txt"
+                                    ? 'cygpath -m "$PWD" && git branch --show-current && cat published-marker.txt'
                                     : "pwd && git branch --show-current && cat published-marker.txt",
                         }),
                     ),
