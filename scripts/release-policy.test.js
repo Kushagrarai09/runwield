@@ -107,7 +107,7 @@ Deno.test("WinGet submission stays disabled while Stable manifest preparation re
         workflow,
         "ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || needs.metadata.outputs.tag }}",
     );
-    assertMatch(submitJob, /\n        if: \$\{\{ false \}\}\n/);
+    assertMatch(submitJob, /\n {8}if: \$\{\{ false \}\}\n/);
     const packageJob = workflow.slice(workflow.indexOf("    winget-package:"), submitStart);
     assertStringIncludes(packageJob, "needs.metadata.outputs.kind == 'stable'");
     assertStringIncludes(packageJob, "deno task package:winget");
