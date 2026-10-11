@@ -110,6 +110,19 @@ jobs:
               run: |
                   choco install zip unzip --yes --no-progress
                   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            - name: Prepare pinned native OpenSSH SFTP boundary
+              if: matrix.phase == 'source'
+              run: |
+                  $asset = if ('${{ matrix.arch }}' -eq 'arm64') { 'OpenSSH-ARM64' } else { 'OpenSSH-Win64' }
+                  $hash = if ('${{ matrix.arch }}' -eq 'arm64') { '698c6aec31c1dd0fb996206e8741f4531a97355686b5431ef347d531b07fcd42' } else { '23f50f3458c4c5d0b12217c6a5ddfde0137210a30fa870e98b29827f7b43aba5' }
+                  $zip = Join-Path $env:RUNNER_TEMP "$asset.zip"
+                  Invoke-WebRequest "https://github.com/PowerShell/Win32-OpenSSH/releases/download/10.0.0.0p2-Preview/$asset.zip" -OutFile $zip
+                  if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne $hash) { throw 'OpenSSH archive checksum mismatch' }
+                  $destination = Join-Path $env:RUNNER_TEMP 'sftp-boundary'
+                  Expand-Archive $zip -DestinationPath $destination
+                  $server = Get-ChildItem $destination -Filter sftp-server.exe -Recurse | Select-Object -First 1
+                  if (!$server) { throw 'Native sftp-server.exe absent from archive' }
+                  $server.DirectoryName >> $env:GITHUB_PATH
             - name: Setup Go for the real Snip subprocess tests
               if: matrix.phase == 'source'
               uses: actions/setup-go@v6

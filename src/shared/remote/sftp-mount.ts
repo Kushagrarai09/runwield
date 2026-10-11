@@ -1,6 +1,7 @@
 import { mkdtemp, rmdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { platform } from "node:process";
+import { env, platform } from "node:process";
+import { delimiter, posix } from "node:path";
 import type { Socket } from "node:net";
 import { Readable, Writable } from "node:stream";
 import { listenSocket, readStreamInto } from "../socket-listener.ts";
@@ -17,7 +18,7 @@ import {
     writeFile as fsWriteFile,
 } from "node:fs/promises";
 /* Connection-owned laptop SFTP transport and remote SSHFS mounts. No HOME substitution. */
-import { isAbsolute, join, relative } from "@std/path";
+import { join } from "@std/path";
 import { parse as parseJsonc } from "@std/jsonc";
 import { DefaultPackageManager, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { getCwd, getHomeDir } from "../../constants.js";
@@ -36,9 +37,13 @@ export async function installedLaptopPackageRoots(home: string): Promise<LaptopP
     });
     const parsed = parseJsonc(text);
     if (
-        !parsed || typeof parsed !== "object" || Array.isArray(parsed) ||
-        !("packages" in parsed) || !Array.isArray(parsed.packages)
-    ) return [];
+        !parsed ||
+        typeof parsed !== "object" ||
+        Array.isArray(parsed) ||
+        !("packages" in parsed) ||
+        !Array.isArray(parsed.packages)
+    )
+        return [];
     const manager = new DefaultPackageManager({
         cwd: getCwd(),
         agentDir: join(home, ".wld"),
@@ -46,11 +51,12 @@ export async function installedLaptopPackageRoots(home: string): Promise<LaptopP
     });
     const roots: LaptopPackageRoot[] = [];
     for (const entry of parsed.packages) {
-        const source = typeof entry === "string"
-            ? entry
-            : entry && typeof entry === "object" && !Array.isArray(entry) && "source" in entry
-            ? entry.source
-            : undefined;
+        const source =
+            typeof entry === "string"
+                ? entry
+                : entry && typeof entry === "object" && !Array.isArray(entry) && "source" in entry
+                  ? entry.source
+                  : undefined;
         if (typeof source !== "string" || !source) continue;
         const installed = manager.getInstalledPath(source, "user");
         if (!installed) continue;
@@ -61,11 +67,22 @@ export async function installedLaptopPackageRoots(home: string): Promise<LaptopP
 }
 
 function inside(path: string, root: string): boolean {
-    const rest = relative(root, path);
-    return rest === "" || (rest !== ".." && !rest.startsWith("../") && !isAbsolute(rest));
+    const rest = posix.relative(root, path);
+    return rest === "" || (rest !== ".." && !rest.startsWith("../") && !posix.isAbsolute(rest));
+}
+
+/** Win32 OpenSSH exposes absolute drive paths as /C:/Users/name over SFTP. */
+function sftpWirePath(path: string): string {
+    if (platform !== "win32") return path;
+    const normalized = path.replaceAll("\\", "/");
+    if (!/^[A-Za-z]:\//.test(normalized)) {
+        throw new Error("Windows laptop SFTP requires an absolute local drive path");
+    }
+    return `/${normalized}`;
 }
 
 export interface MountHeader {
+    /** Absolute SFTP server path, independent of the receiver operating system. */
     laptopHome: string;
     sftpPort: number;
     sftpSecret: string;
@@ -101,23 +118,39 @@ export async function startLaptopSftp(): Promise<SftpService> {
     if (!(await fsStat(source).catch(() => null))?.isDirectory()) {
         throw new Error("Laptop ~/.wld must exist before a remote mount can start");
     }
-    const paths = platform === "darwin" ? ["/usr/libexec/sftp-server"] : [
-        "/usr/lib/openssh/sftp-server",
-        "/usr/lib/ssh/sftp-server",
-        "/usr/libexec/sftp-server",
-        "/usr/libexec/openssh/sftp-server",
-    ];
+    const paths =
+        platform === "win32"
+            ? [
+                  ...(env.PATH || "")
+                      .split(delimiter)
+                      .filter(Boolean)
+                      .map((directory) => join(directory, "sftp-server.exe")),
+                  ...(env.ProgramFiles ? [join(env.ProgramFiles, "OpenSSH", "sftp-server.exe")] : []),
+                  ...(env.SystemRoot ? [join(env.SystemRoot, "System32", "OpenSSH", "sftp-server.exe")] : []),
+              ]
+            : platform === "darwin"
+              ? ["/usr/libexec/sftp-server"]
+              : [
+                    "/usr/lib/openssh/sftp-server",
+                    "/usr/lib/ssh/sftp-server",
+                    "/usr/libexec/sftp-server",
+                    "/usr/libexec/openssh/sftp-server",
+                ];
     let executable: string | undefined;
     for (const path of paths) {
         const file = await fsStat(path).catch(() => null);
-        if (file?.isFile() && file.mode !== null && (file.mode & 0o111)) {
+        if (file?.isFile() && (platform === "win32" || (file.mode !== null && file.mode & 0o111))) {
             executable = path;
             break;
         }
     }
     if (!executable) throw new Error("OpenSSH sftp-server is required on the laptop");
     const agents = (await fsStat(join(home, ".agents")).catch(() => null))?.isDirectory() ?? false;
-    const packages = await installedLaptopPackageRoots(home);
+    const laptopHome = sftpWirePath(home);
+    const packages = (await installedLaptopPackageRoots(home)).map((entry) => ({
+        source: entry.source,
+        laptopPath: sftpWirePath(entry.laptopPath),
+    }));
     const listener = await listenSocket({ host: "127.0.0.1", port: 0 });
     const secret = Array.from(crypto.getRandomValues(new Uint8Array(32)), (n) => n.toString(16).padStart(2, "0")).join(
         "",
@@ -127,8 +160,10 @@ export async function startLaptopSftp(): Promise<SftpService> {
     const stopServingChild = async (child: NativeProcess) => {
         try {
             child.kill("SIGKILL");
-        } catch { /* Already exited. */ }
-        if (!await settleWithin(child.status, 5_000)) {
+        } catch {
+            /* Already exited. */
+        }
+        if (!(await settleWithin(child.status, 5_000))) {
             throw new Error(`SFTP serving process termination unconfirmed: ${child.pid}`);
         }
     };
@@ -159,7 +194,9 @@ export async function startLaptopSftp(): Promise<SftpService> {
             });
             children.add(child);
             await Promise.all([
-                Readable.toWeb(conn).pipeTo(child.stdin).catch(() => undefined),
+                Readable.toWeb(conn)
+                    .pipeTo(child.stdin)
+                    .catch(() => undefined),
                 child.stdout.pipeTo(Writable.toWeb(conn)).catch(() => undefined),
             ]);
         } catch {
@@ -167,13 +204,15 @@ export async function startLaptopSftp(): Promise<SftpService> {
         } finally {
             try {
                 conn.destroy();
-            } catch { /* Already closed. */ }
+            } catch {
+                /* Already closed. */
+            }
             connections.delete(conn);
             if (child) {
                 const servingChild = child;
-                await stopServingChild(servingChild).then(() => children.delete(servingChild)).catch((error) =>
-                    console.error("SFTP serving cleanup failed:", error)
-                );
+                await stopServingChild(servingChild)
+                    .then(() => children.delete(servingChild))
+                    .catch((error) => console.error("SFTP serving cleanup failed:", error));
             }
         }
     };
@@ -188,7 +227,7 @@ export async function startLaptopSftp(): Promise<SftpService> {
     })();
     return {
         header: {
-            laptopHome: home,
+            laptopHome,
             sftpPort: listener.port,
             sftpSecret: secret,
             agents,
@@ -201,7 +240,9 @@ export async function startLaptopSftp(): Promise<SftpService> {
             for (const conn of connections) {
                 try {
                     conn.destroy();
-                } catch { /* Already closed. */ }
+                } catch {
+                    /* Already closed. */
+                }
             }
             await accept;
             const results = await Promise.allSettled([...children].map(stopServingChild));
@@ -213,16 +254,28 @@ export async function startLaptopSftp(): Promise<SftpService> {
 
 export function validateMountHeader(value: MountHeader): void {
     if (
-        !value || typeof value.laptopHome !== "string" || !value.laptopHome.startsWith("/") ||
-        value.laptopHome.includes("\0") || !Number.isInteger(value.sftpPort) ||
-        value.sftpPort < 1 || value.sftpPort > 65535 ||
-        !/^[a-f0-9]{64}$/.test(value.sftpSecret) || typeof value.agents !== "boolean" ||
-        (value.packages !== undefined && (!Array.isArray(value.packages) || value.packages.length > 128 ||
-            value.packages.some((entry) =>
-                !entry || typeof entry.source !== "string" || !entry.source ||
-                typeof entry.laptopPath !== "string" || !isAbsolute(entry.laptopPath) ||
-                entry.laptopPath.includes("\0") || entry.laptopPath === "/"
-            )))
+        !value ||
+        typeof value.laptopHome !== "string" ||
+        !value.laptopHome.startsWith("/") ||
+        value.laptopHome.includes("\0") ||
+        !Number.isInteger(value.sftpPort) ||
+        value.sftpPort < 1 ||
+        value.sftpPort > 65535 ||
+        !/^[a-f0-9]{64}$/.test(value.sftpSecret) ||
+        typeof value.agents !== "boolean" ||
+        (value.packages !== undefined &&
+            (!Array.isArray(value.packages) ||
+                value.packages.length > 128 ||
+                value.packages.some(
+                    (entry) =>
+                        !entry ||
+                        typeof entry.source !== "string" ||
+                        !entry.source ||
+                        typeof entry.laptopPath !== "string" ||
+                        !posix.isAbsolute(entry.laptopPath) ||
+                        entry.laptopPath.includes("\0") ||
+                        entry.laptopPath === "/",
+                )))
     ) {
         throw new Error("Invalid SFTP mount configuration");
     }
@@ -274,7 +327,10 @@ async function mountAt(path: string): Promise<MountRecord | undefined> {
     const text = await fsReadFile("/proc/self/mountinfo", "utf8");
     const field = path.replaceAll("\\", "\\134").replaceAll(" ", "\\040").replaceAll("\t", "\\011");
     // The last matching entry is the visible (top) mount if another mount was stacked here.
-    const line = text.split("\n").filter((entry) => entry.split(" ")[4] === field).at(-1);
+    const line = text
+        .split("\n")
+        .filter((entry) => entry.split(" ")[4] === field)
+        .at(-1);
     return line ? { id: line.split(" ")[0], type: line.split(" - ")[1]?.split(" ")[0] ?? "" } : undefined;
 }
 
@@ -299,7 +355,7 @@ export interface RemoteMount {
 export async function mountLaptopHome(home: string, config: MountHeader): Promise<RemoteMount> {
     validateMountHeader(config);
     if (platform !== "linux") throw new Error("Remote SSHFS mount requires Linux");
-    if (!home.startsWith("/") || home.includes("\0") || await fsRealpath(home) !== home) {
+    if (!home.startsWith("/") || home.includes("\0") || (await fsRealpath(home)) !== home) {
         throw new Error("Invalid remote home for SSHFS mount");
     }
     const homeStat = await fsLstat(home);
@@ -317,8 +373,8 @@ export async function mountLaptopHome(home: string, config: MountHeader): Promis
     await fsReadFile("/proc/self/mountinfo", "utf8").catch(() => {
         throw new Error("Remote mount requires /proc/self/mountinfo for safe cleanup");
     });
-    const globalLaptop = join(config.laptopHome, ".wld");
-    const agentsLaptop = join(config.laptopHome, ".agents");
+    const globalLaptop = posix.join(config.laptopHome, ".wld");
+    const agentsLaptop = posix.join(config.laptopHome, ".agents");
     const mounts = [
         { name: "global", laptop: globalLaptop },
         ...(config.agents ? [{ name: "agents", laptop: agentsLaptop }] : []),
@@ -327,9 +383,9 @@ export async function mountLaptopHome(home: string, config: MountHeader): Promis
     for (const entry of config.packages ?? []) {
         if (Object.hasOwn(packageRoots, entry.source)) throw new Error("Duplicate laptop package source");
         if (inside(entry.laptopPath, globalLaptop)) {
-            packageRoots[entry.source] = join("global", relative(globalLaptop, entry.laptopPath));
+            packageRoots[entry.source] = join("global", posix.relative(globalLaptop, entry.laptopPath));
         } else if (config.agents && inside(entry.laptopPath, agentsLaptop)) {
-            packageRoots[entry.source] = join("agents", relative(agentsLaptop, entry.laptopPath));
+            packageRoots[entry.source] = join("agents", posix.relative(agentsLaptop, entry.laptopPath));
         } else {
             const name = `package-${mounts.length}`;
             mounts.push({ name, laptop: entry.laptopPath });
@@ -393,9 +449,11 @@ export async function mountLaptopHome(home: string, config: MountHeader): Promis
                 uncertain = true;
                 try {
                     unmount.kill("SIGKILL");
-                } catch { /* Already exited. */ }
+                } catch {
+                    /* Already exited. */
+                }
                 // A stuck helper can remain in the kernel even after SIGKILL.
-                if (!await settleWithin(unmount.status, 1_000)) {
+                if (!(await settleWithin(unmount.status, 1_000))) {
                     throw new Error(`SSHFS unmount helper termination unconfirmed: ${path}`);
                 }
             }
@@ -413,8 +471,10 @@ export async function mountLaptopHome(home: string, config: MountHeader): Promis
                 stopped = true;
                 try {
                     child.kill("SIGKILL");
-                } catch { /* Already exited. */ }
-                if (!await settleWithin(child.status, 5_000)) {
+                } catch {
+                    /* Already exited. */
+                }
+                if (!(await settleWithin(child.status, 5_000))) {
                     uncertain = true;
                     throw new Error(`SSHFS process termination unconfirmed: ${path}`);
                 }
@@ -431,13 +491,13 @@ export async function mountLaptopHome(home: string, config: MountHeader): Promis
                 }
             };
             try {
-                if (!await attempt(false)) {
+                if (!(await attempt(false))) {
                     // Lazy detach removes the mount from this namespace, but cannot cancel
                     // pending kernel FUSE requests. Retain the sealed private directory.
                     uncertain = true;
-                    if (!await attempt(true)) {
+                    if (!(await attempt(true))) {
                         await stopChild();
-                        if (!await attempt(true)) throw new Error(`SSHFS detach not confirmed: ${path}`);
+                        if (!(await attempt(true))) throw new Error(`SSHFS detach not confirmed: ${path}`);
                     }
                 }
             } catch (error) {
@@ -531,7 +591,8 @@ export async function mountLaptopHome(home: string, config: MountHeader): Promis
                     }
                     if (current) throw new Error(`Unexpected filesystem at mountpoint: ${path}`);
                     if (await settleWithin(child.status, 100)) {
-                        const detail = (await new Response(child.stderr).text()).trim()
+                        const detail = (await new Response(child.stderr).text())
+                            .trim()
                             .replaceAll(config.sftpSecret, "[redacted]");
                         throw new Error(`SSHFS stopped before mounting ${entry.name}: ${detail}`);
                     }
@@ -553,7 +614,7 @@ export async function mountLaptopHome(home: string, config: MountHeader): Promis
             const probe = join(path, `.wld-mount-probe-${crypto.randomUUID()}`);
             try {
                 await boundedStorage(fsWriteFile(probe, "laptop-backed", { flag: "wx" }), entry.name);
-                if (await boundedStorage(fsReadFile(probe, "utf8"), entry.name) !== "laptop-backed") {
+                if ((await boundedStorage(fsReadFile(probe, "utf8"), entry.name)) !== "laptop-backed") {
                     throw new Error("SSHFS readback differs");
                 }
             } finally {
@@ -589,7 +650,10 @@ export async function mountLaptopHome(home: string, config: MountHeader): Promis
                     }
                 };
                 const result = await Promise.race([
-                    lookup().then(() => "healthy" as const, () => "failed" as const),
+                    lookup().then(
+                        () => "healthy" as const,
+                        () => "failed" as const,
+                    ),
                     new Promise<"timed out">((resolve) => {
                         deadline = setTimeout(() => resolve("timed out"), 30_000);
                     }),

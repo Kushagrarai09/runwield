@@ -843,3 +843,12 @@ Python and filesystem primitives, while Windows laptop SFTP discovery and transm
 spelling need native implementation and real file-access coverage. ADR-018's exclusion of Windows
 remote hosts does not exclude Windows laptops. A skipped Linux-host fixture cannot establish
 Windows laptop support, and no full-platform completion is claimed.
+
+Windows laptop SFTP now discovers native OpenSSH servers and advertises the server's canonical
+`/C:/...` drive paths, with explicit POSIX operations on the receiver. Local UNC roots fail
+explicitly pending qualification. CI extracts checksum-pinned x64/ARM64 OpenSSH binaries without
+installing a service or changing firewall rules. A new authenticated transport test reads actual
+Unicode-named file bytes at the advertised path; a wrong-path mutation fails that test. macOS
+Bun and Deno pass the transport file (seven active cases, two existing Linux kernel-mount cases
+skipped). Types and lint pass, and independent spec/standards review has no findings. Native
+Windows file access and the full source inventory remain pending.
