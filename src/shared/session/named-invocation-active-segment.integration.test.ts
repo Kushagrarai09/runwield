@@ -1,7 +1,8 @@
+import { writeRuntimeExecutableFixture } from "../../testing/runtime-executable-fixture.ts";
 import { delimiter } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { chmod as fsChmod, mkdir as fsMkdir, readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promises";
+import { mkdir as fsMkdir, readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promises";
 import { test } from "node:test";
 import { assert, assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { join } from "@std/path";
@@ -74,24 +75,28 @@ test("bundled release from Router exposes an interactive interview before releas
             setModelResponseFactories([
                 (context: TranscriptContext) => {
                     availableTools = getCurrentTools(context.messages).map((tool) => tool.name);
-                    return fauxAssistantMessage(fauxToolCall("user_interview", {
-                        question: {
-                            type: "multiple_choice",
-                            prompt: "What kind of release operation should I run?",
-                            choices: [
-                                { value: "create_candidate", label: "Create Candidate" },
-                                { value: "promote_candidate", label: "Promote Candidate" },
-                                { value: "create_stable_direct", label: "Create Stable Directly" },
-                            ],
-                        },
-                    }));
+                    return fauxAssistantMessage(
+                        fauxToolCall("user_interview", {
+                            question: {
+                                type: "multiple_choice",
+                                prompt: "What kind of release operation should I run?",
+                                choices: [
+                                    { value: "create_candidate", label: "Create Candidate" },
+                                    { value: "promote_candidate", label: "Promote Candidate" },
+                                    { value: "create_stable_direct", label: "Create Stable Directly" },
+                                ],
+                            },
+                        }),
+                    );
                 },
                 (context: TranscriptContext) => {
-                    canceledResult = context.messages.some((message) =>
-                        message.role === "toolResult" && message.toolName === "user_interview" &&
-                        message.content.some((content) =>
-                            content.type === "text" && content.text.includes("Interview canceled")
-                        )
+                    canceledResult = context.messages.some(
+                        (message) =>
+                            message.role === "toolResult" &&
+                            message.toolName === "user_interview" &&
+                            message.content.some(
+                                (content) => content.type === "text" && content.text.includes("Interview canceled"),
+                            ),
                     );
                     return fauxAssistantMessage(fauxText("Release canceled."));
                 },
@@ -106,21 +111,19 @@ test("bundled release from Router exposes an interactive interview before releas
                         return { outcome: "canceled" };
                     },
                 });
-                const result = await runtime.promptUserTurn(created.sessionId, {
+                const result = (await runtime.promptUserTurn(created.sessionId, {
                     initialRequest: "/release",
                     initialImages: [],
-                }) as NamedInvocationPromptResult;
+                })) as NamedInvocationPromptResult;
                 assertEquals(result.ok, true);
                 assertEquals(result.namedInvocation?.profile?.agentName, "engineer");
                 assert(availableTools.includes("user_interview"));
                 assertEquals(questions.length, 1);
                 assertEquals(questions[0].type, "select");
-                assertEquals(questions[0].options?.map((option) => option.value), [
-                    "create_candidate",
-                    "promote_candidate",
-                    "create_stable_direct",
-                    "other",
-                ]);
+                assertEquals(
+                    questions[0].options?.map((option) => option.value),
+                    ["create_candidate", "promote_candidate", "create_stable_direct", "other"],
+                );
                 assertEquals(canceledResult, true);
                 assertEquals(runtime.getSessionSnapshot(created.sessionId)?.activeAgent, "engineer");
             } finally {
@@ -132,19 +135,18 @@ test("bundled release from Router exposes an interactive interview before releas
 
 async function installClaudeCliFixture(binDir: string, logPath: string): Promise<void> {
     await fsMkdir(binDir, { recursive: true });
-    const fixturePath = fileURLToPath(new URL("./backends/claude-cli/testing/fake-claude-mcp-client.ts", import.meta.url));
-    const command = [process.execPath, "run", ...(process.versions.deno ? ["-A"] : []), fixturePath]
-        .map((argument) => `'${argument.replaceAll("'", "'\\''")}'`).join(" ");
-    const script = `#!/bin/sh\nexec ${command} "$@"\n`;
-    const path = join(binDir, "claude");
-    await fsWriteFile(path, script);
-    await fsChmod(path, 0o755);
+    const fixturePath = fileURLToPath(
+        new URL("./backends/claude-cli/testing/fake-claude-mcp-client.ts", import.meta.url),
+    );
+    await writeRuntimeExecutableFixture(join(binDir, "claude"), fixturePath);
     await fsWriteFile(logPath, "");
 }
 
 async function readNamedInvocationPayloads(transcriptPath: string): Promise<PersistedNamedInvocationPayload[]> {
     const text = await fsReadFile(transcriptPath, "utf8");
-    return text.trim().split("\n")
+    return text
+        .trim()
+        .split("\n")
         .filter(Boolean)
         .map((line) => JSON.parse(line) as PersistedTranscriptEntry)
         .filter((entry) => entry.type === "custom" && entry.customType === "runwield.named_invocation")
@@ -172,10 +174,12 @@ test("Prompt Template invocation sends active Segment history plus the exact exp
             const modelRequests: string[] = [];
             const recordToolRequest = (context: TranscriptContext) => {
                 modelRequests.push(JSON.stringify(context.messages));
-                return fauxAssistantMessage(fauxToolCall("write", {
-                    path: "tool-proof.txt",
-                    content: "ACTIVE-TOOL-EXCHANGE\n",
-                }));
+                return fauxAssistantMessage(
+                    fauxToolCall("write", {
+                        path: "tool-proof.txt",
+                        content: "ACTIVE-TOOL-EXCHANGE\n",
+                    }),
+                );
             };
             const recordTextRequest = (context: TranscriptContext) => {
                 modelRequests.push(JSON.stringify(context.messages));
@@ -223,30 +227,32 @@ test("Prompt Template invocation sends active Segment history plus the exact exp
                 });
                 assertEquals(second.ok, true);
                 await drainWorkflowMetrics();
-                const metrics = (await fsReadFile(getWorkflowMetricsFilePath(projectRoot), "utf8")).trim()
-                    .split("\n").map((line) => JSON.parse(line));
-                const invocation = metrics.filter((row) =>
-                    row.event === "command_started" && row.command === "use-active-fact"
+                const metrics = (await fsReadFile(getWorkflowMetricsFilePath(projectRoot), "utf8"))
+                    .trim()
+                    .split("\n")
+                    .map((line) => JSON.parse(line));
+                const invocation = metrics.filter(
+                    (row) => row.event === "command_started" && row.command === "use-active-fact",
                 );
                 assertEquals(invocation.length, 1);
                 assertEquals(
-                    metrics.filter((row) =>
-                        row.event === "command_finished" &&
-                        row.commandId === invocation[0].commandId
+                    metrics.filter(
+                        (row) => row.event === "command_finished" && row.commandId === invocation[0].commandId,
                     ).length,
                     1,
                 );
                 assertEquals(
-                    metrics.filter((row) =>
-                        row.event === "execution_started" &&
-                        row.commandId === invocation[0].commandId
+                    metrics.filter(
+                        (row) => row.event === "execution_started" && row.commandId === invocation[0].commandId,
                     ).length > 0,
                     true,
                 );
                 assertEquals(
-                    metrics.filter((row) =>
-                        row.event === "execution_started" &&
-                        row.commandId !== null && row.commandId !== invocation[0].commandId
+                    metrics.filter(
+                        (row) =>
+                            row.event === "execution_started" &&
+                            row.commandId !== null &&
+                            row.commandId !== invocation[0].commandId,
                     ).length,
                     0,
                 );
@@ -306,10 +312,12 @@ test("Prompt Template invocation sends active Segment history plus the exact exp
             const modelRequests: string[] = [];
             const recordToolRequest = (context: TranscriptContext) => {
                 modelRequests.push(JSON.stringify(context.messages));
-                return fauxAssistantMessage(fauxToolCall("write", {
-                    path: "claude-tool-proof.txt",
-                    content: "ACTIVE-CLI-TOOL-EXCHANGE\n",
-                }));
+                return fauxAssistantMessage(
+                    fauxToolCall("write", {
+                        path: "claude-tool-proof.txt",
+                        content: "ACTIVE-CLI-TOOL-EXCHANGE\n",
+                    }),
+                );
             };
             const recordTextRequest = (context: TranscriptContext) => {
                 modelRequests.push(JSON.stringify(context.messages));
@@ -352,9 +360,11 @@ test("Prompt Template invocation sends active Segment history plus the exact exp
                 assertEquals(active.ok, true);
                 runtime.subscribeSessionEvents(sessionId, (event) => {
                     if (
-                        event.type === "agent_changed" || event.type === "model_changed" ||
+                        event.type === "agent_changed" ||
+                        event.type === "model_changed" ||
                         event.type === "thinking_level_changed"
-                    ) events.push(event);
+                    )
+                        events.push(event);
                 });
 
                 const result: NamedInvocationPromptResult = await runtime.promptUserTurn(sessionId, {
@@ -385,9 +395,11 @@ test("Prompt Template invocation sends active Segment history plus the exact exp
                     "Claude CLI receives the expanded request, not the compact command",
                 );
                 assertEquals(
-                    events.some((event) =>
-                        event.type === "model_changed" && event.provider === "claude-cli" &&
-                        (event.model === "sonnet" || event.model === "claude-cli/sonnet")
+                    events.some(
+                        (event) =>
+                            event.type === "model_changed" &&
+                            event.provider === "claude-cli" &&
+                            (event.model === "sonnet" || event.model === "claude-cli/sonnet"),
                     ),
                     true,
                 );
@@ -413,110 +425,98 @@ test("Prompt Template invocation sends active Segment history plus the exact exp
 });
 
 test("Prompt Template invocation rejects unsupported Claude CLI thinking before process launch", async () => {
-    await withRuntimeCommandFixture(
-        "named-invocation-claude-cli-thinking-",
-        async ({ projectRoot, homeDir }) => {
-            const promptDir = join(projectRoot, ".wld", "prompts");
-            await fsMkdir(promptDir, { recursive: true });
-            await fsWriteFile(
-                join(promptDir, "claude-deep.md"),
-                [
-                    "---",
-                    "agent: operator",
-                    "model: claude-cli/sonnet",
-                    "thinkingLevel: high",
-                    "---",
-                    "Think deeply through Claude CLI about {{input}}",
-                    "",
-                ].join("\n"),
+    await withRuntimeCommandFixture("named-invocation-claude-cli-thinking-", async ({ projectRoot, homeDir }) => {
+        const promptDir = join(projectRoot, ".wld", "prompts");
+        await fsMkdir(promptDir, { recursive: true });
+        await fsWriteFile(
+            join(promptDir, "claude-deep.md"),
+            [
+                "---",
+                "agent: operator",
+                "model: claude-cli/sonnet",
+                "thinkingLevel: high",
+                "---",
+                "Think deeply through Claude CLI about {{input}}",
+                "",
+            ].join("\n"),
+        );
+        const binDir = join(homeDir, "claude-thinking-bin");
+        const logPath = join(homeDir, "claude-thinking-log.jsonl");
+        await installClaudeCliFixture(binDir, logPath);
+        const previousPath = process.env["PATH"];
+        const previousLog = process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"];
+        process.env["PATH"] = `${binDir}${delimiter}${previousPath || ""}`;
+        process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"] = logPath;
+
+        const store = openFileSessionStore();
+        const runtime = makeRuntime(store);
+        try {
+            const created = await runtime.createInteractiveSession({ cwd: projectRoot, mode: "new" });
+            const sessionId = created.sessionId;
+            await runtime.switchAgent(sessionId, { agentName: "engineer" });
+            const beforeSnapshot = runtime.getSessionSnapshot(sessionId);
+
+            await assertRejects(
+                () =>
+                    runtime.promptUserTurn(sessionId, {
+                        initialRequest: "/claude-deep this fixture",
+                        initialImages: [],
+                    }),
+                Error,
+                'does not support thinkingLevel "high" for RunWield named invocations',
             );
-            const binDir = join(homeDir, "claude-thinking-bin");
-            const logPath = join(homeDir, "claude-thinking-log.jsonl");
-            await installClaudeCliFixture(binDir, logPath);
-            const previousPath = process.env["PATH"];
-            const previousLog = process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"];
-            process.env["PATH"] = `${binDir}${delimiter}${previousPath || ""}`;
-            process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"] = logPath;
 
-            const store = openFileSessionStore();
-            const runtime = makeRuntime(store);
-            try {
-                const created = await runtime.createInteractiveSession({ cwd: projectRoot, mode: "new" });
-                const sessionId = created.sessionId;
-                await runtime.switchAgent(sessionId, { agentName: "engineer" });
-                const beforeSnapshot = runtime.getSessionSnapshot(sessionId);
-
-                await assertRejects(
-                    () =>
-                        runtime.promptUserTurn(sessionId, {
-                            initialRequest: "/claude-deep this fixture",
-                            initialImages: [],
-                        }),
-                    Error,
-                    'does not support thinkingLevel "high" for RunWield named invocations',
-                );
-
-                assertEquals(await fsReadFile(logPath, "utf8"), "");
-                assertEquals(runtime.getSessionSnapshot(sessionId)?.activeAgent, beforeSnapshot?.activeAgent);
-                assertEquals(runtime.getSessionSnapshot(sessionId)?.activeModel, beforeSnapshot?.activeModel);
-                assertEquals(
-                    runtime.getSessionSnapshot(sessionId)?.activeExecutionWorkflow,
-                    beforeSnapshot?.activeExecutionWorkflow,
-                );
-            } finally {
-                await runtime.closeAllSessionsWhenIdle?.();
-                store.close();
-                if (previousPath === undefined) delete process.env["PATH"];
-                else process.env["PATH"] = previousPath;
-                if (previousLog === undefined) delete process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"];
-                else process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"] = previousLog;
-            }
-        },
-    );
+            assertEquals(await fsReadFile(logPath, "utf8"), "");
+            assertEquals(runtime.getSessionSnapshot(sessionId)?.activeAgent, beforeSnapshot?.activeAgent);
+            assertEquals(runtime.getSessionSnapshot(sessionId)?.activeModel, beforeSnapshot?.activeModel);
+            assertEquals(
+                runtime.getSessionSnapshot(sessionId)?.activeExecutionWorkflow,
+                beforeSnapshot?.activeExecutionWorkflow,
+            );
+        } finally {
+            await runtime.closeAllSessionsWhenIdle?.();
+            store.close();
+            if (previousPath === undefined) delete process.env["PATH"];
+            else process.env["PATH"] = previousPath;
+            if (previousLog === undefined) delete process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"];
+            else process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"] = previousLog;
+        }
+    });
 });
 
 test("Prompt Template invocation uses ordinary Claude CLI handling for large requests", async () => {
-    await withRuntimeCommandFixture(
-        "named-invocation-claude-capacity-",
-        async ({ projectRoot, homeDir }) => {
-            const promptDir = join(projectRoot, ".wld", "prompts");
-            await fsMkdir(promptDir, { recursive: true });
-            await fsWriteFile(
-                join(promptDir, "too-large.md"),
-                [
-                    "---",
-                    "agent: operator",
-                    "model: claude-cli/sonnet",
-                    "---",
-                    "x ".repeat(900_000),
-                ].join("\n"),
-            );
-            const binDir = join(homeDir, "claude-capacity-bin");
-            const logPath = join(homeDir, "claude-capacity-log.jsonl");
-            await installClaudeCliFixture(binDir, logPath);
-            const previousPath = process.env["PATH"];
-            const previousLog = process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"];
-            process.env["PATH"] = `${binDir}${delimiter}${previousPath || ""}`;
-            process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"] = logPath;
-            const runtime = makeRuntime();
-            try {
-                const created = await runtime.createInteractiveSession({ cwd: projectRoot, mode: "new" });
-                const result = await runtime.promptUserTurn(created.sessionId, {
-                    initialRequest: "/too-large",
-                    initialImages: [],
-                });
-                assertEquals(result.ok, true);
-                const log = JSON.parse((await fsReadFile(logPath, "utf8")).trim().split("\n")[0]);
-                assertStringIncludes(log.stdin, "x ".repeat(100));
-            } finally {
-                await runtime.closeAllSessionsWhenIdle?.();
-                if (previousPath === undefined) delete process.env["PATH"];
-                else process.env["PATH"] = previousPath;
-                if (previousLog === undefined) delete process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"];
-                else process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"] = previousLog;
-            }
-        },
-    );
+    await withRuntimeCommandFixture("named-invocation-claude-capacity-", async ({ projectRoot, homeDir }) => {
+        const promptDir = join(projectRoot, ".wld", "prompts");
+        await fsMkdir(promptDir, { recursive: true });
+        await fsWriteFile(
+            join(promptDir, "too-large.md"),
+            ["---", "agent: operator", "model: claude-cli/sonnet", "---", "x ".repeat(900_000)].join("\n"),
+        );
+        const binDir = join(homeDir, "claude-capacity-bin");
+        const logPath = join(homeDir, "claude-capacity-log.jsonl");
+        await installClaudeCliFixture(binDir, logPath);
+        const previousPath = process.env["PATH"];
+        const previousLog = process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"];
+        process.env["PATH"] = `${binDir}${delimiter}${previousPath || ""}`;
+        process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"] = logPath;
+        const runtime = makeRuntime();
+        try {
+            const created = await runtime.createInteractiveSession({ cwd: projectRoot, mode: "new" });
+            const result = await runtime.promptUserTurn(created.sessionId, {
+                initialRequest: "/too-large",
+                initialImages: [],
+            });
+            assertEquals(result.ok, true);
+            const log = JSON.parse((await fsReadFile(logPath, "utf8")).trim().split("\n")[0]);
+            assertStringIncludes(log.stdin, "x ".repeat(100));
+        } finally {
+            await runtime.closeAllSessionsWhenIdle?.();
+            if (previousPath === undefined) delete process.env["PATH"];
+            else process.env["PATH"] = previousPath;
+            if (previousLog === undefined) delete process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"];
+            else process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"] = previousLog;
+        }
+    });
 });
 
 test("Prompt Template expansion survives a file-backed resume and follow-up", async () => {
@@ -593,7 +593,9 @@ test("Prompt Template expansion survives a file-backed resume and follow-up", as
                 assertStringIncludes(request, "Persisted expansion for {{input}}\\n\\nsaved work");
                 assertEquals(request.includes("/resume-template saved work"), false);
             }
-            const transcriptEntries = (await fsReadFile(transcriptPath, "utf8")).trim().split("\n")
+            const transcriptEntries = (await fsReadFile(transcriptPath, "utf8"))
+                .trim()
+                .split("\n")
                 .filter(Boolean)
                 .map((line) => JSON.parse(line) as PersistedTranscriptEntry);
             const edits = transcriptEntries.filter((entry) => entry.type === "context_edit");
@@ -642,14 +644,17 @@ test("Prompt Template invocation stores persisted image references", async () =>
                 assertStringIncludes(modelRequest, "Inspect the attached image.");
                 assertStringIncludes(modelRequest, imageData);
 
-                const transcriptEntries = (await fsReadFile(segment.transcriptPath, "utf8")).trim().split("\n")
+                const transcriptEntries = (await fsReadFile(segment.transcriptPath, "utf8"))
+                    .trim()
+                    .split("\n")
                     .filter(Boolean)
                     .map((line) => JSON.parse(line) as PersistedTranscriptEntry);
-                const metadata = transcriptEntries.find((entry) =>
-                    entry.type === "custom" && entry.customType === "runwield.named_invocation"
+                const metadata = transcriptEntries.find(
+                    (entry) => entry.type === "custom" && entry.customType === "runwield.named_invocation",
                 );
-                const userEntry = transcriptEntries.find((entry) =>
-                    entry.type === "message" && entry.parentId === metadata?.id && entry.message?.role === "user"
+                const userEntry = transcriptEntries.find(
+                    (entry) =>
+                        entry.type === "message" && entry.parentId === metadata?.id && entry.message?.role === "user",
                 );
                 assertEquals(userEntry?.message?.content?.[0], { type: "text", text: "/inspect-image" });
                 assertEquals(userEntry?.message?.content?.[1], {
@@ -657,8 +662,8 @@ test("Prompt Template invocation stores persisted image references", async () =>
                     data: imageData,
                     mimeType: "image/png",
                 });
-                const contextEdit = transcriptEntries.find((entry) =>
-                    entry.type === "context_edit" && entry.targetId === userEntry?.id
+                const contextEdit = transcriptEntries.find(
+                    (entry) => entry.type === "context_edit" && entry.targetId === userEntry?.id,
                 );
                 assertEquals(contextEdit?.replacement?.content?.[0], {
                     type: "text",

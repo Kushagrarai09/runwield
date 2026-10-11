@@ -1,3 +1,4 @@
+import { platform } from "node:process";
 import { captureForegroundProcess } from "../captured-process.ts";
 import { type Stats } from "node:fs";
 import { lstat as fsLstat, readFile as fsReadFile } from "node:fs/promises";
@@ -50,7 +51,9 @@ function isJsonMap(value: JsonValue): value is JsonMap {
 }
 
 function isOwnerOnlyMode(mode: number | null): boolean {
-    if (mode === null) return true;
+    // Windows node:fs exposes synthetic mode bits, unlike Deno's null mode.
+    // The POSIX permission gate cannot infer Windows ACL access from those bits.
+    if (platform === "win32" || mode === null) return true;
     return (mode & 0o077) === 0;
 }
 
@@ -69,7 +72,7 @@ async function safeFileInfo(path: string): Promise<Stats | null> {
         const info = await fsLstat(path);
         return info;
     } catch (error) {
-        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return null;
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
         throw error;
     }
 }

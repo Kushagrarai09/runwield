@@ -78,28 +78,30 @@ function fixture() {
             blockedReason: null,
         },
         generation: null,
-        segments: [{
-            segmentId: "segment",
-            runwieldSessionId: "session",
-            projectId: project.projectId,
-            piSessionId: "pi",
-            transcriptPath,
-            transcriptCwd: projectRoot,
-            ordinal: 0,
-            kind: "planning",
-            sealedAt: null,
-            headerVersion: 3,
-            headerTimestamp: timestamp,
-            firstCatalogedAt: timestamp,
-            lastCatalogedAt: timestamp,
-            lineageParentSegmentId: null,
-            lineageParentPiSessionId: null,
-            lineageGroupKey: null,
-            lineageRecordedAt: null,
-            sealedByteLength: null,
-            sealedDigestHex: null,
-            sealedTerminalEntryId: null,
-        }],
+        segments: [
+            {
+                segmentId: "segment",
+                runwieldSessionId: "session",
+                projectId: project.projectId,
+                piSessionId: "pi",
+                transcriptPath,
+                transcriptCwd: projectRoot,
+                ordinal: 0,
+                kind: "planning",
+                sealedAt: null,
+                headerVersion: 3,
+                headerTimestamp: timestamp,
+                firstCatalogedAt: timestamp,
+                lastCatalogedAt: timestamp,
+                lineageParentSegmentId: null,
+                lineageParentPiSessionId: null,
+                lineageGroupKey: null,
+                lineageRecordedAt: null,
+                sealedByteLength: null,
+                sealedDigestHex: null,
+                sealedTerminalEntryId: null,
+            },
+        ],
     };
     const path = manifestPath(sessionDir, "session");
     writeManifest(manifest, path);
@@ -137,7 +139,8 @@ registerCase("portable filesystem readers distinguish absence, invalid JSON and 
         equal(pathExists(missing), false);
         deepEqual(listProjectsFromDisk(missing), []);
         throws(() => readJson(missing), { code: "ENOENT" });
-        throws(() => pathExists(join(f.transcriptPath, "child")), { code: "ENOTDIR" });
+        if (platform === "win32") equal(pathExists(join(f.transcriptPath, "child")), false);
+        else throws(() => pathExists(join(f.transcriptPath, "child")), { code: "ENOTDIR" });
         throws(() => listProjectsFromDisk(f.transcriptPath), { code: "ENOTDIR" });
         writeFileSync(f.path, "broken json");
         throws(() => readJson(f.path), SyntaxError);
@@ -192,8 +195,9 @@ registerCase("recovery preserves damaged manifests and restores transcript-adjac
         const recovered = listManifests(f.sessionDir);
         equal(recovered.length, 1);
         equal(recovered[0].manifest.runwieldSessionId, "session");
-        const damaged = readdirSync(join(f.sessionDir, ".runwield", "session-bundles", "session"))
-            .find((name) => name.startsWith("manifest.json.damaged-"));
+        const damaged = readdirSync(join(f.sessionDir, ".runwield", "session-bundles", "session")).find((name) =>
+            name.startsWith("manifest.json.damaged-"),
+        );
         ok(damaged);
         equal(
             readFileSync(join(f.sessionDir, ".runwield", "session-bundles", "session", damaged), "utf8"),

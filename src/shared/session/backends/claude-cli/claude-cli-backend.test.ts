@@ -1,8 +1,8 @@
+import { writeRuntimeExecutableFixture } from "../../../../testing/runtime-executable-fixture.ts";
 import { delimiter } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
 import {
-    chmod as fsChmod,
     mkdir as fsMkdir,
     mkdtemp as fsMkdtemp,
     readFile as fsReadFile,
@@ -40,14 +40,7 @@ async function withTempDir(callback: (dir: string) => Promise<void>): Promise<vo
 async function installClaudeFixture(binDir: string, logPath: string): Promise<void> {
     await fsMkdir(binDir, { recursive: true });
     const fixturePath = fileURLToPath(new URL("./testing/fake-claude-mcp-client.ts", import.meta.url));
-    // The fixture lives in the workspace so its npm imports (the real MCP SDK
-    // client) resolve through the repository deno.json/node_modules.
-    const script = `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} run ${process.versions.deno ? "-A " : ""}${
-        JSON.stringify(fixturePath)
-    } "$@"\n`;
-    const path = join(binDir, "claude");
-    await fsWriteFile(path, script);
-    await fsChmod(path, 0o755);
+    await writeRuntimeExecutableFixture(join(binDir, "claude"), fixturePath);
     await fsWriteFile(logPath, "");
 }
 
@@ -167,10 +160,7 @@ test("Claude CLI command pre-authorizes project and workflow tools", async () =>
             assertEquals(allowedTools.includes("mcp__runwield__web_code_search"), true);
             assertEquals(allowedTools.includes("mcp__runwield__web_docs_search"), true);
             assertEquals(allowedTools.includes("EnterWorktree"), true);
-            assertEquals(
-                allowedTools.filter((tool) => tool === "runwield_triage_report").length,
-                1,
-            );
+            assertEquals(allowedTools.filter((tool) => tool === "runwield_triage_report").length, 1);
             assertEquals(allowedTools.includes("mcp__runwield__runwield_triage_report"), true);
         } finally {
             await removeClaudeCliPromptFile(command);
@@ -183,7 +173,7 @@ test("Claude CLI command writes an owner-only appended prompt file", async () =>
     try {
         assertEquals(await fsReadFile(command.promptFilePath, "utf8"), "private prompt");
         const mode = (await fsStat(command.promptFilePath)).mode;
-        if (mode !== null) assertEquals(mode & 0o777, 0o600);
+        if (process.platform !== "win32" && mode !== null) assertEquals(mode & 0o777, 0o600);
     } finally {
         await removeClaudeCliPromptFile(command);
     }
@@ -198,13 +188,15 @@ test("Claude CLI command prompt file cleanup removes the file", async () => {
 test("Claude CLI parser emits assistant text and ignores internal events", async () => {
     const deltas: string[] = [];
     const result = await parseClaudeCliStream(
-        streamFromText([
-            JSON.stringify({ type: "system", subtype: "init" }),
-            JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "hel" }] } }),
-            JSON.stringify({ type: "content_block_delta", delta: { type: "text_delta", text: "lo" } }),
-            JSON.stringify({ type: "tool_use", name: "Bash" }),
-            JSON.stringify({ type: "result", result: "hello", usage: { input_tokens: 3, output_tokens: 4 } }),
-        ].join("\n")),
+        streamFromText(
+            [
+                JSON.stringify({ type: "system", subtype: "init" }),
+                JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "hel" }] } }),
+                JSON.stringify({ type: "content_block_delta", delta: { type: "text_delta", text: "lo" } }),
+                JSON.stringify({ type: "tool_use", name: "Bash" }),
+                JSON.stringify({ type: "result", result: "hello", usage: { input_tokens: 3, output_tokens: 4 } }),
+            ].join("\n"),
+        ),
         { onDelta: (delta) => deltas.push(delta.text) },
     );
     assertEquals(deltas, ["hel", "lo"]);
@@ -248,10 +240,12 @@ test("Claude CLI parser preserves a structured error result", async () => {
 test("Claude CLI parser preserves plain stdout diagnostics as assistant text", async () => {
     const deltas: string[] = [];
     const result = await parseClaudeCliStream(
-        streamFromText([
-            JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "visible reply" }] } }),
-            "I'm requesting permission to call runwield_plan_written.",
-        ].join("\n")),
+        streamFromText(
+            [
+                JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "visible reply" }] } }),
+                "I'm requesting permission to call runwield_plan_written.",
+            ].join("\n"),
+        ),
         { onDelta: (delta) => deltas.push(delta.text) },
     );
     assertEquals(deltas, ["visible reply", "I'm requesting permission to call runwield_plan_written."]);
@@ -261,13 +255,10 @@ test("Claude CLI parser preserves plain stdout diagnostics as assistant text", a
 
 test("Claude CLI parser preserves line breaks in plain assistant stdout", async () => {
     const deltas: string[] = [];
-    const result = await parseClaudeCliStream(
-        streamFromText("First line\nSecond line\nThird line"),
-        {
-            onDelta: (delta) => deltas.push(delta.text),
-            isTerminalAccepted: () => true,
-        },
-    );
+    const result = await parseClaudeCliStream(streamFromText("First line\nSecond line\nThird line"), {
+        onDelta: (delta) => deltas.push(delta.text),
+        isTerminalAccepted: () => true,
+    });
     assertEquals(deltas, ["First line", "\nSecond line", "\nThird line"]);
     assertEquals(result.text, "First line\nSecond line\nThird line");
 });
@@ -275,23 +266,30 @@ test("Claude CLI parser preserves line breaks in plain assistant stdout", async 
 test("Claude CLI parser separates streamed assistant updates across tool calls", async () => {
     const deltas: string[] = [];
     const result = await parseClaudeCliStream(
-        streamFromText([
-            JSON.stringify({
-                type: "stream_event",
-                event: { type: "content_block_delta", delta: { type: "text_delta", text: "Checking." } },
-            }),
-            JSON.stringify({
-                type: "assistant",
-                message: { content: [{ type: "text", text: "Checking." }, { type: "tool_use", name: "Bash" }] },
-            }),
-            JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", content: "ok" }] } }),
-            JSON.stringify({
-                type: "stream_event",
-                event: { type: "content_block_delta", delta: { type: "text_delta", text: "Next step." } },
-            }),
-            JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Next step." }] } }),
-            JSON.stringify({ type: "result", result: "Next step." }),
-        ].join("\n")),
+        streamFromText(
+            [
+                JSON.stringify({
+                    type: "stream_event",
+                    event: { type: "content_block_delta", delta: { type: "text_delta", text: "Checking." } },
+                }),
+                JSON.stringify({
+                    type: "assistant",
+                    message: {
+                        content: [
+                            { type: "text", text: "Checking." },
+                            { type: "tool_use", name: "Bash" },
+                        ],
+                    },
+                }),
+                JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", content: "ok" }] } }),
+                JSON.stringify({
+                    type: "stream_event",
+                    event: { type: "content_block_delta", delta: { type: "text_delta", text: "Next step." } },
+                }),
+                JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Next step." }] } }),
+                JSON.stringify({ type: "result", result: "Next step." }),
+            ].join("\n"),
+        ),
         { onDelta: (delta) => deltas.push(delta.text) },
     );
     assertEquals(deltas.join(""), "Checking.\nNext step.");
@@ -300,11 +298,17 @@ test("Claude CLI parser separates streamed assistant updates across tool calls",
 
 test("Claude CLI parser keeps plain diagnostics around a matching final result", async () => {
     const result = await parseClaudeCliStream(
-        streamFromText([
-            JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "visible reply" }] } }),
-            "The routing call needs your approval.",
-            JSON.stringify({ type: "result", result: "visible reply", usage: { input_tokens: 1, output_tokens: 2 } }),
-        ].join("\n")),
+        streamFromText(
+            [
+                JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "visible reply" }] } }),
+                "The routing call needs your approval.",
+                JSON.stringify({
+                    type: "result",
+                    result: "visible reply",
+                    usage: { input_tokens: 1, output_tokens: 2 },
+                }),
+            ].join("\n"),
+        ),
         { onDelta: () => undefined },
     );
     assertEquals(result.text, "visible replyThe routing call needs your approval.");
@@ -316,40 +320,46 @@ test("Claude CLI parser streams thinking and text deltas live without duplicatin
     const thinkingDeltas: string[] = [];
     let thinkingEndCalls = 0;
     const result = await parseClaudeCliStream(
-        streamFromText([
-            JSON.stringify({
-                type: "stream_event",
-                event: { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "" } },
-            }),
-            JSON.stringify({
-                type: "stream_event",
-                event: {
-                    type: "content_block_delta",
-                    index: 0,
-                    delta: { type: "thinking_delta", thinking: "Let me " },
-                },
-            }),
-            JSON.stringify({
-                type: "stream_event",
-                event: { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "check." } },
-            }),
-            JSON.stringify({ type: "stream_event", event: { type: "content_block_stop", index: 0 } }),
-            JSON.stringify({
-                type: "stream_event",
-                event: { type: "content_block_start", index: 1, content_block: { type: "text", text: "" } },
-            }),
-            JSON.stringify({
-                type: "stream_event",
-                event: { type: "content_block_delta", index: 1, delta: { type: "text_delta", text: "hel" } },
-            }),
-            JSON.stringify({
-                type: "stream_event",
-                event: { type: "content_block_delta", index: 1, delta: { type: "text_delta", text: "lo" } },
-            }),
-            JSON.stringify({ type: "stream_event", event: { type: "content_block_stop", index: 1 } }),
-            JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "hello" }] } }),
-            JSON.stringify({ type: "result", result: "hello", usage: { input_tokens: 1, output_tokens: 2 } }),
-        ].join("\n")),
+        streamFromText(
+            [
+                JSON.stringify({
+                    type: "stream_event",
+                    event: { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "" } },
+                }),
+                JSON.stringify({
+                    type: "stream_event",
+                    event: {
+                        type: "content_block_delta",
+                        index: 0,
+                        delta: { type: "thinking_delta", thinking: "Let me " },
+                    },
+                }),
+                JSON.stringify({
+                    type: "stream_event",
+                    event: {
+                        type: "content_block_delta",
+                        index: 0,
+                        delta: { type: "thinking_delta", thinking: "check." },
+                    },
+                }),
+                JSON.stringify({ type: "stream_event", event: { type: "content_block_stop", index: 0 } }),
+                JSON.stringify({
+                    type: "stream_event",
+                    event: { type: "content_block_start", index: 1, content_block: { type: "text", text: "" } },
+                }),
+                JSON.stringify({
+                    type: "stream_event",
+                    event: { type: "content_block_delta", index: 1, delta: { type: "text_delta", text: "hel" } },
+                }),
+                JSON.stringify({
+                    type: "stream_event",
+                    event: { type: "content_block_delta", index: 1, delta: { type: "text_delta", text: "lo" } },
+                }),
+                JSON.stringify({ type: "stream_event", event: { type: "content_block_stop", index: 1 } }),
+                JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "hello" }] } }),
+                JSON.stringify({ type: "result", result: "hello", usage: { input_tokens: 1, output_tokens: 2 } }),
+            ].join("\n"),
+        ),
         {
             onDelta: (delta) => textDeltas.push(delta.text),
             onThinkingDelta: (delta) => thinkingDeltas.push(delta.text),
@@ -377,9 +387,9 @@ test("Claude CLI parser rejects final text that differs from visible stream", as
         () =>
             parseClaudeCliStream(
                 streamFromText(
-                    `${JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "a" }] } })}\n${
-                        JSON.stringify({ type: "result", result: "b" })
-                    }\n`,
+                    `${JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "a" }] } })}\n${JSON.stringify(
+                        { type: "result", result: "b" },
+                    )}\n`,
                 ),
                 { onDelta: () => undefined },
             ),
@@ -419,15 +429,19 @@ test("Claude CLI execution session appends RunWield transcript entries and sends
             entries.some((entry) => entry.type === "custom" && entry.customType === "runwield.execution_backend"),
             true,
         );
-        assertEquals(entries.some((entry) => entry.type === "model_change"), true);
+        assertEquals(
+            entries.some((entry) => entry.type === "model_change"),
+            true,
+        );
     });
 });
 
 test("captured Claude Code 2.1.284 Read stream reaches the execution owner's JSONL", async () => {
     await withClaudeFixture(async (root) => {
         await setCustomSetting("workflowMetrics", true, "project", root);
-        process.env["RUNWIELD_CLAUDE_FIXTURE_STREAM_FILE"] =
-            fileURLToPath(new URL("./fixtures/claude-2.1.284-read-tool-stream.jsonl", import.meta.url));
+        process.env["RUNWIELD_CLAUDE_FIXTURE_STREAM_FILE"] = fileURLToPath(
+            new URL("./fixtures/claude-2.1.284-read-tool-stream.jsonl", import.meta.url),
+        );
         const model = getModelRegistry().find("claude-cli", "sonnet");
         if (!model) throw new Error("missing claude model");
         const manager = SessionManager.inMemory(root);
@@ -441,17 +455,19 @@ test("captured Claude Code 2.1.284 Read stream reaches the execution owner's JSO
         });
         await session.runTurn({ userRequest: "Read the disposable file." });
         await drainWorkflowMetrics();
-        const rows = (await fsReadFile(getWorkflowMetricsFilePath(root), "utf8")).trim().split("\n")
+        const rows = (await fsReadFile(getWorkflowMetricsFilePath(root), "utf8"))
+            .trim()
+            .split("\n")
             .map((line) => JSON.parse(line));
         const native = rows.filter((row) => row.callId === "call_fixture_1");
-        assertEquals(native.map((row) => row.event), ["tool_call_started", "tool_call_finished"]);
+        assertEquals(
+            native.map((row) => row.event),
+            ["tool_call_started", "tool_call_finished"],
+        );
         assertEquals(native[0].toolName, "Read");
         assertEquals(native[1].outcome, "success");
         assertEquals(
-            rows.some((row) =>
-                row.event === "model_usage" && row.inputTokens === 4 &&
-                row.outputTokens === 507
-            ),
+            rows.some((row) => row.event === "model_usage" && row.inputTokens === 4 && row.outputTokens === 507),
             true,
         );
         const latency = rows.find((row) => row.event === "response_latency");
@@ -490,7 +506,9 @@ test("truncated Claude stream preserves observed assistant usage on failure", as
         });
         await assertRejects(() => session.runTurn({ userRequest: "truncated" }));
         await drainWorkflowMetrics();
-        const rows = (await fsReadFile(getWorkflowMetricsFilePath(root), "utf8")).trim().split("\n")
+        const rows = (await fsReadFile(getWorkflowMetricsFilePath(root), "utf8"))
+            .trim()
+            .split("\n")
             .map((line) => JSON.parse(line));
         assertEquals(rows.find((row) => row.event === "execution_finished")?.outcome, "failed");
         assertEquals(rows.find((row) => row.event === "model_usage")?.inputTokens, 22);
@@ -516,7 +534,7 @@ test("Claude CLI execution session streams thinking and text runtime events live
         });
         const events: Array<{ type?: string; delta?: string; messageId?: string; agentName?: string }> = [];
         hostedSession.setEventSink((event: { type?: string; delta?: string; messageId?: string }) =>
-            events.push(event)
+            events.push(event),
         );
         const session = new ClaudeCliExecutionSession({
             cwd: root,
@@ -597,9 +615,7 @@ test("^Claude CLI MCP config is additive authenticated and ephemeral$", async ()
         const callsPath = join(root, "mcp-calls.json");
         await fsWriteFile(
             callsPath,
-            JSON.stringify([
-                { name: "runwield_task_completed", arguments: { message: "mcp accepted" } },
-            ]),
+            JSON.stringify([{ name: "runwield_task_completed", arguments: { message: "mcp accepted" } }]),
         );
         process.env["RUNWIELD_CLAUDE_FIXTURE_MCP_CALLS"] = callsPath;
         const session = new ClaudeCliExecutionSession({
@@ -614,14 +630,22 @@ test("^Claude CLI MCP config is additive authenticated and ephemeral$", async ()
         });
         const messages = await session.runTurn({ userRequest: "execute" });
         await drainWorkflowMetrics();
-        const metricRows = (await fsReadFile(getWorkflowMetricsFilePath(root), "utf8")).trim().split("\n")
+        const metricRows = (await fsReadFile(getWorkflowMetricsFilePath(root), "utf8"))
+            .trim()
+            .split("\n")
             .map((line) => JSON.parse(line));
         const bridgeCalls = metricRows.filter((row) => ["tool_call_started", "tool_call_finished"].includes(row.event));
-        assertEquals(bridgeCalls.map((row) => row.event), ["tool_call_started", "tool_call_finished"]);
+        assertEquals(
+            bridgeCalls.map((row) => row.event),
+            ["tool_call_started", "tool_call_finished"],
+        );
         assertEquals(bridgeCalls[0].callId, bridgeCalls[1].callId);
         assertEquals(bridgeCalls[1].outcome, "success");
 
-        const lines = (await fsReadFile(logPath, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+        const lines = (await fsReadFile(logPath, "utf8"))
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line));
         const argvLine = lines[0];
         assertEquals(argvLine.args.includes("--mcp-config"), true);
         assertEquals(argvLine.args.includes("--strict-mcp-config"), false);
@@ -630,7 +654,7 @@ test("^Claude CLI MCP config is additive authenticated and ephemeral$", async ()
         const configLine = lines.find((line) => line.mcp?.config);
         assertEquals(configLine.mcp.config.url.startsWith("http://127.0.0.1:"), true);
         assertEquals(configLine.mcp.config.authHeaderPresent, true);
-        if (configLine.mcp.config.configMode !== null) {
+        if (process.platform !== "win32" && configLine.mcp.config.configMode !== null) {
             assertEquals(configLine.mcp.config.configMode & 0o777, 0o600);
         }
         const authLine = lines.find((line) => line.mcp?.unauthorizedStatus !== undefined);
@@ -693,10 +717,14 @@ test("^Claude CLI missing executable fails before workflow mutation$", async () 
                 assertEquals(manager.getBranch().filter((entry) => entry.type === "message").length, 0);
                 assertEquals(hostedSession.getActiveExecutionWorkflow()?.planName, "plan");
                 assertEquals(
-                    manager.getBranch().some((entry) =>
-                        entry.type === "custom" && entry.customType === "runwield.backend_status" &&
-                        (entry as { data?: { kind?: string } }).data?.kind === "missing_executable"
-                    ),
+                    manager
+                        .getBranch()
+                        .some(
+                            (entry) =>
+                                entry.type === "custom" &&
+                                entry.customType === "runwield.backend_status" &&
+                                (entry as { data?: { kind?: string } }).data?.kind === "missing_executable",
+                        ),
                     true,
                 );
             } finally {
@@ -736,16 +764,21 @@ test("^Claude CLI auth failure is a sanitized visible non-zero exit$", async () 
         assertStringIncludes(error.message, "Claude Code authentication failed");
         assertEquals(error.message.includes("secret-token"), false);
         assertEquals(error.message.includes("https://secret.example"), false);
-        const statusEntries = manager.getBranch().filter((entry) =>
-            entry.type === "custom" && entry.customType === "runwield.backend_status"
-        ) as Array<{ data?: { kind?: string; message?: string; exitCode?: number | null } }>;
+        const statusEntries = manager
+            .getBranch()
+            .filter((entry) => entry.type === "custom" && entry.customType === "runwield.backend_status") as Array<{
+            data?: { kind?: string; message?: string; exitCode?: number | null };
+        }>;
         assertEquals(statusEntries.length, 1);
         assertEquals(statusEntries[0].data?.kind, "auth_failed");
         assertEquals(statusEntries[0].data?.exitCode, 1);
         const serialized = JSON.stringify(manager.getBranch());
         assertEquals(serialized.includes("secret-token"), false);
         assertEquals(serialized.includes("Authorization"), false);
-        assertEquals(events.some((event) => event.type === "system_status" && event.level === "error"), true);
+        assertEquals(
+            events.some((event) => event.type === "system_status" && event.level === "error"),
+            true,
+        );
     });
 });
 
@@ -777,9 +810,11 @@ test("^Claude CLI structured limit failure shows Claude's message$", async () =>
 
         assertEquals(error.kind, "non_zero_exit");
         assertEquals(error.message, limitMessage);
-        const statusEntries = manager.getBranch().filter((entry) =>
-            entry.type === "custom" && entry.customType === "runwield.backend_status"
-        ) as Array<{ data?: { message?: string } }>;
+        const statusEntries = manager
+            .getBranch()
+            .filter((entry) => entry.type === "custom" && entry.customType === "runwield.backend_status") as Array<{
+            data?: { message?: string };
+        }>;
         assertEquals(statusEntries.length, 1);
         assertEquals(statusEntries[0].data?.message, limitMessage);
         assertEquals(
@@ -822,9 +857,11 @@ test("^Claude CLI malformed stream is a typed failure with cleanup$", async () =
         assertEquals(error.kind, "malformed_stream");
         const entries = manager.getBranch();
         assertEquals(
-            entries.some((entry) =>
-                entry.type === "custom" && entry.customType === "runwield.backend_status" &&
-                (entry as { data?: { kind?: string } }).data?.kind === "malformed_stream"
+            entries.some(
+                (entry) =>
+                    entry.type === "custom" &&
+                    entry.customType === "runwield.backend_status" &&
+                    (entry as { data?: { kind?: string } }).data?.kind === "malformed_stream",
             ),
             true,
         );
@@ -872,10 +909,14 @@ test("^Claude CLI abort cancels the subprocess and preserves active workflow$", 
         assertEquals(error.kind, "canceled");
         assertEquals(hostedSession.getActiveExecutionWorkflow()?.planName, "plan");
         assertEquals(
-            manager.getBranch().some((entry) =>
-                entry.type === "custom" && entry.customType === "runwield.backend_status" &&
-                (entry as { data?: { kind?: string } }).data?.kind === "canceled"
-            ),
+            manager
+                .getBranch()
+                .some(
+                    (entry) =>
+                        entry.type === "custom" &&
+                        entry.customType === "runwield.backend_status" &&
+                        (entry as { data?: { kind?: string } }).data?.kind === "canceled",
+                ),
             true,
         );
         const log = await fsReadFile(logPath, "utf8");
@@ -887,35 +928,40 @@ test("Claude stream exposes native tool results and alternative per-model usage"
     const calls: string[] = [];
     const usage: Array<{ sourceId: string; aggregationBasis: string; inputTokens: number | null }> = [];
     await parseClaudeCliStream(
-        streamFromText([
-            JSON.stringify({
-                type: "assistant",
-                message: {
-                    id: "msg_1",
-                    model: "claude-sonnet",
-                    usage: { input_tokens: 0, output_tokens: 3 },
-                    content: [{ type: "tool_use", id: "toolu_1", name: "Read", input: { file_path: "/private" } }, {
-                        type: "text",
-                        text: "done",
-                    }],
-                },
-            }),
-            JSON.stringify({
-                type: "user",
-                message: {
-                    content: [
-                        { type: "tool_result", tool_use_id: "toolu_1", content: "private result", is_error: false },
-                    ],
-                },
-            }),
-            JSON.stringify({
-                type: "result",
-                result: "done",
-                total_cost_usd: 0.1,
-                usage: { input_tokens: 10, output_tokens: 5 },
-                modelUsage: { "claude-sonnet": { inputTokens: 8, outputTokens: 5, costUSD: 0.08 } },
-            }),
-        ].join("\n")),
+        streamFromText(
+            [
+                JSON.stringify({
+                    type: "assistant",
+                    message: {
+                        id: "msg_1",
+                        model: "claude-sonnet",
+                        usage: { input_tokens: 0, output_tokens: 3 },
+                        content: [
+                            { type: "tool_use", id: "toolu_1", name: "Read", input: { file_path: "/private" } },
+                            {
+                                type: "text",
+                                text: "done",
+                            },
+                        ],
+                    },
+                }),
+                JSON.stringify({
+                    type: "user",
+                    message: {
+                        content: [
+                            { type: "tool_result", tool_use_id: "toolu_1", content: "private result", is_error: false },
+                        ],
+                    },
+                }),
+                JSON.stringify({
+                    type: "result",
+                    result: "done",
+                    total_cost_usd: 0.1,
+                    usage: { input_tokens: 10, output_tokens: 5 },
+                    modelUsage: { "claude-sonnet": { inputTokens: 8, outputTokens: 5, costUSD: 0.08 } },
+                }),
+            ].join("\n"),
+        ),
         {
             onDelta: () => {},
             onNativeToolStart: (call) => calls.push(`start:${call.callId}`),
@@ -929,10 +975,14 @@ test("Claude stream exposes native tool results and alternative per-model usage"
         },
     );
     assertEquals(calls, ["start:toolu_1", "end:toolu_1"]);
-    assertEquals(usage.map((entry) => [entry.aggregationBasis, entry.inputTokens]), [["alternative", 0], ["turn", 10], [
-        "alternative",
-        8,
-    ]]);
+    assertEquals(
+        usage.map((entry) => [entry.aggregationBasis, entry.inputTokens]),
+        [
+            ["alternative", 0],
+            ["turn", 10],
+            ["alternative", 8],
+        ],
+    );
 });
 
 test("Claude full thinking content precedes visible text as first response", async () => {
@@ -957,10 +1007,7 @@ test("Claude owner counts an MCP bridge call once when its alias also appears in
     await withClaudeFixture(async (root) => {
         await setCustomSetting("workflowMetrics", true, "project", root);
         const callsPath = join(root, "calls.json");
-        await fsWriteFile(
-            callsPath,
-            JSON.stringify([{ name: "read_fixture", arguments: { value: "PRIVATE-ARG" } }]),
-        );
+        await fsWriteFile(callsPath, JSON.stringify([{ name: "read_fixture", arguments: { value: "PRIVATE-ARG" } }]));
         process.env["RUNWIELD_CLAUDE_FIXTURE_MCP_CALLS"] = callsPath;
         const streamPath = join(root, "overlap.jsonl");
         await fsWriteFile(
@@ -996,7 +1043,9 @@ test("Claude owner counts an MCP bridge call once when its alias also appears in
                 },
                 { type: "assistant", message: { content: [{ type: "text", text: "done" }] } },
                 { type: "result", result: "done", usage: { input_tokens: 2, output_tokens: 1 } },
-            ].map((line) => JSON.stringify(line)).join("\n") + "\n",
+            ]
+                .map((line) => JSON.stringify(line))
+                .join("\n") + "\n",
         );
         process.env["RUNWIELD_CLAUDE_FIXTURE_STREAM_FILE"] = streamPath;
         const model = getModelRegistry().find("claude-cli", "sonnet");
@@ -1020,13 +1069,18 @@ test("Claude owner counts an MCP bridge call once when its alias also appears in
         });
         await session.runTurn({ userRequest: "Read fixture." });
         await drainWorkflowMetrics();
-        const rows = (await fsReadFile(getWorkflowMetricsFilePath(root), "utf8")).trim().split("\n")
+        const rows = (await fsReadFile(getWorkflowMetricsFilePath(root), "utf8"))
+            .trim()
+            .split("\n")
             .map((line) => JSON.parse(line));
         const started = rows.filter((row) => row.event === "tool_call_started");
         assertEquals(started.map((row) => row.toolName).sort(), ["Read", "read_fixture"]);
         assertEquals(rows.filter((row) => row.event === "tool_call_finished").length, 2);
         assertEquals(rows.find((row) => row.event === "execution_finished")?.callCount, 2);
-        assertEquals(rows.some((row) => row.callId === "stream-alias"), false);
+        assertEquals(
+            rows.some((row) => row.callId === "stream-alias"),
+            false,
+        );
         assertEquals(JSON.stringify(rows).includes("PRIVATE-"), false);
     });
 });

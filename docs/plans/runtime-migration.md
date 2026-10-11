@@ -646,7 +646,6 @@ registry expansion. The complete macOS Bun gate passes: Workspace build, product
 `90bd269553d258e80b19e3ccab4f98f0831f87442a2f056510ce24fd1b425fc2`) and a disposable writable copy of build assets. This
 exercises Linux runtime behavior but does not claim a clean native Linux Bun install.
 
-
 The first Linux 444-file run passed 415 files, then exposed exhausted temporary-memory storage and two Claude test
 launchers still hardcoding Deno. Both launchers now use the active executable, runtime-specific flags, decoded file
 URLs and literal POSIX argument quoting. The shared fake Claude client was already portable. Both corrected files pass
@@ -783,7 +782,6 @@ the complete isolated Bun inventory and relocated executable/provider qualificat
 Native Windows execution remains pending until those jobs pass; no skipped or failed case
 is evidence of qualification. Source types/lint and macOS lock regression pass locally.
 
-
 ### Windows package checkpoint and source corrections
 
 Draft PR #235 consolidates the foundation and Linux follow-up. At `65e313d92`, native Windows
@@ -821,3 +819,27 @@ pass; source types cover 1,303 entries and lint covers 1,437 files with zero dia
 new CRLF publication cases reproduce the failure before the fix and pass afterward, including
 retry and preservation of later user edits. Independent Spec and Standards review is performed
 before the correction batch is pushed. Deno remains the production/default release lane.
+
+### Native source fixture and transport follow-up
+
+At `ce9105004`, Windows x64 again passed the complete package lane. ARM64 passed all 22
+focused files, Bun/Deno native-lock interoperability, relocated package checks, and the
+HTTP-provider/terminal-restoration exercise. Its job failed during final temporary-directory
+removal with EBUSY; bounded explicit cleanup retries now cover the transient executable mapping.
+The eight complete source shards are still running, so full Windows source qualification is pending.
+
+The next reviewed batch preserves mandatory-lock contention semantics in Plan and Work Record
+stores, restores Deno's Windows treatment of unavailable POSIX mode metadata for MCP configs,
+and ports Claude/Mnemoteca fixtures, shell commands, and filesystem expectations. A linked
+checkout fixture now leaves its current directory before replacing it. Windows update coverage
+explicitly checks the existing package-manager/release guidance; Unix installer and Homebrew
+fixture cases remain POSIX-scoped. No test cases were deleted; one Windows update case was added.
+All 21 affected files passed Bun on macOS and Deno in separate frozen dependency checkouts.
+The type gate checks 1,303 entries and lint checks 1,437 files. Spec and standards reviewers
+approved all 24 code/test paths after correcting two remaining Windows assertions.
+
+Remaining remote qualification is concrete: Linux remote-host integration fixtures use POSIX
+Python and filesystem primitives, while Windows laptop SFTP discovery and transmitted path
+spelling need native implementation and real file-access coverage. ADR-018's exclusion of Windows
+remote hosts does not exclude Windows laptops. A skipped Linux-host fixture cannot establish
+Windows laptop support, and no full-platform completion is claimed.

@@ -1,3 +1,4 @@
+import { platform } from "node:process";
 import fs from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import {
@@ -69,13 +70,14 @@ async function assertLinkedWorkRecordLockExclusion(
         const entries: string[] = [];
         let releaseFirst = () => {};
         let signalFirst = () => {};
-        const firstMayFinish = new Promise<void>((resolve) => releaseFirst = resolve);
-        const firstEntered = new Promise<void>((resolve) => signalFirst = resolve);
+        const firstMayFinish = new Promise<void>((resolve) => (releaseFirst = resolve));
+        const firstEntered = new Promise<void>((resolve) => (signalFirst = resolve));
         const first = (async () => {
             const release = await acquire(selected);
             try {
                 entries.push("selected-first");
-                assertEquals(JSON.parse(await fsReadFile(selectedPath, "utf8")).token.length > 0, true);
+                if (platform === "win32") await assertRejects(() => fsReadFile(selectedPath, "utf8"));
+                else assertEquals(JSON.parse(await fsReadFile(selectedPath, "utf8")).token.length > 0, true);
                 await assertMissing(primaryPath);
                 await assertMissing(legacySelectedPath);
                 signalFirst();
@@ -98,7 +100,8 @@ async function assertLinkedWorkRecordLockExclusion(
         const releasePrimary = await acquire(root);
         try {
             entries.push("primary");
-            assertEquals(JSON.parse(await fsReadFile(primaryPath, "utf8")).token.length > 0, true);
+            if (platform === "win32") await assertRejects(() => fsReadFile(primaryPath, "utf8"));
+            else assertEquals(JSON.parse(await fsReadFile(primaryPath, "utf8")).token.length > 0, true);
         } finally {
             await releasePrimary();
         }
@@ -135,13 +138,13 @@ async function seed(cwd: string, withProposal = true) {
             ...attrs(SUCCESSOR_ID),
             ...(withProposal
                 ? {
-                    supersessionProposal: {
-                        candidates: [
-                            { recordId: PREDECESSOR_ID, reason: "Replaced by the complete result." },
-                            { recordId: OTHER_ID, reason: "Combined into the complete result." },
-                        ],
-                    },
-                }
+                      supersessionProposal: {
+                          candidates: [
+                              { recordId: PREDECESSOR_ID, reason: "Replaced by the complete result." },
+                              { recordId: OTHER_ID, reason: "Combined into the complete result." },
+                          ],
+                      },
+                  }
                 : {}),
         },
         "# New\n\n## Summary\n\nNew work.",
@@ -187,9 +190,9 @@ test("supersession lock release does not remove a replacement owned by another t
         await seed(cwd, false);
         const fixture = createWorkRecordMnemotecaFixture();
         let signalSync: (() => void) | undefined;
-        const syncStarted = new Promise<void>((resolve) => signalSync = resolve);
+        const syncStarted = new Promise<void>((resolve) => (signalSync = resolve));
         let releaseSync: (() => void) | undefined;
-        const syncGate = new Promise<void>((resolve) => releaseSync = resolve);
+        const syncGate = new Promise<void>((resolve) => (releaseSync = resolve));
         let delayed = false;
         const mnemotecaPort = {
             async run(args: string[], options?: { cwd?: string }) {
@@ -258,9 +261,9 @@ test("concurrent supersession projection indexes the latest canonical successor"
         await seed(cwd, false);
         const fixture = createWorkRecordMnemotecaFixture();
         let signalFirstSync: (() => void) | undefined;
-        const firstSync = new Promise<void>((resolve) => signalFirstSync = resolve);
+        const firstSync = new Promise<void>((resolve) => (signalFirstSync = resolve));
         let releaseFirstSync: (() => void) | undefined;
-        const firstSyncGate = new Promise<void>((resolve) => releaseFirstSync = resolve);
+        const firstSyncGate = new Promise<void>((resolve) => (releaseFirstSync = resolve));
         let delayed = false;
         const mnemotecaPort = {
             async run(args: string[], options?: { cwd?: string }) {
@@ -319,7 +322,10 @@ test("Work Record proposals list, confirm only pending IDs, and retain unrequest
             mnemotecaPort: createWorkRecordMnemotecaFixture(),
         });
         const successor = await findWorkRecordById(cwd, SUCCESSOR_ID);
-        assertEquals(successor?.attrs.supersessionProposal?.candidates.map((item) => item.recordId), [OTHER_ID]);
+        assertEquals(
+            successor?.attrs.supersessionProposal?.candidates.map((item) => item.recordId),
+            [OTHER_ID],
+        );
     } finally {
         await fsRm(cwd, { recursive: true });
     }
@@ -514,7 +520,10 @@ test("reject removes only named pending proposal and reports index failure as a 
             },
         });
         assertStringIncludes(result.indexWarning || "", "index rebuild");
-        assertEquals(result.record.attrs.supersessionProposal?.candidates.map((item) => item.recordId), [OTHER_ID]);
+        assertEquals(
+            result.record.attrs.supersessionProposal?.candidates.map((item) => item.recordId),
+            [OTHER_ID],
+        );
         assertEquals((await findWorkRecordById(cwd, PREDECESSOR_ID))?.attrs.status, "approved");
     } finally {
         await fsRm(cwd, { recursive: true });

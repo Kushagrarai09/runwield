@@ -26,14 +26,14 @@ test("artifact readers share canonical Markdown loading and reject escaped paths
         sourceSegmentId: "segment-1",
     };
     try {
-        await fsMkdir(`${root}/docs`);
-        await fsWriteFile(`${root}/${artifact.path}`, "# Requirements\n\nShared reader.\n");
+        await fsMkdir(join(root, `docs`));
+        await fsWriteFile(join(root, `${artifact.path}`), "# Requirements\n\nShared reader.\n");
         const document = await readSessionArtifact(root, artifact);
         assertEquals(document.markdown, "# Requirements\n\nShared reader.\n");
-        assertEquals(document.imageBaseDir, `${await fsRealpath(root)}/docs`);
+        assertEquals(document.imageBaseDir, join(await fsRealpath(root), "docs"));
         assertEquals(document.kind, "prd");
-        await fsWriteFile(`${outside}/private.md`, "outside project");
-        await fsSymlink(`${outside}/private.md`, `${root}/escape.md`);
+        await fsWriteFile(join(outside, `private.md`), "outside project");
+        await fsSymlink(join(outside, `private.md`), join(root, `escape.md`));
         await assertRejects(
             () => readSessionArtifact(root, { ...artifact, path: "escape.md" }),
             Error,

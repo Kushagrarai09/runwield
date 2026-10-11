@@ -1,3 +1,4 @@
+import { platform } from "node:process";
 import { clearInterval, setInterval } from "node:timers";
 import { type NativeFileLock, openNativeFileLock } from "../native-file-lock.ts";
 import { mkdir as fsMkdir } from "node:fs/promises";
@@ -44,11 +45,11 @@ export class WorkRecordSupersessionRollbackError extends Error {
 
     constructor(originalError: Error, uncertainRelativePaths: string[], rollbackErrors: string[]) {
         super(
-            `Work Record supersession failed and rollback was incomplete. Uncertain canonical paths: ${
-                uncertainRelativePaths.join(", ")
-            }. Original error: ${originalError.message}. Rollback errors: ${
-                rollbackErrors.join("; ")
-            }. Inspect these files before retrying; do not delete the successor blindly.`,
+            `Work Record supersession failed and rollback was incomplete. Uncertain canonical paths: ${uncertainRelativePaths.join(
+                ", ",
+            )}. Original error: ${originalError.message}. Rollback errors: ${rollbackErrors.join(
+                "; ",
+            )}. Inspect these files before retrying; do not delete the successor blindly.`,
             { cause: originalError },
         );
         this.name = "WorkRecordSupersessionRollbackError";
@@ -75,11 +76,16 @@ interface LockSnapshot extends LockFileSnapshot {
 }
 
 async function readLockSnapshot(lockPath: string): Promise<LockSnapshot | undefined> {
-    const snapshot = await readLockFileSnapshot(lockPath);
+    const snapshot = await readLockFileSnapshot(lockPath).catch((error: NodeJS.ErrnoException) => {
+        // An active Windows holder prevents reads; no snapshot permits retirement.
+        if (platform === "win32" && error.code === "EBUSY") return null;
+        throw error;
+    });
     if (!snapshot) return undefined;
-    const record = snapshot.token && snapshot.createdAt !== undefined && snapshot.updatedAt !== undefined
-        ? { token: snapshot.token, createdAt: snapshot.createdAt, updatedAt: snapshot.updatedAt }
-        : undefined;
+    const record =
+        snapshot.token && snapshot.createdAt !== undefined && snapshot.updatedAt !== undefined
+            ? { token: snapshot.token, createdAt: snapshot.createdAt, updatedAt: snapshot.updatedAt }
+            : undefined;
     return { ...snapshot, ...(record ? { record } : {}) };
 }
 
@@ -163,8 +169,9 @@ export async function acquireRecoveryLock(cwd: string): Promise<() => Promise<vo
                 throw new Error(`Timed out waiting for the Work Record supersession recovery lock: ${lockPath}`);
             }
             if (
-                snapshot && Date.now() - (snapshot.record?.updatedAt ?? snapshot.mtime) > RECOVERY_LOCK_STALE_MS &&
-                await removeLockFileIfSnapshotMatches(lockPath, snapshot)
+                snapshot &&
+                Date.now() - (snapshot.record?.updatedAt ?? snapshot.mtime) > RECOVERY_LOCK_STALE_MS &&
+                (await removeLockFileIfSnapshotMatches(lockPath, snapshot))
             ) {
                 continue;
             }
@@ -229,7 +236,7 @@ function requestedIds(options: WorkRecordSupersessionOptions): { successorId: st
         throw new Error("predecessorRecordIds must contain at least one Work Record UUID.");
     }
     const predecessorIds = options.predecessorRecordIds.map((id, index) =>
-        validateId(id, `predecessorRecordIds[${index}]`)
+        validateId(id, `predecessorRecordIds[${index}]`),
     );
     if (new Set(predecessorIds.map((id) => id.toLowerCase())).size !== predecessorIds.length) {
         throw new Error("predecessorRecordIds must not contain duplicates.");
@@ -321,10 +328,10 @@ async function projectFreshCanonicalRecords(
             records,
             ...(failures.length
                 ? {
-                    warning: `Canonical Work Records were updated, but index sync failed: ${
-                        failures.join("; ")
-                    } ${INDEX_GUIDANCE}`,
-                }
+                      warning: `Canonical Work Records were updated, but index sync failed: ${failures.join(
+                          "; ",
+                      )} ${INDEX_GUIDANCE}`,
+                  }
                 : {}),
         };
     } catch (error) {
@@ -382,7 +389,7 @@ async function applyLocked(
     const replacements = [
         prepareReplacement(successor, successorAttrs),
         ...predecessors.map((record) =>
-            prepareReplacement(record, supersedeWorkRecord(record.attrs, successor.attrs.recordId))
+            prepareReplacement(record, supersedeWorkRecord(record.attrs, successor.attrs.recordId)),
         ),
     ];
     await writePrepared(cwd, replacements);
@@ -415,7 +422,7 @@ export async function listWorkRecordSupersessionProposals(cwd: string): Promise<
             successorRecordId: record.attrs.recordId,
             predecessorRecordId: candidate.recordId,
             reason: candidate.reason,
-        }))
+        })),
     );
 }
 

@@ -1,8 +1,8 @@
+import { writeRuntimeExecutableFixture } from "../../testing/runtime-executable-fixture.ts";
 import { delimiter } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import {
-    chmod as fsChmod,
     mkdir as fsMkdir,
     mkdtemp as fsMkdtemp,
     readFile as fsReadFile,
@@ -92,15 +92,10 @@ async function removeTempDir(path: string): Promise<void> {
 
 async function installClaudeFixture(binDir: string, logPath: string): Promise<void> {
     await fsMkdir(binDir, { recursive: true });
-    const fixturePath = fileURLToPath(new URL("./backends/claude-cli/testing/fake-claude-mcp-client.ts", import.meta.url));
-    // The fixture lives in the workspace so its npm imports (the real MCP SDK
-    // client) resolve through the repository configuration/node_modules.
-    const command = [process.execPath, "run", ...(process.versions.deno ? ["-A"] : []), fixturePath]
-        .map((argument) => `'${argument.replaceAll("'", "'\\''")}'`).join(" ");
-    const script = `#!/bin/sh\nexec ${command} "$@"\n`;
-    const path = join(binDir, "claude");
-    await fsWriteFile(path, script);
-    await fsChmod(path, 0o755);
+    const fixturePath = fileURLToPath(
+        new URL("./backends/claude-cli/testing/fake-claude-mcp-client.ts", import.meta.url),
+    );
+    await writeRuntimeExecutableFixture(join(binDir, "claude"), fixturePath);
     await fsWriteFile(logPath, "");
 }
 
@@ -268,13 +263,15 @@ test("Claude CLI roots discover initially empty MCP tools and refresh them betwe
         const fixtureServer = fileURLToPath(new URL("../mcp/fixture-server.ts", import.meta.url));
         const poolResult = await startMcpIntegration({
             cwd,
-            servers: [{
-                name: "fixture",
-                command: process.execPath,
-                args: process.versions.deno ? ["run", "-A", fixtureServer] : ["run", fixtureServer],
-                env: { RUNWIELD_MCP_FIXTURE_LOG: externalLogPath, RUNWIELD_MCP_FIXTURE_TOOLS_PATH: toolsPath },
-                source: "request",
-            }],
+            servers: [
+                {
+                    name: "fixture",
+                    command: process.execPath,
+                    args: process.versions.deno ? ["run", "-A", fixtureServer] : ["run", fixtureServer],
+                    env: { RUNWIELD_MCP_FIXTURE_LOG: externalLogPath, RUNWIELD_MCP_FIXTURE_TOOLS_PATH: toolsPath },
+                    source: "request",
+                },
+            ],
         });
         assertEquals(poolResult.warnings, []);
         assertEquals(poolResult.integration.getTools(), []);
@@ -304,13 +301,19 @@ test("Claude CLI roots discover initially empty MCP tools and refresh them betwe
                 userRequest: "call external",
             });
 
-            const lines = (await fsReadFile(logPath, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+            const lines = (await fsReadFile(logPath, "utf8"))
+                .trim()
+                .split("\n")
+                .map((line) => JSON.parse(line));
             const toolsLine = lines.find((line) => line.mcp?.tools);
             assertEquals(toolsLine.mcp.tools.includes("mcp__fixture__fixture_echo"), true);
             const callsLine = lines.find((line) => line.mcp?.calls);
             assertEquals(callsLine.mcp.calls[0].isError, false);
             assertStringIncludes(await fsReadFile(externalLogPath, "utf8"), '"marker":"claude-external"');
-            assertEquals(messages.some((message) => message.role === "toolResult"), true);
+            assertEquals(
+                messages.some((message) => message.role === "toolResult"),
+                true,
+            );
             const tool = poolResult.integration.getTools()[0];
             await tool.execute(
                 "change-tools",
@@ -321,18 +324,20 @@ test("Claude CLI roots discover initially empty MCP tools and refresh them betwe
             );
             const deadline = Date.now() + 5_000;
             while (
-                poolResult.integration.getTools()[0]?.name !== "mcp__fixture__replacement" && Date.now() < deadline
+                poolResult.integration.getTools()[0]?.name !== "mcp__fixture__replacement" &&
+                Date.now() < deadline
             ) {
                 await new Promise((resolve) => setTimeout(resolve, 10));
             }
             await fsWriteFile(
                 callsPath,
-                JSON.stringify([
-                    { name: "mcp__fixture__replacement", arguments: { marker: "claude-next-turn" } },
-                ]),
+                JSON.stringify([{ name: "mcp__fixture__replacement", arguments: { marker: "claude-next-turn" } }]),
             );
             await runRootTurn({ hostedSession, agentName: AGENTS.GUIDE, userRequest: "call replacement" });
-            const nextLines = (await fsReadFile(logPath, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+            const nextLines = (await fsReadFile(logPath, "utf8"))
+                .trim()
+                .split("\n")
+                .map((line) => JSON.parse(line));
             const nextTools = nextLines.filter((line) => line.mcp?.tools).at(-1).mcp.tools;
             assertEquals(nextTools.includes("mcp__fixture__replacement"), true);
             assertEquals(nextTools.includes("mcp__fixture__fixture_echo"), false);
@@ -360,7 +365,10 @@ test("Claude CLI root turn can set the Session Name through MCP", async () => {
         await ensureRootAgentSession({ hostedSession, agentName: AGENTS.GUIDE });
         const messages = await runRootTurn({ hostedSession, agentName: AGENTS.GUIDE, userRequest: "name this" });
 
-        const lines = (await fsReadFile(logPath, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+        const lines = (await fsReadFile(logPath, "utf8"))
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line));
         assertEquals(lines[0].args.includes("set_session_name"), true);
         assertEquals(lines[0].args.includes("mcp__runwield__set_session_name"), true);
         const toolsLine = lines.find((line) => line.mcp?.tools);
@@ -368,9 +376,12 @@ test("Claude CLI root turn can set the Session Name through MCP", async () => {
         const callsLine = lines.find((line) => line.mcp?.calls);
         assertEquals(callsLine.mcp.calls[0].isError, false);
         assertEquals(manager.getSessionName(), "claude session");
-        assertEquals(events.some((event) => event.type === "session_renamed" && event.name === "claude session"), true);
-        const toolResult = messages.find((message) =>
-            message.role === "toolResult" && message.toolName === "set_session_name"
+        assertEquals(
+            events.some((event) => event.type === "session_renamed" && event.name === "claude session"),
+            true,
+        );
+        const toolResult = messages.find(
+            (message) => message.role === "toolResult" && message.toolName === "set_session_name",
         ) as ToolResultMessage | undefined;
         assertEquals(toolResult?.details?.name, "claude session");
         assertEquals(toolResult?.details?.provenance, CLAUDE_CLI_MCP_PROVENANCE);
@@ -430,25 +441,30 @@ test("Claude CLI accepted workflow completion shuts down without recording a bac
         const callsPath = join(cwd, "mcp-calls-completion.json");
         await fsWriteFile(
             callsPath,
-            JSON.stringify([
-                { name: "runwield_task_completed", arguments: { message: "Completed the repair." } },
-            ]),
+            JSON.stringify([{ name: "runwield_task_completed", arguments: { message: "Completed the repair." } }]),
         );
         process.env["RUNWIELD_CLAUDE_FIXTURE_MCP_CALLS"] = callsPath;
-        const result = await runValidationAgentUntilEvent({ runIsolatedAgentSession }, {
-            hostedSession,
-            cwd,
-            agentName: AGENTS.ENGINEER,
-            userRequest: "Complete the repair using task_completed.",
-            sessionManager: manager,
-        }, "task_completed");
+        const result = await runValidationAgentUntilEvent(
+            { runIsolatedAgentSession },
+            {
+                hostedSession,
+                cwd,
+                agentName: AGENTS.ENGINEER,
+                userRequest: "Complete the repair using task_completed.",
+                sessionManager: manager,
+            },
+            "task_completed",
+        );
         assertEquals(result.event?.kind, "task_completed");
         assertEquals(result.event?.sourceSessionId, manager.getSessionId());
-        assertEquals(readRequestAttemptEntries(manager).map((entry) => entry.phase), ["started", "completed"]);
         assertEquals(
-            manager.getBranch().filter((entry) =>
-                entry.type === "custom" && entry.customType === "runwield.backend_status"
-            ),
+            readRequestAttemptEntries(manager).map((entry) => entry.phase),
+            ["started", "completed"],
+        );
+        assertEquals(
+            manager
+                .getBranch()
+                .filter((entry) => entry.type === "custom" && entry.customType === "runwield.backend_status"),
             [],
         );
         if (result.event) settleWorkflowToolEvent(hostedSession, result.event);
@@ -522,7 +538,10 @@ test("^Claude CLI MCP lifecycle bridge black-box contract$", async () => {
         const messages = await runRootTurn({ hostedSession, agentName: AGENTS.ENGINEER, userRequest: "implement" });
 
         // The old no-tools tracer bullet line is gone from the prompt appendix.
-        const lines = (await fsReadFile(logPath, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+        const lines = (await fsReadFile(logPath, "utf8"))
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line));
         assertStringIncludes(lines[0].promptText, "runwield_task_completed");
         assertEquals(lines[0].promptText.includes("Custom Tools are not exposed to Claude CLI"), false);
         assertStringIncludes(lines[0].promptText, "only way to advance RunWield workflow state");
@@ -534,8 +553,8 @@ test("^Claude CLI MCP lifecycle bridge black-box contract$", async () => {
         assertEquals(toolsLine.mcp.tools.includes("delegate_agent"), false);
         // The canonical internal tool result is exposed to current workflow readers.
         assertEquals(readLatestTaskCompletedOutcome(messages), true);
-        const toolResults = messages.filter((message) =>
-            message.role === "toolResult" && message.toolName === "task_completed"
+        const toolResults = messages.filter(
+            (message) => message.role === "toolResult" && message.toolName === "task_completed",
         );
         assertEquals(toolResults.length, 2);
         const accepted = toolResults.at(-1) as ToolResultMessage;
@@ -547,15 +566,17 @@ test("^Claude CLI MCP lifecycle bridge black-box contract$", async () => {
         assertEquals("outcome" in (rejected.details || {}), false);
 
         // The SessionManager transcript carries the same canonical exchange.
-        const branchMessages = manager.getBranch()
+        const branchMessages = manager
+            .getBranch()
             .filter((entry) => entry.type === "message")
             .map((entry) => (entry as BranchMessageEntry).message)
             .filter((message): message is BranchMessage => message !== undefined);
         assertEquals(
-            branchMessages.some((msg) =>
-                msg.role === "assistant" &&
-                Array.isArray(msg.content) &&
-                msg.content.some((block) => block.type === "toolCall" && block.name === "task_completed")
+            branchMessages.some(
+                (msg) =>
+                    msg.role === "assistant" &&
+                    Array.isArray(msg.content) &&
+                    msg.content.some((block) => block.type === "toolCall" && block.name === "task_completed"),
             ),
             true,
         );
@@ -566,9 +587,9 @@ test("^Claude CLI MCP lifecycle bridge black-box contract$", async () => {
 
         // The durable Task Completion outbox remains the execution authority.
         assertEquals(
-            manager.getBranch().some(
-                (entry) => entry.type === "custom" && entry.customType === "runwield.task_completion",
-            ),
+            manager
+                .getBranch()
+                .some((entry) => entry.type === "custom" && entry.customType === "runwield.task_completion"),
             true,
         );
     });
@@ -598,13 +619,15 @@ test("Claude CLI plan_written rejects once when live user steering is pending", 
         assertEquals(steered !== null, true);
         const messages = await run;
 
-        const callsLine = (await fsReadFile(logPath, "utf8")).trim().split("\n")
+        const callsLine = (await fsReadFile(logPath, "utf8"))
+            .trim()
+            .split("\n")
             .map((line) => JSON.parse(line))
             .find((line) => line.mcp?.calls);
         assertEquals(callsLine.mcp.calls[0].isError, true);
         assertStringIncludes(callsLine.mcp.calls[0].text, "include the timeout case");
-        const planResults = messages.filter((message) =>
-            message.role === "toolResult" && message.toolName === "plan_written"
+        const planResults = messages.filter(
+            (message) => message.role === "toolResult" && message.toolName === "plan_written",
         );
         assertEquals(planResults.length, 1);
         const rejected = planResults[0] as ToolResultMessage;
@@ -620,15 +643,17 @@ test("^Claude CLI Router exposes triage_report through the MCP lifecycle bridge$
         const callsPath = join(cwd, "mcp-calls-triage.json");
         await fsWriteFile(
             callsPath,
-            JSON.stringify([{
-                name: "runwield_triage_report",
-                arguments: {
-                    routingIntent: "QUICK_FIX",
-                    complexity: "LOW",
-                    summary: "Router can report a bounded Claude CLI bug fix.",
-                    sessionName: "claude router tools",
+            JSON.stringify([
+                {
+                    name: "runwield_triage_report",
+                    arguments: {
+                        routingIntent: "QUICK_FIX",
+                        complexity: "LOW",
+                        summary: "Router can report a bounded Claude CLI bug fix.",
+                        sessionName: "claude router tools",
+                    },
                 },
-            }]),
+            ]),
         );
         process.env["RUNWIELD_CLAUDE_FIXTURE_MCP_CALLS"] = callsPath;
         process.env["RUNWIELD_CLAUDE_FIXTURE_TEXT"] = "freeform text after triage";
@@ -636,7 +661,10 @@ test("^Claude CLI Router exposes triage_report through the MCP lifecycle bridge$
         await ensureRootAgentSession({ hostedSession, agentName: AGENTS.ROUTER });
         const messages = await runRootTurn({ hostedSession, agentName: AGENTS.ROUTER, userRequest: "route this" });
 
-        const lines = (await fsReadFile(logPath, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+        const lines = (await fsReadFile(logPath, "utf8"))
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line));
         assertEquals(lines[0].args.includes("--allowedTools"), true);
         assertEquals(lines[0].args.includes("runwield_triage_report"), true);
         assertEquals(lines[0].args.includes("mcp__runwield__runwield_triage_report"), true);
@@ -672,25 +700,36 @@ test("^Claude CLI root turn abort reaches the subprocess and preserves workflow$
         assertEquals(error.kind, "canceled");
         assertEquals(hostedSession.getActiveExecutionWorkflow()?.planName, "quick-fix");
         assertEquals(
-            manager.getBranch().filter((entry) =>
-                entry.type === "message" && (entry as BranchMessageEntry).message?.role === "assistant"
-            ).length,
+            manager
+                .getBranch()
+                .filter(
+                    (entry) => entry.type === "message" && (entry as BranchMessageEntry).message?.role === "assistant",
+                ).length,
             0,
         );
         assertEquals(
-            manager.getBranch().some((entry) =>
-                entry.type === "custom" && entry.customType === "runwield.backend_status" &&
-                (entry as BranchCustomEntry).data?.kind === "canceled"
-            ),
+            manager
+                .getBranch()
+                .some(
+                    (entry) =>
+                        entry.type === "custom" &&
+                        entry.customType === "runwield.backend_status" &&
+                        (entry as BranchCustomEntry).data?.kind === "canceled",
+                ),
             true,
         );
-        const failedAttempt = manager.getBranch().findLast((entry) =>
-            entry.type === "custom" && entry.customType === "runwield.request_attempt" &&
-            (entry as BranchCustomEntry).data?.phase === "failed"
-        ) as BranchCustomEntry | undefined;
-        const backendFailure = manager.getBranch().findLast((entry) =>
-            entry.type === "custom" && entry.customType === "runwield.backend_status"
-        ) as BranchCustomEntry | undefined;
+        const failedAttempt = manager
+            .getBranch()
+            .findLast(
+                (entry) =>
+                    entry.type === "custom" &&
+                    entry.customType === "runwield.request_attempt" &&
+                    (entry as BranchCustomEntry).data?.phase === "failed",
+            ) as BranchCustomEntry | undefined;
+        const backendFailure = manager
+            .getBranch()
+            .findLast((entry) => entry.type === "custom" && entry.customType === "runwield.backend_status") as
+            BranchCustomEntry | undefined;
         assertEquals(failedAttempt?.data?.dispatchKind, "quick_fix");
         assertEquals(failedAttempt?.data?.requestId, backendFailure?.data?.requestId);
         assertEquals(failedAttempt?.data?.attemptId, backendFailure?.data?.attemptId);
@@ -769,7 +808,10 @@ test("Claude CLI caller-supplied review_diff reaches the bridged tool list", asy
             customTools: [reviewDiffTool],
         });
 
-        const lines = (await fsReadFile(logPath, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+        const lines = (await fsReadFile(logPath, "utf8"))
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line));
         const toolsLine = lines.find((line) => line.mcp?.tools);
         assertEquals(toolsLine.mcp.tools.includes("review_diff"), true);
     });

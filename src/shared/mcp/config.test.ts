@@ -71,11 +71,14 @@ test("MCP config resolves global, project replacement, disable entries, and requ
             });
 
             assertEquals(result.warnings, []);
-            assertEquals(result.servers.map((server) => [server.name, server.command, server.source]), [
-                ["shared", "project-shared", "project"],
-                ["globalOnly", "global-only", "global"],
-                ["requestOnly", "/bin/echo", "request"],
-            ]);
+            assertEquals(
+                result.servers.map((server) => [server.name, server.command, server.source]),
+                [
+                    ["shared", "project-shared", "project"],
+                    ["globalOnly", "global-only", "global"],
+                    ["requestOnly", "/bin/echo", "request"],
+                ],
+            );
         } finally {
             if (oldHome) process.env["HOME"] = oldHome;
             else delete process.env["HOME"];
@@ -144,7 +147,10 @@ test("MCP config redacts parse and schema errors", async () => {
 
             const result = await resolveMcpConfig({ cwd: project });
             assertEquals(result.servers, []);
-            assertEquals(result.warnings.map((item) => item.stage), ["parse", "parse"]);
+            assertEquals(
+                result.warnings.map((item) => item.stage),
+                ["parse", "parse"],
+            );
             const warningText = result.warnings.map((item) => item.message).join("\n");
             assertEquals(warningText.includes("raw-global-secret"), false);
             assertEquals(warningText.includes("raw-project-secret"), false);
@@ -209,10 +215,12 @@ test("MCP config rejects committed, staged, intent-to-add, symlink, and broad-mo
                 assertEquals(symlink.servers, []);
                 assertStringIncludes(symlink.warnings[0].message, "regular file");
 
-                await writeMode(join(modeProject, ".wld", "mcp.json"), configText, 0o644);
-                const broadMode = await resolveMcpConfig({ cwd: modeProject });
-                assertEquals(broadMode.servers, []);
-                assertStringIncludes(broadMode.warnings[0].message, "mode 0600");
+                if (process.platform !== "win32") {
+                    await writeMode(join(modeProject, ".wld", "mcp.json"), configText, 0o644);
+                    const broadMode = await resolveMcpConfig({ cwd: modeProject });
+                    assertEquals(broadMode.servers, []);
+                    assertStringIncludes(broadMode.warnings[0].message, "mode 0600");
+                }
             } finally {
                 await fsRm(committedProject, { recursive: true });
                 await fsRm(stagedProject, { recursive: true });
@@ -253,9 +261,10 @@ test("MCP config resolves project file from the primary checkout for execution w
             const result = await resolveMcpConfig({ cwd: worktree });
 
             assertEquals(result.warnings, []);
-            assertEquals(result.servers.map((server) => [server.name, server.command, server.source]), [
-                ["primaryOnly", "primary", "project"],
-            ]);
+            assertEquals(
+                result.servers.map((server) => [server.name, server.command, server.source]),
+                [["primaryOnly", "primary", "project"]],
+            );
         } finally {
             if (oldHome) process.env["HOME"] = oldHome;
             else delete process.env["HOME"];

@@ -1,3 +1,4 @@
+import { bashFixtureExecutable, bashFixturePath } from "../../../scripts/bash-fixture.ts";
 import { captureForegroundProcess } from "../captured-process.ts";
 import { serveHttp } from "../http-server.ts";
 import {
@@ -118,19 +119,20 @@ test("bounded remote Pi session reads its project through a tool and sends the r
         const result = createAssistantMessageEventStream();
         contexts.push(JSON.stringify(context));
         modelRequests.push(model.id);
-        const reply = contexts.length === 1
-            ? fauxAssistantMessage(fauxToolCall("read_remote_sentinel", {}))
-            : contexts.length === 2
-            ? fauxAssistantMessage(fauxText(`Received ${scriptResult}`))
-            : contexts.length === 3
-            ? fauxAssistantMessage(fauxToolCall("see_image", { imageRef: "shot.png" }))
-            : contexts.length === 4
-            ? fauxAssistantMessage(fauxText("remote vision description"))
-            : contexts.length === 5
-            ? fauxAssistantMessage(fauxText("Vision completed"))
-            : contexts.length === 6
-            ? fauxAssistantMessage(fauxText(summary))
-            : fauxAssistantMessage(fauxText(turnSummary));
+        const reply =
+            contexts.length === 1
+                ? fauxAssistantMessage(fauxToolCall("read_remote_sentinel", {}))
+                : contexts.length === 2
+                  ? fauxAssistantMessage(fauxText(`Received ${scriptResult}`))
+                  : contexts.length === 3
+                    ? fauxAssistantMessage(fauxToolCall("see_image", { imageRef: "shot.png" }))
+                    : contexts.length === 4
+                      ? fauxAssistantMessage(fauxText("remote vision description"))
+                      : contexts.length === 5
+                        ? fauxAssistantMessage(fauxText("Vision completed"))
+                        : contexts.length === 6
+                          ? fauxAssistantMessage(fauxText(summary))
+                          : fauxAssistantMessage(fauxText(turnSummary));
         queueMicrotask(() => {
             if (options?.signal?.aborted) return;
             result.push({ type: "done", reason: "stop", message: reply });
@@ -144,51 +146,54 @@ test("bounded remote Pi session reads its project through a tool and sends the r
         allowModelNetwork: false,
         refreshOnCreate: false,
     });
-    runtime.registerNativeProvider(createProvider({
-        id: "laptop-only",
-        name: "Laptop",
-        models: [{
-            provider: "laptop-only",
-            id: "vision",
-            name: "Vision",
-            api: "openai-completions",
-            baseUrl: `https://${laptopSecret}.invalid`,
-            reasoning: false,
-            input: ["text", "image"],
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-            contextWindow: 1000,
-            maxTokens: 100,
-        }, {
-            provider: "laptop-only",
-            id: "allowed",
-            name: "Allowed",
-            api: "openai-completions",
-            baseUrl: `https://${laptopSecret}.invalid`,
-            headers: { Authorization: laptopSecret },
-            reasoning: false,
-            input: ["text"],
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-            contextWindow: 128000,
-            maxTokens: 100,
-        }],
-        auth: {
-            apiKey: {
-                name: "Local",
-                check: () => Promise.resolve({ type: "api_key" }),
-                resolve: () => Promise.resolve({ auth: {} }),
+    runtime.registerNativeProvider(
+        createProvider({
+            id: "laptop-only",
+            name: "Laptop",
+            models: [
+                {
+                    provider: "laptop-only",
+                    id: "vision",
+                    name: "Vision",
+                    api: "openai-completions",
+                    baseUrl: `https://${laptopSecret}.invalid`,
+                    reasoning: false,
+                    input: ["text", "image"],
+                    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                    contextWindow: 1000,
+                    maxTokens: 100,
+                },
+                {
+                    provider: "laptop-only",
+                    id: "allowed",
+                    name: "Allowed",
+                    api: "openai-completions",
+                    baseUrl: `https://${laptopSecret}.invalid`,
+                    headers: { Authorization: laptopSecret },
+                    reasoning: false,
+                    input: ["text"],
+                    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                    contextWindow: 128000,
+                    maxTokens: 100,
+                },
+            ],
+            auth: {
+                apiKey: {
+                    name: "Local",
+                    check: () => Promise.resolve({ type: "api_key" }),
+                    resolve: () => Promise.resolve({ auth: {} }),
+                },
             },
-        },
-        api: { stream, streamSimple: stream },
-    }));
+            api: { stream, streamSimple: stream },
+        }),
+    );
     await runtime.refresh({ allowNetwork: false });
     const bridge = new LocalModelBridge(runtime);
     const credential = "a".repeat(64);
-    const server = serveHttp(
-        { hostname: "127.0.0.1", port: 0, onListen() {} },
-        (request) =>
-            request.headers.get("Authorization") === `Bearer ${credential}`
-                ? handleModelRequest(bridge, request, new URL(request.url).pathname)
-                : new Response(null, { status: 401 }),
+    const server = serveHttp({ hostname: "127.0.0.1", port: 0, onListen() {} }, (request) =>
+        request.headers.get("Authorization") === `Bearer ${credential}`
+            ? handleModelRequest(bridge, request, new URL(request.url).pathname)
+            : new Response(null, { status: 401 }),
     );
     const mount: RemoteMount = { globalRoot: root, lost: new Promise<void>(() => {}), close: () => Promise.resolve() };
     try {
@@ -199,8 +204,8 @@ test("bounded remote Pi session reads its project through a tool and sends the r
             description: "Run the nested Skill script against a file in the remote project",
             parameters: { type: "object", properties: {} },
             execute: async () => {
-                const output = await captureForegroundProcess("sh", {
-                    args: ["scripts/nested/read-sentinel.sh", join(project, "sentinel.txt")],
+                const output = await captureForegroundProcess(bashFixtureExecutable(), {
+                    args: ["scripts/nested/read-sentinel.sh", bashFixturePath(join(project, "sentinel.txt"))],
                     cwd: skillDir,
                 });
                 if (output.code !== 0) throw new Error(new TextDecoder().decode(output.stderr));
@@ -221,7 +226,13 @@ test("bounded remote Pi session reads its project through a tool and sends the r
         try {
             assertEquals(session.model?.id, "allowed");
             assert(session.promptTemplates.some((template) => template.name === "remote-report"));
-            assertEquals(registry.getSelectable().map((item) => item.id).sort(), ["allowed", "vision"]);
+            assertEquals(
+                registry
+                    .getSelectable()
+                    .map((item) => item.id)
+                    .sort(),
+                ["allowed", "vision"],
+            );
             assertEquals(registry.find("anthropic", "claude-sonnet-4-5"), undefined);
             assertEquals((await registry.getApiKeyAndHeaders(registry.find("laptop-only", "allowed")!)).ok, false);
             assertThrows(() => getModelRegistry(), Error, "explicit control connection");
@@ -302,26 +313,47 @@ test("bounded remote Pi session reads its project through a tool and sends the r
                 {},
                 {},
             );
-            await check("project-preset", piDefault, {
-                activeModelPreset: "remote",
-                modelPresets: { remote: { agents: { engineer: { model: "agy-cli/gemini-3.1-pro" } } } },
-            }, {});
+            await check(
+                "project-preset",
+                piDefault,
+                {
+                    activeModelPreset: "remote",
+                    modelPresets: { remote: { agents: { engineer: { model: "agy-cli/gemini-3.1-pro" } } } },
+                },
+                {},
+            );
             for (const name of ["delegated", "plan-engineer", "reviewer-feedback-engineer", "guide"]) {
-                await check(name, piDefault, { agents: { [name]: { model: "claude-cli/sonnet" } } }, {
-                    agentName: name,
-                    agentDef: { ...agentDef, name, displayName: name },
-                });
+                await check(
+                    name,
+                    piDefault,
+                    { agents: { [name]: { model: "claude-cli/sonnet" } } },
+                    {
+                        agentName: name,
+                        agentDef: { ...agentDef, name, displayName: name },
+                    },
+                );
             }
-            await check("repair-engineer-fallback", piDefault, {
-                agents: { engineer: { model: "agy-cli/gemini-3.1-pro" } },
-            }, {
-                agentName: "reviewer-feedback-engineer",
-                agentDef: { ...agentDef, name: "reviewer-feedback-engineer" },
-            });
+            await check(
+                "repair-engineer-fallback",
+                piDefault,
+                {
+                    agents: { engineer: { model: "agy-cli/gemini-3.1-pro" } },
+                },
+                {
+                    agentName: "reviewer-feedback-engineer",
+                    agentDef: { ...agentDef, name: "reviewer-feedback-engineer" },
+                },
+            );
             await check("definition", {}, {}, { agentDef: { ...agentDef, model: "agy-cli/gemini-3.1-pro" } });
-            await check("catalog-explicit", { defaultProvider: "claude-cli", defaultModel: "sonnet" }, {}, {
-                modelOverride: "laptop-only/allowed",
-            }, "");
+            await check(
+                "catalog-explicit",
+                { defaultProvider: "claude-cli", defaultModel: "sonnet" },
+                {},
+                {
+                    modelOverride: "laptop-only/allowed",
+                },
+                "",
+            );
             await check("catalog-saved", piDefault, {}, { provider: "laptop-only", modelId: "allowed" }, "");
             await check("catalog-agent", piDefault, { agents: { engineer: { model: "laptop-only/allowed" } } }, {}, "");
             await check(
@@ -342,8 +374,8 @@ test("bounded remote Pi session reads its project through a tool and sends the r
                 "Unknown invocation model override",
             );
             const skill = (await listSkills({ cwd: project })).find((entry) => entry.name === "remote-sentinel");
-            const template = (await listPromptTemplates({ cwd: project })).find((entry) =>
-                entry.name === "remote-report"
+            const template = (await listPromptTemplates({ cwd: project })).find(
+                (entry) => entry.name === "remote-report",
             );
             assertEquals(skill?.source, "home");
             assertEquals(skill?.path, join(skillDir, "SKILL.md"));
@@ -359,7 +391,7 @@ test("bounded remote Pi session reads its project through a tool and sends the r
             assertStringIncludes(contexts[0], "mounted-laptop-instructions");
             assertStringIncludes(contexts[0], "remote-project-instructions");
             assertStringIncludes(contexts[0], "remote-project-agent-instructions");
-            assertStringIncludes(contexts[0], join(skillDir, "SKILL.md"));
+            assertStringIncludes(contexts[0], JSON.stringify(join(skillDir, "SKILL.md")).slice(1, -1));
             assertStringIncludes(contexts[0], "Run scripts/nested/read-sentinel.sh from this Skill directory");
             assertStringIncludes(contexts[0], "Use the remote-sentinel Skill and report the result");
             assertStringIncludes(contexts[0], "Read the remote project sentinel and report it.");

@@ -21,7 +21,7 @@ import {
 test("bundled Snip filters are readable from the compile-safe resource directory", async () => {
     const denoTestFilter = await fsReadFile(join(SNIP_FILTERS_DIR, "deno-test.yaml"), "utf8");
 
-    assertStringIncludes(SNIP_FILTERS_DIR, "src/snip-filters");
+    assertStringIncludes(SNIP_FILTERS_DIR, join("src", "snip-filters"));
     assertStringIncludes(denoTestFilter, "deno test");
 });
 
@@ -53,10 +53,12 @@ test("user Snip filter install and cleanup only manage RunWield-owned files", as
         assertEquals(install.filtersDir, paths.userFiltersDir);
         assertEquals(install.installed.length, 4);
         assertEquals(install.removedLegacy.length, 3);
-        assertEquals(install.skipped, [{
-            path: join(paths.userFiltersDir, "deno-lint.yaml"),
-            reason: "existing non-RunWield filter",
-        }]);
+        assertEquals(install.skipped, [
+            {
+                path: join(paths.userFiltersDir, "deno-lint.yaml"),
+                reason: "existing non-RunWield filter",
+            },
+        ]);
 
         const installedFmt = await fsReadFile(join(paths.userFiltersDir, "deno-fmt.yaml"), "utf8");
         assertStringIncludes(installedFmt, "Managed by RunWield");
@@ -75,10 +77,12 @@ test("user Snip filter install and cleanup only manage RunWield-owned files", as
         const cleanup = await cleanupRunWieldSnipFiltersForUser({ homeDir });
         assertEquals(cleanup.removed.length, 4);
         assertEquals(cleanup.removedLegacy, []);
-        assertEquals(cleanup.skipped, [{
-            path: join(paths.userFiltersDir, "deno-lint.yaml"),
-            reason: "existing non-RunWield filter",
-        }]);
+        assertEquals(cleanup.skipped, [
+            {
+                path: join(paths.userFiltersDir, "deno-lint.yaml"),
+                reason: "existing non-RunWield filter",
+            },
+        ]);
         assertEquals(await fsReadFile(join(paths.userFiltersDir, "deno-lint.yaml"), "utf8"), "name: user-deno-lint\n");
     } finally {
         await fsRm(homeDir, { recursive: true }).catch(() => {});

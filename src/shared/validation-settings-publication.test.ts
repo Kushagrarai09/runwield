@@ -1,3 +1,4 @@
+import { platform } from "node:process";
 import {
     mkdir as fsMkdir,
     mkdtemp as fsMkdtemp,
@@ -17,19 +18,22 @@ import { setExactProjectCustomSetting } from "./settings.js";
 import { publishExecutionWorktreeIsolated } from "./isolated-publication.ts";
 import { ensureRunWieldOwnedGitignoreBlock } from "./runwield-owned-paths.ts";
 
+const failingCommand = platform === "win32" ? "echo initial & exit /b 1" : "printf initial; exit 1";
+const passingCommand = platform === "win32" ? "echo repaired" : "printf repaired";
+const fileCommand =
+    platform === "win32" ? "if exist ci-fixed.txt (exit /b 0) else (exit /b 1)" : "test -f ci-fixed.txt";
+
 for (const tracked of [false, true]) {
-    for (
-        const userEdit of [
-            "none",
-            "before-worktree",
-            "staged-before-worktree",
-            "before-worktree-same",
-            "staged-before-worktree-same",
-            "before",
-            "after",
-            "staged",
-        ] as const
-    ) {
+    for (const userEdit of [
+        "none",
+        "before-worktree",
+        "staged-before-worktree",
+        "before-worktree-same",
+        "staged-before-worktree-same",
+        "before",
+        "after",
+        "staged",
+    ] as const) {
         test(`validation-time command repair publishes only owned settings: tracked=${tracked}, edit=${userEdit}`, async () => {
             const root = await makeRepo();
             const worktreeRoot = await fsMkdtemp(join(tmpdir(), "portable-fixture-"));
@@ -44,8 +48,8 @@ for (const tracked of [false, true]) {
                 }
                 await git(root, ["commit", "-m", "Project before validation"]);
                 const sameCommand = userEdit.endsWith("-same");
-                const command = sameCommand ? "test -f ci-fixed.txt" : "printf initial; exit 1";
-                const repairedCommand = sameCommand ? command : "printf repaired";
+                const command = sameCommand ? fileCommand : failingCommand;
+                const repairedCommand = sameCommand ? command : passingCommand;
                 if (userEdit.includes("before-worktree")) {
                     setExactProjectCustomSetting("theme", "user-before-worktree", root);
                     if (userEdit.startsWith("staged-before-worktree")) {
@@ -124,8 +128,8 @@ for (const tracked of [false, true]) {
                     });
                 if (userEdit === "none") {
                     await publication();
-                    assertStringIncludes(await fsReadFile(join(root, ".wld/settings.json"), "utf8"), "printf repaired");
-                    assertStringIncludes(await git(root, ["show", "HEAD:.wld/settings.json"]), "printf repaired");
+                    assertStringIncludes(await fsReadFile(join(root, ".wld/settings.json"), "utf8"), passingCommand);
+                    assertStringIncludes(await git(root, ["show", "HEAD:.wld/settings.json"]), passingCommand);
                 } else {
                     await assertRejects(publication);
                     assertEquals(await fsReadFile(join(root, ".wld/settings.json"), "utf8"), beforeSettings);
@@ -155,9 +159,11 @@ for (const inherit of [false, true]) {
         try {
             await fsMkdir(join(root, ".wld"), { recursive: true });
             await fsWriteFile(join(root, ".gitignore"), ".wld/\n");
-            const command = "printf initial; exit 1";
-            const jsonc = '{ // Project preferences\n "codereview": "none",\n' +
-                (inherit ? ` "verification_command": "${command}",\n` : "") + "}\n";
+            const command = failingCommand;
+            const jsonc =
+                '{ // Project preferences\n "codereview": "none",\n' +
+                (inherit ? ` "verification_command": "${command}",\n` : "") +
+                "}\n";
             // An older execution checkout exercises inheritance from a clean primary JSONC file.
             const entry = inherit
                 ? await createTestWorktreeAttempt({ projectRoot: root, planName: "jsonc", worktreeRoot })
@@ -166,8 +172,8 @@ for (const inherit of [false, true]) {
             await fsWriteFile(join(root, ".wld/settings.json"), jsonc);
             await git(root, ["add", "-f", ".gitignore", ".wld/settings.json"]);
             await git(root, ["commit", "-m", "Supported JSONC settings"]);
-            const execution = entry ??
-                await createTestWorktreeAttempt({ projectRoot: root, planName: "jsonc", worktreeRoot });
+            const execution =
+                entry ?? (await createTestWorktreeAttempt({ projectRoot: root, planName: "jsonc", worktreeRoot }));
             executionRoot = execution.path;
             await ensureRunWieldOwnedGitignoreBlock(executionRoot);
             session = new HostedSession({ id: crypto.randomUUID(), cwd: executionRoot });
@@ -188,7 +194,7 @@ for (const inherit of [false, true]) {
             if (first.kind !== "completed") throw new Error("Command should execute with JSONC settings");
             assertEquals(first.exitCode, 1);
             assertEquals(prompts, inherit ? 0 : 1);
-            setExactProjectCustomSetting("verification_command", "printf repaired", executionRoot);
+            setExactProjectCustomSetting("verification_command", passingCommand, executionRoot);
             const second = await runLocalCI({
                 hostedSession: session,
                 cwd: executionRoot,
@@ -219,7 +225,7 @@ for (const inherit of [false, true]) {
                 sealedExecutionCommit: checkpoint.executionCommit,
                 allowedPlanPaths: [],
             });
-            assertStringIncludes(await git(root, ["show", "HEAD:.wld/settings.json"]), "printf repaired");
+            assertStringIncludes(await git(root, ["show", "HEAD:.wld/settings.json"]), passingCommand);
         } finally {
             session?.dispose();
             if (executionRoot) {

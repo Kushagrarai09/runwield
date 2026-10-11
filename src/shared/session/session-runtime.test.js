@@ -1,7 +1,12 @@
+import { delimiter } from "node:path";
+import {
+    writeWorkflowBinaryFixtures,
+    assertWorkflowBinaryCallsSupported,
+} from "../../testing/workflow-binary-fixtures.ts";
 import { serveHttp } from "../http-server.ts";
 import { makeTempFile } from "../../testing/temp-file.ts";
 import { tmpdir } from "node:os";
-import { test } from "node:test";
+import { after, before, test } from "node:test";
 import {
     mkdir as fsMkdir,
     mkdtemp as fsMkdtemp,
@@ -54,6 +59,27 @@ import { WORKFLOW_TOOL_EVENT_CUSTOM_TYPE } from "../workflow/workflow-tool-event
 import { getHomeDir, SUBAGENTS } from "../../constants.js";
 import { defineCommittedGitFixture, git } from "../git-test-fixture.ts";
 
+let helperRoot = "";
+let priorHelperPath = "";
+before(() =>
+    withProcessGlobalTestLock(async () => {
+        priorHelperPath = process.env.PATH || "";
+        helperRoot = await fsMkdtemp(join(tmpdir(), "session-runtime-helpers-"));
+        const bin = await writeWorkflowBinaryFixtures(helperRoot);
+        process.env.PATH = `${bin}${delimiter}${priorHelperPath}`;
+    }),
+);
+after(() =>
+    withProcessGlobalTestLock(async () => {
+        process.env.PATH = priorHelperPath;
+        try {
+            await assertWorkflowBinaryCallsSupported(helperRoot);
+        } finally {
+            await fsRm(helperRoot, { recursive: true });
+        }
+    }),
+);
+
 const RUNTIME_TEST_PROVIDER = "session-runtime-test";
 const RUNTIME_TEST_MODEL = "fixture-model";
 const RUNTIME_TEST_API = "session-runtime-faux";
@@ -99,14 +125,16 @@ function ensureRuntimeModelFixture() {
                     baseUrl: "http://127.0.0.1:0",
                     apiKey: "fixture-key",
                     api: RUNTIME_TEST_API,
-                    models: [{
-                        id: RUNTIME_TEST_MODEL,
-                        name: "SessionRuntime Fixture Model",
-                        api: RUNTIME_TEST_API,
-                        input: ["text", "image"],
-                        contextWindow: 128000,
-                        maxTokens: 4096,
-                    }],
+                    models: [
+                        {
+                            id: RUNTIME_TEST_MODEL,
+                            name: "SessionRuntime Fixture Model",
+                            api: RUNTIME_TEST_API,
+                            input: ["text", "image"],
+                            contextWindow: 128000,
+                            maxTokens: 4096,
+                        },
+                    ],
                 },
             },
         }),
@@ -131,10 +159,7 @@ function ensureRuntimeModelFixture() {
         models: [{ id: RUNTIME_TEST_MODEL, name: "SessionRuntime Fixture Model", input: ["text", "image"] }],
     });
     runtimeFauxProvider.setResponses(
-        Array.from(
-            { length: 100 },
-            () => () => fauxAssistantMessage(fauxText("SessionRuntime fixture response.")),
-        ),
+        Array.from({ length: 100 }, () => () => fauxAssistantMessage(fauxText("SessionRuntime fixture response."))),
     );
     __resetSettingsForTests();
 }
@@ -144,10 +169,7 @@ function setRuntimeModelMessages(messages) {
     ensureRuntimeModelFixture();
     runtimeFauxProvider?.setResponses([
         ...messages.map((message) => () => message),
-        ...Array.from(
-            { length: 100 },
-            () => () => fauxAssistantMessage(fauxText("SessionRuntime fixture response.")),
-        ),
+        ...Array.from({ length: 100 }, () => () => fauxAssistantMessage(fauxText("SessionRuntime fixture response."))),
     ]);
 }
 
@@ -156,10 +178,7 @@ function setRuntimeModelResponseFactories(factories) {
     ensureRuntimeModelFixture();
     runtimeFauxProvider?.setResponses([
         ...factories,
-        ...Array.from(
-            { length: 100 },
-            () => () => fauxAssistantMessage(fauxText("SessionRuntime fixture response.")),
-        ),
+        ...Array.from({ length: 100 }, () => () => fauxAssistantMessage(fauxText("SessionRuntime fixture response."))),
     ]);
 }
 
@@ -212,8 +231,9 @@ async function removeTempDir(path) {
             await fsRm(path, { recursive: true });
             return;
         } catch (error) {
-            if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return;
-            const isRetryable = error instanceof Error &&
+            if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
+            const isRetryable =
+                error instanceof Error &&
                 /Directory not empty|resource busy|os error 66|os error 16/i.test(error.message);
             if (!isRetryable || attempt === 4) throw error;
             await delay(25 * (attempt + 1));
@@ -338,7 +358,10 @@ test("SessionRuntime restores the previous user model override when active root 
     assertEquals(session.getActiveModelState(), { model: "sonnet", provider: "anthropic" });
     assertStrictEquals(session.getRootAgentSession(), previousAgentSession);
     assertStrictEquals(session.getActiveOnMessage(), previousHandler);
-    assertEquals(events.filter((event) => event.type === RuntimeEventTypes.MODEL_CHANGED), []);
+    assertEquals(
+        events.filter((event) => event.type === RuntimeEventTypes.MODEL_CHANGED),
+        [],
+    );
 });
 
 function makeSteeringAgentSession() {
@@ -642,9 +665,8 @@ test("SessionRuntime uses the model selected by image preflight for submission",
                     initialImages: [image],
                 });
                 assertEquals(preflight.ok, true);
-                const preparedModelOverride = "preparedModelOverride" in preflight
-                    ? preflight.preparedModelOverride
-                    : undefined;
+                const preparedModelOverride =
+                    "preparedModelOverride" in preflight ? preflight.preparedModelOverride : undefined;
                 assertEquals(preparedModelOverride, "runtime-command-fixture/fixture-model");
                 await fsWriteFile(
                     settingsPath,
@@ -705,9 +727,8 @@ test("SessionRuntime keeps a prepared image model through Prompt Template prefli
                     initialImages: [image],
                 });
                 assertEquals(preflight.ok, true);
-                const preparedModelOverride = "preparedModelOverride" in preflight
-                    ? preflight.preparedModelOverride
-                    : undefined;
+                const preparedModelOverride =
+                    "preparedModelOverride" in preflight ? preflight.preparedModelOverride : undefined;
                 assertEquals(preparedModelOverride, "runtime-command-fixture/fixture-model");
                 await fsWriteFile(
                     join(homeDir, ".wld", "models.json"),
@@ -718,21 +739,24 @@ test("SessionRuntime keeps a prepared image model through Prompt Template prefli
                                 baseUrl: "http://127.0.0.1:0",
                                 apiKey: "fixture-key",
                                 api: "runtime-command-faux",
-                                models: [{
-                                    id: "fixture-model",
-                                    name: "Runtime Command Fixture Model",
-                                    api: "runtime-command-faux",
-                                    input: ["text", "image"],
-                                    contextWindow: 128000,
-                                    maxTokens: 4096,
-                                }, {
-                                    id: "text-only-model",
-                                    name: "Text Only",
-                                    api: "runtime-command-faux",
-                                    input: ["text"],
-                                    contextWindow: 128000,
-                                    maxTokens: 4096,
-                                }],
+                                models: [
+                                    {
+                                        id: "fixture-model",
+                                        name: "Runtime Command Fixture Model",
+                                        api: "runtime-command-faux",
+                                        input: ["text", "image"],
+                                        contextWindow: 128000,
+                                        maxTokens: 4096,
+                                    },
+                                    {
+                                        id: "text-only-model",
+                                        name: "Text Only",
+                                        api: "runtime-command-faux",
+                                        input: ["text"],
+                                        contextWindow: 128000,
+                                        maxTokens: 4096,
+                                    },
+                                ],
                             },
                         },
                     }),
@@ -832,10 +856,16 @@ test("SessionRuntime persists a newly managed Pi transcript before cataloging it
                 assertExists(segment?.transcriptPath);
                 assertEquals((await fsStat(segment.transcriptPath)).isFile(), true);
                 const resumable = await runtime.listResumableSessions(cwd);
-                assertEquals(resumable.some((session) => session.id === created.sessionManagerId), false);
+                assertEquals(
+                    resumable.some((session) => session.id === created.sessionManagerId),
+                    false,
+                );
                 await runtime.renameSession(created.sessionId, "Named empty Session");
                 const named = await runtime.listResumableSessions(cwd);
-                assertEquals(named.some((session) => session.id === created.sessionManagerId), true);
+                assertEquals(
+                    named.some((session) => session.id === created.sessionManagerId),
+                    true,
+                );
 
                 await runtime.switchAgent(created.sessionId, { agentName: "Ideator" });
                 const snapshot = runtime.getSessionSnapshot(created.sessionId);
@@ -980,9 +1010,9 @@ async function exerciseRepairCompactionFollowUp(disconnect) {
                         repairPromptText = JSON.stringify(context.messages.at(-1));
                         return disconnect
                             ? fauxAssistantMessage(fauxText(blockerText.repeat(3)), {
-                                stopReason: "error",
-                                errorMessage: "Unexpected EOF",
-                            })
+                                  stopReason: "error",
+                                  errorMessage: "Unexpected EOF",
+                              })
                             : fauxAssistantMessage(fauxText(blockerText));
                     },
                     () => fauxAssistantMessage(fauxText(`Compacted repair context keeps: ${blockerNeedle}`)),
@@ -1026,11 +1056,13 @@ async function exerciseRepairCompactionFollowUp(disconnect) {
                     const compaction = await runtime.compactSession(adopted.sessionId);
                     assertEquals(compaction.error, undefined);
                 }
-                setRuntimeModelResponseFactories([(context) => {
-                    deliveries += 1;
-                    promptText = JSON.stringify(context);
-                    return fauxAssistantMessage(fauxText("Follow-up reached the repair Agent."));
-                }]);
+                setRuntimeModelResponseFactories([
+                    (context) => {
+                        deliveries += 1;
+                        promptText = JSON.stringify(context);
+                        return fauxAssistantMessage(fauxText("Follow-up reached the repair Agent."));
+                    },
+                ]);
                 const result = await runtime.promptUserTurn(adopted.sessionId, {
                     initialRequest: "Summarize remaining repair work.",
                 });
@@ -1053,11 +1085,13 @@ async function exerciseRepairCompactionFollowUp(disconnect) {
                 ownerProcessKind: "test",
                 ownerInstanceId: "runtime-test-owner-reloaded",
             });
-            setRuntimeModelResponseFactories([(context) => {
-                deliveries += 1;
-                promptText = JSON.stringify(context);
-                return fauxAssistantMessage(fauxText("Reloaded follow-up reached the repair Agent."));
-            }]);
+            setRuntimeModelResponseFactories([
+                (context) => {
+                    deliveries += 1;
+                    promptText = JSON.stringify(context);
+                    return fauxAssistantMessage(fauxText("Reloaded follow-up reached the repair Agent."));
+                },
+            ]);
             try {
                 const loaded = reloadedRuntime.adoptManagedSession({
                     session: acquired.session,
@@ -1076,15 +1110,12 @@ async function exerciseRepairCompactionFollowUp(disconnect) {
                 );
                 assertStringIncludes(promptText, "Continue after disposal.");
                 assertStringIncludes(promptText, blockerNeedle);
-                assertEquals(
-                    reloadedRuntime.getSessionSnapshot(loaded.sessionId)?.cwd,
-                    await fsRealpath(worktreeRoot),
-                );
+                assertEquals(reloadedRuntime.getSessionSnapshot(loaded.sessionId)?.cwd, await fsRealpath(worktreeRoot));
             } finally {
                 await reloadedRuntime.closeAllSessionsWhenIdle?.();
             }
         } finally {
-            await Promise.resolve((/** @type {any} */ (manager))?.dispose?.());
+            await Promise.resolve(/** @type {any} */ (manager)?.dispose?.());
             store.close();
             process.env["HOME"] = previousHome;
             await removeTempDir(home);
@@ -1219,9 +1250,7 @@ test("SessionRuntime automatically recovers append-only output written before ge
                 timestamp: Date.now(),
                 content: [{ type: "text", text: "preserved output" }],
             });
-            await Promise.resolve(
-                (/** @type {{ dispose?: () => void | Promise<void> }} */ (manager)).dispose?.(),
-            );
+            await Promise.resolve(/** @type {{ dispose?: () => void | Promise<void> }} */ (manager).dispose?.());
             interruptedStore.close();
 
             const resumedStore = openFileSessionStore();
@@ -1250,121 +1279,113 @@ test("SessionRuntime automatically recovers append-only output written before ge
 });
 
 test("SessionRuntime synchronization recovers safe append-only output after a later interrupted turn", async () => {
-    await withRuntimeCommandFixture(
-        "runtime-managed-later-recovery-",
-        async ({ homeDir: home, projectRoot: cwd }) => {
-            const store = openOwnerCoordinationStore({ dbPath: `${home}/owner.sqlite3` });
-            const runtime = createSessionRuntime({
-                sessionStore: store,
+    await withRuntimeCommandFixture("runtime-managed-later-recovery-", async ({ homeDir: home, projectRoot: cwd }) => {
+        const store = openOwnerCoordinationStore({ dbPath: `${home}/owner.sqlite3` });
+        const runtime = createSessionRuntime({
+            sessionStore: store,
+            ownerProcessKind: "test",
+            ownerInstanceId: "runtime-recovery-owner",
+        });
+        try {
+            const sessionId = await runtime.createPromptReadySession({ cwd, agentName: "guide" });
+            const managed = runtime.getSessionSnapshot(sessionId)?.managed;
+            if (!managed) throw new Error("Fixture Session was not managed");
+            const segment = store.getCurrentSessionSegment(managed.runwieldSessionId);
+            if (!segment) throw new Error("Fixture Session segment was unavailable");
+            const state = store.inspectSessionActivation(managed.runwieldSessionId);
+            const proof = store.acquireSessionActivation({
+                runwieldSessionId: managed.runwieldSessionId,
+                projectId: managed.projectId,
+                ownerInstanceId: "interrupted-claude-turn",
                 ownerProcessKind: "test",
-                ownerInstanceId: "runtime-recovery-owner",
+                expectedGeneration: state.generation?.generation ?? null,
+                expectedCurrentSegmentId: managed.currentSegmentId,
+                phase: "turning",
             });
-            try {
-                const sessionId = await runtime.createPromptReadySession({ cwd, agentName: "guide" });
-                const managed = runtime.getSessionSnapshot(sessionId)?.managed;
-                if (!managed) throw new Error("Fixture Session was not managed");
-                const segment = store.getCurrentSessionSegment(managed.runwieldSessionId);
-                if (!segment) throw new Error("Fixture Session segment was unavailable");
-                const state = store.inspectSessionActivation(managed.runwieldSessionId);
-                const proof = store.acquireSessionActivation({
-                    runwieldSessionId: managed.runwieldSessionId,
-                    projectId: managed.projectId,
-                    ownerInstanceId: "interrupted-claude-turn",
-                    ownerProcessKind: "test",
-                    expectedGeneration: state.generation?.generation ?? null,
-                    expectedCurrentSegmentId: managed.currentSegmentId,
-                    phase: "turning",
-                });
-                await fsWriteFile(
-                    segment.transcriptPath,
-                    `${
-                        JSON.stringify({
-                            type: "custom",
-                            id: crypto.randomUUID(),
-                            customType: "runwield.backend_status",
-                            data: {
-                                version: 1,
-                                backend: "claude-cli",
-                                kind: "non_zero_exit",
-                                exitCode: 1,
-                                message: "Claude Code exited before completing the turn.",
-                            },
-                        })
-                    }\n`,
-                    { flag: "a" },
-                );
-                store.markSessionUncertain(proof, { reason: "Claude Code exited before completing the turn." });
+            await fsWriteFile(
+                segment.transcriptPath,
+                `${JSON.stringify({
+                    type: "custom",
+                    id: crypto.randomUUID(),
+                    customType: "runwield.backend_status",
+                    data: {
+                        version: 1,
+                        backend: "claude-cli",
+                        kind: "non_zero_exit",
+                        exitCode: 1,
+                        message: "Claude Code exited before completing the turn.",
+                    },
+                })}\n`,
+                { flag: "a" },
+            );
+            store.markSessionUncertain(proof, { reason: "Claude Code exited before completing the turn." });
 
-                const synchronized = await runtime.synchronizeManagedSession(sessionId);
+            const synchronized = await runtime.synchronizeManagedSession(sessionId);
 
-                assertEquals(synchronized.ok, true);
-                assertEquals(
-                    store.inspectSessionActivation(managed.runwieldSessionId).generation?.generation,
-                    (state.generation?.generation ?? 0) + 1,
-                );
-                assertEquals(store.inspectSessionActivation(managed.runwieldSessionId).activation?.state, "idle");
-                assertEquals(runtime.getSessionSnapshot(sessionId)?.managed?.syncState?.status, "current");
-                assertEquals(runtime.getUserTurnSubmissionBlockMessage(sessionId), null);
-            } finally {
-                await runtime.closeAllSessionsWhenIdle?.();
-                store.close();
-            }
-        },
-    );
+            assertEquals(synchronized.ok, true);
+            assertEquals(
+                store.inspectSessionActivation(managed.runwieldSessionId).generation?.generation,
+                (state.generation?.generation ?? 0) + 1,
+            );
+            assertEquals(store.inspectSessionActivation(managed.runwieldSessionId).activation?.state, "idle");
+            assertEquals(runtime.getSessionSnapshot(sessionId)?.managed?.syncState?.status, "current");
+            assertEquals(runtime.getUserTurnSubmissionBlockMessage(sessionId), null);
+        } finally {
+            await runtime.closeAllSessionsWhenIdle?.();
+            store.close();
+        }
+    });
 });
 
 test("SessionRuntime does not emit unchanged current managed sync state on idle polls", async () => {
-    await withRuntimeCommandFixture(
-        "runtime-managed-idle-sync-",
-        async ({ homeDir, projectRoot }) => {
-            const store = openOwnerCoordinationStore({ dbPath: `${homeDir}/owner.sqlite3` });
+    await withRuntimeCommandFixture("runtime-managed-idle-sync-", async ({ homeDir, projectRoot }) => {
+        const store = openOwnerCoordinationStore({ dbPath: `${homeDir}/owner.sqlite3` });
+        try {
+            const writerRuntime = createSessionRuntime({
+                sessionStore: store,
+                ownerProcessKind: "test",
+                ownerInstanceId: "runtime-idle-sync-writer",
+            });
+            let runwieldSessionId = "";
             try {
-                const writerRuntime = createSessionRuntime({
-                    sessionStore: store,
-                    ownerProcessKind: "test",
-                    ownerInstanceId: "runtime-idle-sync-writer",
-                });
-                let runwieldSessionId = "";
-                try {
-                    const created = await writerRuntime.createInteractiveSession({ cwd: projectRoot, mode: "new" });
-                    await writerRuntime.switchAgent(created.sessionId, { agentName: "Ideator" });
-                    runwieldSessionId = writerRuntime.getSessionSnapshot(created.sessionId)?.managed
-                        ?.runwieldSessionId || "";
-                    assert(runwieldSessionId);
-                } finally {
-                    await writerRuntime.closeAllSessionsWhenIdle?.();
-                }
-
-                const observerRuntime = createSessionRuntime({
-                    sessionStore: store,
-                    ownerProcessKind: "test",
-                    ownerInstanceId: "runtime-idle-sync-observer",
-                });
-                try {
-                    const resumed = await observerRuntime.createInteractiveSession({
-                        cwd: projectRoot,
-                        mode: "continue",
-                        resumeSessionId: runwieldSessionId,
-                    });
-                    await observerRuntime.synchronizeManagedSession(resumed.sessionId);
-                    /** @type {string[]} */
-                    const events = [];
-                    observerRuntime.subscribeSessionEvents(resumed.sessionId, (event) => {
-                        if (event.type === RuntimeEventTypes.MANAGED_SYNC_STATE_CHANGED) events.push(event.status);
-                    });
-
-                    await observerRuntime.synchronizeManagedSession(resumed.sessionId);
-                    await observerRuntime.synchronizeManagedSession(resumed.sessionId);
-
-                    assertEquals(events, []);
-                } finally {
-                    await observerRuntime.closeAllSessionsWhenIdle?.();
-                }
+                const created = await writerRuntime.createInteractiveSession({ cwd: projectRoot, mode: "new" });
+                await writerRuntime.switchAgent(created.sessionId, { agentName: "Ideator" });
+                runwieldSessionId =
+                    writerRuntime.getSessionSnapshot(created.sessionId)?.managed?.runwieldSessionId || "";
+                assert(runwieldSessionId);
             } finally {
-                store.close();
+                await writerRuntime.closeAllSessionsWhenIdle?.();
             }
-        },
-    );
+
+            const observerRuntime = createSessionRuntime({
+                sessionStore: store,
+                ownerProcessKind: "test",
+                ownerInstanceId: "runtime-idle-sync-observer",
+            });
+            try {
+                const resumed = await observerRuntime.createInteractiveSession({
+                    cwd: projectRoot,
+                    mode: "continue",
+                    resumeSessionId: runwieldSessionId,
+                });
+                await observerRuntime.synchronizeManagedSession(resumed.sessionId);
+                /** @type {string[]} */
+                const events = [];
+                observerRuntime.subscribeSessionEvents(resumed.sessionId, (event) => {
+                    if (event.type === RuntimeEventTypes.MANAGED_SYNC_STATE_CHANGED) events.push(event.status);
+                });
+
+                await observerRuntime.synchronizeManagedSession(resumed.sessionId);
+                await observerRuntime.synchronizeManagedSession(resumed.sessionId);
+
+                assertEquals(events, []);
+            } finally {
+                await observerRuntime.closeAllSessionsWhenIdle?.();
+            }
+        } finally {
+            store.close();
+        }
+    });
 });
 
 test("SessionRuntime hydrates dormant managed Sessions for direct Plan workflow operations", async () => {
@@ -2076,11 +2097,13 @@ test("SessionRuntime persists tutorial context before the first model turn and r
     const runtime = makeRuntime({ sessionHost });
     const cwd = runtimeProjectRoot();
     let contextSeenByModel = null;
-    setRuntimeModelResponseFactories([() => {
-        const active = runtime.listSessions()[0];
-        contextSeenByModel = active?.tutorialContext || null;
-        return fauxAssistantMessage(fauxText("Tutorial context observed."));
-    }]);
+    setRuntimeModelResponseFactories([
+        () => {
+            const active = runtime.listSessions()[0];
+            contextSeenByModel = active?.tutorialContext || null;
+            return fauxAssistantMessage(fauxText("Tutorial context observed."));
+        },
+    ]);
     const sessionId = await runtime.createPromptReadySession({ cwd, agentName: "guide" });
     const initialTutorialContext = {
         version: 1,
@@ -2382,7 +2405,8 @@ test("SessionRuntime snapshots and events keep workflow footer context separate 
     assertEquals(snapshot?.activeExecutionWorkflow === hostedSession.getActiveExecutionWorkflow(), false);
     assertEquals("workflow" in /** @type {Record<string, unknown>} */ (snapshot || {}), false);
     assertEquals(
-        events.filter((event) => event.type === RuntimeEventTypes.WORKFLOW_CONTEXT_CHANGED)
+        events
+            .filter((event) => event.type === RuntimeEventTypes.WORKFLOW_CONTEXT_CHANGED)
             .map((event) => event.workflowContext),
         [
             { routingIntent: "PLANNED_CHANGE", complexity: "MEDIUM" },
@@ -2443,7 +2467,10 @@ test("SessionRuntime emits one ordered lifecycle for one prompt", async () => {
     assertEquals(eventTypes.filter((type) => type === RuntimeEventTypes.ATTENTION_REQUESTED).length, 1);
     assertEquals(eventTypes.filter((type) => type === RuntimeEventTypes.ASSISTANT_TEXT_DELTA).length > 0, true);
     assertEquals(events.filter((event) => event.type === RuntimeEventTypes.USER_MESSAGE).length, 1);
-    assertEquals(events.every((event) => event.sessionId === sessionId), true);
+    assertEquals(
+        events.every((event) => event.sessionId === sessionId),
+        true,
+    );
 });
 
 test("SessionRuntime persists pending prompt images once a live manager exists", async () => {
@@ -2480,95 +2507,98 @@ test("SessionRuntime persists pending prompt images once a live manager exists",
 });
 
 test("SessionRuntime keeps executePlan workflow operations busy while preparation runs", async () => {
-    await withRuntimeCommandFixture(
-        "runtime-execute-busy-",
-        async ({ projectRoot: cwd, setModelResponseFactory }) => {
-            const runtime = createSessionRuntime();
-            /** @type {() => void} */
-            let releaseEngineerTurn = () => {};
-            const engineerTurnReleased = new Promise((resolve) => {
-                releaseEngineerTurn = /** @type {() => void} */ (resolve);
-            });
-            setModelResponseFactory(async () => {
-                await engineerTurnReleased;
-                return fauxAssistantMessage(fauxText("Execution remains paused in the fixture."));
-            });
-            const planName = "execute-busy-plan";
-            await savePlan(cwd, planName, `# ${planName}`, {
-                classification: "PLANNED_CHANGE",
-                status: "ready_for_work",
-                summary: planName,
-                affectedPaths: [],
-                planId: "execute-busy-plan-id",
-            });
-            // Exercise the real persisted-consent path against the fixture HOME. This keeps
-            // the test on the non-Git execution branch without replacing workflow machinery
-            // or opening an interactive prompt.
-            await rememberNonGitExecutionConsent("featurePlan", cwd);
-            const approvalEvidence = await loadPlanActionEvidence(cwd, "execute-busy-plan-id");
-            if (approvalEvidence.kind !== "success") throw new Error(approvalEvidence.message);
-            const sessionId = await runtime.createPromptReadySession({ cwd });
-            /** @type {boolean[]} */
-            const busyStates = [];
-            /** @type {RuntimePreparationBusySample[]} */
-            const preparationMessages = [];
-            /** @type {() => void} */
-            let resolveLaunchSeen = () => {};
-            const launchSeen = new Promise((resolve) => {
-                resolveLaunchSeen = /** @type {() => void} */ (resolve);
-            });
-            runtime.subscribeSessionEvents(sessionId, (event) => {
-                if (event.type === RuntimeEventTypes.BUSY_CHANGED) busyStates.push(event.busy);
-                if ("message" in event && typeof event.message === "string") {
-                    if (
-                        event.message.includes("Preparing the implementation target") ||
-                        event.message.includes("Preparing in-place work because Git is unavailable") ||
-                        event.message.includes("Marking the Plan as in progress") ||
-                        event.message.includes("Starting Plan Engineer")
-                    ) {
-                        preparationMessages.push({
-                            message: event.message,
-                            busy: runtime.getSessionSnapshot(sessionId)?.busy,
-                        });
-                    }
-                    if (event.message.includes("Starting Plan Engineer")) resolveLaunchSeen();
+    await withRuntimeCommandFixture("runtime-execute-busy-", async ({ projectRoot: cwd, setModelResponseFactory }) => {
+        const runtime = createSessionRuntime();
+        /** @type {() => void} */
+        let releaseEngineerTurn = () => {};
+        const engineerTurnReleased = new Promise((resolve) => {
+            releaseEngineerTurn = /** @type {() => void} */ (resolve);
+        });
+        setModelResponseFactory(async () => {
+            await engineerTurnReleased;
+            return fauxAssistantMessage(fauxText("Execution remains paused in the fixture."));
+        });
+        const planName = "execute-busy-plan";
+        await savePlan(cwd, planName, `# ${planName}`, {
+            classification: "PLANNED_CHANGE",
+            status: "ready_for_work",
+            summary: planName,
+            affectedPaths: [],
+            planId: "execute-busy-plan-id",
+        });
+        // Exercise the real persisted-consent path against the fixture HOME. This keeps
+        // the test on the non-Git execution branch without replacing workflow machinery
+        // or opening an interactive prompt.
+        await rememberNonGitExecutionConsent("featurePlan", cwd);
+        const approvalEvidence = await loadPlanActionEvidence(cwd, "execute-busy-plan-id");
+        if (approvalEvidence.kind !== "success") throw new Error(approvalEvidence.message);
+        const sessionId = await runtime.createPromptReadySession({ cwd });
+        /** @type {boolean[]} */
+        const busyStates = [];
+        /** @type {RuntimePreparationBusySample[]} */
+        const preparationMessages = [];
+        /** @type {() => void} */
+        let resolveLaunchSeen = () => {};
+        const launchSeen = new Promise((resolve) => {
+            resolveLaunchSeen = /** @type {() => void} */ (resolve);
+        });
+        runtime.subscribeSessionEvents(sessionId, (event) => {
+            if (event.type === RuntimeEventTypes.BUSY_CHANGED) busyStates.push(event.busy);
+            if ("message" in event && typeof event.message === "string") {
+                if (
+                    event.message.includes("Preparing the implementation target") ||
+                    event.message.includes("Preparing in-place work because Git is unavailable") ||
+                    event.message.includes("Marking the Plan as in progress") ||
+                    event.message.includes("Starting Plan Engineer")
+                ) {
+                    preparationMessages.push({
+                        message: event.message,
+                        busy: runtime.getSessionSnapshot(sessionId)?.busy,
+                    });
                 }
-            });
-
-            const execution = runtime.executePlan(sessionId, {
-                planName,
-                triageMeta: {
-                    planId: "execute-busy-plan-id",
-                    classification: "PLANNED_CHANGE",
-                    revision: approvalEvidence.evidence.revision,
-                    status: approvalEvidence.evidence.status,
-                    worktree: approvalEvidence.evidence.worktree,
-                },
-            });
-
-            const preparation = await Promise.race([
-                launchSeen.then(() => ({ kind: "launched" })),
-                execution.then((result) => ({ kind: "completed", result })),
-            ]);
-            if (preparation.kind === "completed" && "result" in preparation) {
-                throw new Error(`Execution completed before Engineer launch: ${JSON.stringify(preparation.result)}`);
+                if (event.message.includes("Starting Plan Engineer")) resolveLaunchSeen();
             }
-            assertEquals(runtime.getSessionSnapshot(sessionId)?.busy, true);
-            releaseEngineerTurn();
-            await execution;
+        });
 
-            assertEquals(busyStates, [true, false]);
-            assertEquals(preparationMessages.map((entry) => entry.message), [
+        const execution = runtime.executePlan(sessionId, {
+            planName,
+            triageMeta: {
+                planId: "execute-busy-plan-id",
+                classification: "PLANNED_CHANGE",
+                revision: approvalEvidence.evidence.revision,
+                status: approvalEvidence.evidence.status,
+                worktree: approvalEvidence.evidence.worktree,
+            },
+        });
+
+        const preparation = await Promise.race([
+            launchSeen.then(() => ({ kind: "launched" })),
+            execution.then((result) => ({ kind: "completed", result })),
+        ]);
+        if (preparation.kind === "completed" && "result" in preparation) {
+            throw new Error(`Execution completed before Engineer launch: ${JSON.stringify(preparation.result)}`);
+        }
+        assertEquals(runtime.getSessionSnapshot(sessionId)?.busy, true);
+        releaseEngineerTurn();
+        await execution;
+
+        assertEquals(busyStates, [true, false]);
+        assertEquals(
+            preparationMessages.map((entry) => entry.message),
+            [
                 "Preparing the implementation target...",
                 "Preparing in-place work because Git is unavailable...",
                 "Marking the Plan as in progress...",
                 "Starting Plan Engineer...",
-            ]);
-            assertEquals(preparationMessages.map((entry) => entry.busy), [true, true, true, true]);
-            assertEquals(runtime.getSessionSnapshot(sessionId)?.busy, false);
-            runtime.closeAllSessions();
-        },
-    );
+            ],
+        );
+        assertEquals(
+            preparationMessages.map((entry) => entry.busy),
+            [true, true, true, true],
+        );
+        assertEquals(runtime.getSessionSnapshot(sessionId)?.busy, false);
+        runtime.closeAllSessions();
+    });
 });
 
 test("SessionRuntime keeps direct model operations busy until the outermost operation settles", async () => {
@@ -2630,7 +2660,8 @@ test("SessionRuntime event subscriptions unsubscribe deterministically", async (
     await runtime.setSessionThinkingLevel(sessionId, "medium");
 
     assertEquals(
-        events.filter((event) => event.type === RuntimeEventTypes.THINKING_LEVEL_CHANGED)
+        events
+            .filter((event) => event.type === RuntimeEventTypes.THINKING_LEVEL_CHANGED)
             .map((event) => event.thinkingLevel),
         ["low"],
     );
@@ -2672,10 +2703,12 @@ test("SessionRuntime persists local shell commands as bash execution messages vi
         persist: true,
     });
     let nextTurnContext = "";
-    setRuntimeModelResponseFactories([(context) => {
-        nextTurnContext = JSON.stringify(context.messages);
-        return fauxAssistantMessage(fauxText("Observed the shell result."));
-    }]);
+    setRuntimeModelResponseFactories([
+        (context) => {
+            nextTurnContext = JSON.stringify(context.messages);
+            return fauxAssistantMessage(fauxText("Observed the shell result."));
+        },
+    ]);
     await runtime.promptSession(sessionId, { initialRequest: "what happened?", initialImages: [] });
 
     assertEquals(nextTurnContext.includes("visible-shell"), true);
@@ -2701,50 +2734,56 @@ test("SessionRuntime cancellation terminates an active local shell command", asy
     assertEquals(result.exitCode, 130);
 });
 
-test("SessionRuntime cancellation kills the local shell command's descendant processes", {
-    skip: process.platform === "win32",
-}, async () => {
-    const runtime = makeRuntime();
-    const { sessionId } = await runtime.createInteractiveSession({ cwd: runtimeProjectRoot() });
-    const pidFile = await makeTempFile({ prefix: "runwield-local-shell-descendant-" });
-    let resolveStarted = () => {};
-    const started = new Promise((resolve) => {
-        resolveStarted = () => resolve(undefined);
-    });
-    runtime.subscribeSessionEvents(sessionId, (event) => {
-        if (event.type === RuntimeEventTypes.TOOL_START) resolveStarted();
-    });
+test(
+    "SessionRuntime cancellation kills the local shell command's descendant processes",
+    {
+        skip: process.platform === "win32",
+    },
+    async () => {
+        const runtime = makeRuntime();
+        const { sessionId } = await runtime.createInteractiveSession({ cwd: runtimeProjectRoot() });
+        const pidFile = await makeTempFile({ prefix: "runwield-local-shell-descendant-" });
+        let resolveStarted = () => {};
+        const started = new Promise((resolve) => {
+            resolveStarted = () => resolve(undefined);
+        });
+        runtime.subscribeSessionEvents(sessionId, (event) => {
+            if (event.type === RuntimeEventTypes.TOOL_START) resolveStarted();
+        });
 
-    const command = runtime.runLocalShellCommand(sessionId, {
-        command: `sleep 30 & echo $! > ${pidFile}; wait`,
-        persist: false,
-    });
-    await started;
-    let descendantPid = 0;
-    while (!descendantPid) {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        descendantPid = Number((await fsReadFile(pidFile, "utf8")).trim()) || 0;
-    }
-    runtime.cancelSession(sessionId);
-    const result = await command;
+        const command = runtime.runLocalShellCommand(sessionId, {
+            command: `sleep 30 & echo $! > ${pidFile}; wait`,
+            persist: false,
+        });
+        await started;
+        let descendantPid = 0;
+        while (!descendantPid) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            descendantPid = Number((await fsReadFile(pidFile, "utf8")).trim()) || 0;
+        }
+        runtime.cancelSession(sessionId);
+        const result = await command;
 
-    const descendantDead = await waitForProcessDeath(descendantPid);
-    if (!descendantDead) process.kill(descendantPid, "SIGKILL");
-    await fsRm(pidFile).catch(() => {});
+        const descendantDead = await waitForProcessDeath(descendantPid);
+        if (!descendantDead) process.kill(descendantPid, "SIGKILL");
+        await fsRm(pidFile).catch(() => {});
 
-    assertEquals(result.canceled, true);
-    assertEquals(result.exitCode, 130);
-    assertEquals(
-        descendantDead,
-        true,
-        "cancellation must kill the wrapper shell's descendants, not only the wrapper",
-    );
-});
+        assertEquals(result.canceled, true);
+        assertEquals(result.exitCode, 130);
+        assertEquals(
+            descendantDead,
+            true,
+            "cancellation must kill the wrapper shell's descendants, not only the wrapper",
+        );
+    },
+);
 
 test("SessionRuntime publishes handler errors and releases the turn", async () => {
-    setRuntimeModelResponseFactories([() => {
-        throw new Error("boom");
-    }]);
+    setRuntimeModelResponseFactories([
+        () => {
+            throw new Error("boom");
+        },
+    ]);
     const runtime = makeRuntime();
     const sessionId = await runtime.createPromptReadySession({ cwd: runtimeProjectRoot() });
     /** @type {string[]} */
@@ -2772,11 +2811,13 @@ test("SessionRuntime rejects overlapping turns for one id", async () => {
     const started = new Promise((resolve) => {
         markStarted = () => resolve(undefined);
     });
-    setRuntimeModelResponseFactories([async () => {
-        markStarted();
-        await released;
-        return fauxAssistantMessage(fauxText("Released."));
-    }]);
+    setRuntimeModelResponseFactories([
+        async () => {
+            markStarted();
+            await released;
+            return fauxAssistantMessage(fauxText("Released."));
+        },
+    ]);
     const runtime = makeRuntime();
     const sessionId = await runtime.createPromptReadySession({ cwd: runtimeProjectRoot() });
 
@@ -2817,12 +2858,14 @@ test("SessionRuntime allows independent session ids to run concurrently", async 
         markBothStarted = () => resolve(undefined);
     });
     let startedCount = 0;
-    setRuntimeModelResponseFactories(["Alpha.", "Beta."].map((text) => async () => {
-        startedCount++;
-        if (startedCount === 2) markBothStarted();
-        await released;
-        return fauxAssistantMessage(fauxText(text));
-    }));
+    setRuntimeModelResponseFactories(
+        ["Alpha.", "Beta."].map((text) => async () => {
+            startedCount++;
+            if (startedCount === 2) markBothStarted();
+            await released;
+            return fauxAssistantMessage(fauxText(text));
+        }),
+    );
     const runtime = makeRuntime();
     const alpha = await runtime.createPromptReadySession({ cwd: runtimeProjectRoot() });
     const beta = await runtime.createPromptReadySession({ cwd: runtimeProjectRoot() });
@@ -2849,7 +2892,10 @@ test("SessionRuntime allows independent session ids to run concurrently", async 
         await Promise.all(prompts);
         await runtime.closeAllSessionsWhenIdle();
     }
-    assertEquals((await Promise.all(prompts)).map((result) => result.ok), [true, true]);
+    assertEquals(
+        (await Promise.all(prompts)).map((result) => result.ok),
+        [true, true],
+    );
 });
 
 test("SessionRuntime /reload publishes replacement Prompt Template and Skill catalogs", async () => {
@@ -2903,15 +2949,22 @@ test("SessionRuntime /reload publishes replacement Prompt Template and Skill cat
 
         assertEquals(await runtime.reloadSession(created.sessionId), { ok: true });
         assertEquals(catalogEvents.length, 1);
-        const catalogEvent =
-            /** @type {import('./session-runtime-events.js').RuntimeCommandCatalogChangedEvent} */ (catalogEvents[0]);
+        const catalogEvent = /** @type {import('./session-runtime-events.js').RuntimeCommandCatalogChangedEvent} */ (
+            catalogEvents[0]
+        );
         assertEquals(
             catalogEvent.promptTemplates.find((template) => template.name === "reload-prompt")?.description,
             "after reload",
         );
-        assertEquals(catalogEvent.promptTemplates.some((template) => template.name === "added-prompt"), true);
+        assertEquals(
+            catalogEvent.promptTemplates.some((template) => template.name === "added-prompt"),
+            true,
+        );
         assertEquals(catalogEvent.skills.find((skill) => skill.name === "reload-fixture")?.description, "after skill");
-        assertEquals(catalogEvent.skills.some((skill) => skill.name === "removed-fixture"), false);
+        assertEquals(
+            catalogEvent.skills.some((skill) => skill.name === "removed-fixture"),
+            false,
+        );
         assertEquals(await runtime.expandSessionPromptTemplate(join(promptDir, "reload-prompt.md")), "after body");
         await assertRejects(
             () => runtime.expandSessionSkillCommand(created.sessionId, "removed-fixture"),
@@ -2967,7 +3020,10 @@ test("SessionRuntime ignores synthetic switch-requesting tool results", async ()
     assertEquals(result.ok, true);
     assertEquals(result.turns, 1);
     assertEquals(submittedMessages, ["fix this"]);
-    assertEquals(changedAgents.filter((agentName) => agentName !== "engineer"), []);
+    assertEquals(
+        changedAgents.filter((agentName) => agentName !== "engineer"),
+        [],
+    );
     assertEquals(runtime.getSessionSnapshot(sessionId)?.activeAgent, activeAgentBefore);
 });
 
@@ -2989,17 +3045,19 @@ test("SessionRuntime delivers steering submitted from the Triage report to Plann
         const agentName = tools.includes("triage_report")
             ? "router"
             : tools.includes("plan_written")
-            ? "planner"
-            : "other";
+              ? "planner"
+              : "other";
         providerRequests.push({ agentName, messages, imageCount });
         if (agentName === "router") {
-            return fauxAssistantMessage(fauxToolCall("triage_report", {
-                routingIntent: "PLANNED_CHANGE",
-                workKind: "BUG_FIX",
-                complexity: "MEDIUM",
-                summary: "Fix the steering handoff race.",
-                sessionName: "Fix steering handoff",
-            }));
+            return fauxAssistantMessage(
+                fauxToolCall("triage_report", {
+                    routingIntent: "PLANNED_CHANGE",
+                    workKind: "BUG_FIX",
+                    complexity: "MEDIUM",
+                    summary: "Fix the steering handoff race.",
+                    sessionName: "Fix steering handoff",
+                }),
+            );
         }
         return fauxAssistantMessage(fauxText("Planner received the handoff."));
     };
@@ -3013,10 +3071,7 @@ test("SessionRuntime delivers steering submitted from the Triage report to Plann
     let plannerSteeringSubmission = null;
     runtime.subscribeSessionEvents(sessionId, (event) => {
         runtimeEvents.push(event);
-        if (
-            !steeringSubmission && event.type === RuntimeEventTypes.SYSTEM_STATUS &&
-            event.header === "Triage"
-        ) {
+        if (!steeringSubmission && event.type === RuntimeEventTypes.SYSTEM_STATUS && event.header === "Triage") {
             steeringSubmission = runtime.steerSession(
                 sessionId,
                 "Keep the reproduction deterministic.",
@@ -3025,7 +3080,8 @@ test("SessionRuntime delivers steering submitted from the Triage report to Plann
             );
         }
         if (
-            !plannerSteeringSubmission && event.type === RuntimeEventTypes.AGENT_CHANGED &&
+            !plannerSteeringSubmission &&
+            event.type === RuntimeEventTypes.AGENT_CHANGED &&
             event.agentName === "planner"
         ) {
             plannerSteeringSubmission = runtime.steerSession(
@@ -3073,20 +3129,25 @@ test("SessionRuntime delivers steering submitted from the Triage report to Plann
     const hostedSession = sessionHost.requireSession(sessionId);
     const transcriptPath = hostedSession.getManagedMetadata()?.transcriptPath;
     assertExists(transcriptPath);
-    const transcriptEntries = (await fsReadFile(transcriptPath, "utf8")).trim().split("\n").map((line) =>
-        JSON.parse(line)
-    );
+    const transcriptEntries = (await fsReadFile(transcriptPath, "utf8"))
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
     assertEquals(
-        transcriptEntries.filter((entry) =>
-            entry.type === "custom" && entry.customType === WORKFLOW_TOOL_EVENT_CUSTOM_TYPE &&
-            entry.data?.state === "accepted" && entry.data?.kind === "triage_report"
+        transcriptEntries.filter(
+            (entry) =>
+                entry.type === "custom" &&
+                entry.customType === WORKFLOW_TOOL_EVENT_CUSTOM_TYPE &&
+                entry.data?.state === "accepted" &&
+                entry.data?.kind === "triage_report",
         ).length,
         1,
     );
     const deliveredSteering = /** @type {import('./session-runtime-events.js').RuntimeUserMessageEvent[]} */ (
-        runtimeEvents.filter((event) =>
-            event.type === RuntimeEventTypes.USER_MESSAGE &&
-            [steered.message?.id, plannerSteered.message?.id].includes(event.messageId)
+        runtimeEvents.filter(
+            (event) =>
+                event.type === RuntimeEventTypes.USER_MESSAGE &&
+                [steered.message?.id, plannerSteered.message?.id].includes(event.messageId),
         )
     );
     assertEquals(deliveredSteering.length, 2);
@@ -3122,13 +3183,15 @@ test("SessionRuntime transfers pending Router steering to Planner in submission 
         if (agentName === "router") {
             routerResponseStarted.resolve();
             await releaseRouterResponse.promise;
-            return fauxAssistantMessage(fauxToolCall("triage_report", {
-                routingIntent: "PLANNED_CHANGE",
-                workKind: "BUG_FIX",
-                complexity: "MEDIUM",
-                summary: "Transfer pending steering in order.",
-                sessionName: "Ordered handoff steering",
-            }));
+            return fauxAssistantMessage(
+                fauxToolCall("triage_report", {
+                    routingIntent: "PLANNED_CHANGE",
+                    workKind: "BUG_FIX",
+                    complexity: "MEDIUM",
+                    summary: "Transfer pending steering in order.",
+                    sessionName: "Ordered handoff steering",
+                }),
+            );
         }
         return fauxAssistantMessage(fauxText("Planner received the pending steering."));
     };
@@ -3141,11 +3204,9 @@ test("SessionRuntime transfers pending Router steering to Planner in submission 
 
     await routerResponseStarted.promise;
     const firstSteering = await runtime.steerSession(sessionId, "First pending instruction.", []);
-    const secondSteering = await runtime.steerSession(
-        sessionId,
-        "Second pending instruction with image.",
-        [{ base64: RUNTIME_TEST_PNG, mimeType: "image/png" }],
-    );
+    const secondSteering = await runtime.steerSession(sessionId, "Second pending instruction with image.", [
+        { base64: RUNTIME_TEST_PNG, mimeType: "image/png" },
+    ]);
     releaseRouterResponse.resolve();
 
     const result = await prompt;
@@ -3180,13 +3241,15 @@ test("SessionRuntime waits for steering submitted during replacement prompt prep
             imageCount: 0,
         });
         if (agentName === "router") {
-            return fauxAssistantMessage(fauxToolCall("triage_report", {
-                routingIntent: "PLANNED_CHANGE",
-                workKind: "BUG_FIX",
-                complexity: "MEDIUM",
-                summary: "Hold replacement prompt preparation.",
-                sessionName: "Prepared replacement steering",
-            }));
+            return fauxAssistantMessage(
+                fauxToolCall("triage_report", {
+                    routingIntent: "PLANNED_CHANGE",
+                    workKind: "BUG_FIX",
+                    complexity: "MEDIUM",
+                    summary: "Hold replacement prompt preparation.",
+                    sessionName: "Prepared replacement steering",
+                }),
+            );
         }
         return fauxAssistantMessage(fauxText("Planner received preparation-time steering."));
     };
@@ -3208,7 +3271,10 @@ test("SessionRuntime waits for steering submitted during replacement prompt prep
 
     await plannerActivated.promise;
     await Promise.resolve();
-    assertEquals(providerRequests.map((request) => request.agentName), ["router"]);
+    assertEquals(
+        providerRequests.map((request) => request.agentName),
+        ["router"],
+    );
     assertExists(steeringSubmission);
     const steered = await /** @type {Promise<SteeringResult>} */ (steeringSubmission);
     assertEquals(steered.queued, true);
@@ -3232,13 +3298,15 @@ test("SessionRuntime does not replay handoff steering after a replacement provid
     const response = (context) => {
         const tools = getCurrentTools(context.messages).map((tool) => tool.name);
         if (tools.includes("triage_report")) {
-            return fauxAssistantMessage(fauxToolCall("triage_report", {
-                routingIntent: "PLANNED_CHANGE",
-                workKind: "BUG_FIX",
-                complexity: "MEDIUM",
-                summary: "Do not replay handoff steering after an error.",
-                sessionName: "No steering replay",
-            }));
+            return fauxAssistantMessage(
+                fauxToolCall("triage_report", {
+                    routingIntent: "PLANNED_CHANGE",
+                    workKind: "BUG_FIX",
+                    complexity: "MEDIUM",
+                    summary: "Do not replay handoff steering after an error.",
+                    sessionName: "No steering replay",
+                }),
+            );
         }
         plannerRequests.push(JSON.stringify(context.messages));
         plannerAttempts += 1;
@@ -3252,10 +3320,7 @@ test("SessionRuntime does not replay handoff steering after a replacement provid
     /** @type {string[]} */
     const statuses = [];
     runtime.subscribeSessionEvents(sessionId, (event) => {
-        if (
-            !steeringSubmission && event.type === RuntimeEventTypes.SYSTEM_STATUS &&
-            event.header === "Triage"
-        ) {
+        if (!steeringSubmission && event.type === RuntimeEventTypes.SYSTEM_STATUS && event.header === "Triage") {
             steeringSubmission = runtime.steerSession(sessionId, "Keep this steering exactly once.", [], "tui");
         }
         if (event.type === RuntimeEventTypes.QUEUED_MESSAGE_CHANGED) statuses.push(event.status);
@@ -3297,13 +3362,15 @@ test("SessionRuntime cancellation after Triage acceptance does not start the rep
         const agentName = tools.includes("triage_report") ? "router" : "replacement";
         providerAgents.push(agentName);
         if (agentName === "router") {
-            return fauxAssistantMessage(fauxToolCall("triage_report", {
-                routingIntent: "PLANNED_CHANGE",
-                workKind: "BUG_FIX",
-                complexity: "MEDIUM",
-                summary: "Cancel this handoff.",
-                sessionName: "Cancel handoff",
-            }));
+            return fauxAssistantMessage(
+                fauxToolCall("triage_report", {
+                    routingIntent: "PLANNED_CHANGE",
+                    workKind: "BUG_FIX",
+                    complexity: "MEDIUM",
+                    summary: "Cancel this handoff.",
+                    sessionName: "Cancel handoff",
+                }),
+            );
         }
         return fauxAssistantMessage(fauxText("Replacement must not run."));
     };
@@ -3317,10 +3384,12 @@ test("SessionRuntime cancellation after Triage acceptance does not start the rep
         }
     });
 
-    await runtime.promptUserTurn(sessionId, {
-        initialRequest: "Cancel after triage.",
-        initialImages: [],
-    }).catch(() => undefined);
+    await runtime
+        .promptUserTurn(sessionId, {
+            initialRequest: "Cancel after triage.",
+            initialImages: [],
+        })
+        .catch(() => undefined);
 
     assertEquals(cancellation, { ok: true, aborted: true });
     assertEquals(providerAgents, ["router"]);
@@ -3339,13 +3408,15 @@ test("SessionRuntime cancellation during Planner activation prevents replacement
         const agentName = tools.includes("triage_report") ? "router" : "planner";
         providerAgents.push(agentName);
         if (agentName === "router") {
-            return fauxAssistantMessage(fauxToolCall("triage_report", {
-                routingIntent: "PLANNED_CHANGE",
-                workKind: "BUG_FIX",
-                complexity: "MEDIUM",
-                summary: "Cancel during Planner activation.",
-                sessionName: "Cancel Planner activation",
-            }));
+            return fauxAssistantMessage(
+                fauxToolCall("triage_report", {
+                    routingIntent: "PLANNED_CHANGE",
+                    workKind: "BUG_FIX",
+                    complexity: "MEDIUM",
+                    summary: "Cancel during Planner activation.",
+                    sessionName: "Cancel Planner activation",
+                }),
+            );
         }
         return fauxAssistantMessage(fauxText("Planner must not run."));
     };
@@ -3359,10 +3430,12 @@ test("SessionRuntime cancellation during Planner activation prevents replacement
         }
     });
 
-    await runtime.promptUserTurn(sessionId, {
-        initialRequest: "Cancel when Planner activates.",
-        initialImages: [],
-    }).catch(() => undefined);
+    await runtime
+        .promptUserTurn(sessionId, {
+            initialRequest: "Cancel when Planner activates.",
+            initialImages: [],
+        })
+        .catch(() => undefined);
 
     assertEquals(cancellation, { ok: true, aborted: true });
     assertEquals(providerAgents, ["router"]);
@@ -3566,30 +3639,35 @@ test("SessionRuntime buffers identifiable steering for the replacement Agent and
         if (event.type === RuntimeEventTypes.QUEUED_MESSAGE_CHANGED) events.push(event);
     });
 
-    const steered = await runtime.steerSession(
-        sessionId,
-        "send this to the new Agent",
-        [{ base64: btoa("transition-image"), mimeType: "image/png" }],
-    );
+    const steered = await runtime.steerSession(sessionId, "send this to the new Agent", [
+        { base64: btoa("transition-image"), mimeType: "image/png" },
+    ]);
 
     assertEquals(steered.ok, true);
     assertEquals(steered.queued, true);
     assertExists(steered.message);
     assertEquals(rootSession.getSteeringMessages(), []);
     assertEquals(runtime.getQueuedMessages(sessionId), [steered.message]);
-    assertEquals(hostedSession.consumeAgentTransitionSteering(), [{
-        text: "send this to the new Agent",
-        images: [{ base64: btoa("transition-image"), mimeType: "image/png" }],
-        message: steered.message,
-    }]);
-    hostedSession.restoreAgentTransitionSteering([{
-        text: steered.message.text,
-        images: steered.message.images,
-        message: steered.message,
-    }]);
+    assertEquals(hostedSession.consumeAgentTransitionSteering(), [
+        {
+            text: "send this to the new Agent",
+            images: [{ base64: btoa("transition-image"), mimeType: "image/png" }],
+            message: steered.message,
+        },
+    ]);
+    hostedSession.restoreAgentTransitionSteering([
+        {
+            text: steered.message.text,
+            images: steered.message.images,
+            message: steered.message,
+        },
+    ]);
     const recalled = await runtime.dequeueLastQueuedMessage(sessionId);
     assertEquals(recalled.message?.id, steered.message.id);
-    assertEquals(events.map((event) => event.status), ["queued", "dequeued"]);
+    assertEquals(
+        events.map((event) => event.status),
+        ["queued", "dequeued"],
+    );
     assertEquals(runtime.getQueuedMessages(sessionId), []);
     hostedSession.completeAgentTransition(transitionId);
 });
@@ -3606,23 +3684,24 @@ test("SessionRuntime transfers old Agent steering without claiming consumption",
         if (event.type === RuntimeEventTypes.QUEUED_MESSAGE_CHANGED) statuses.push(event.status);
     });
     const first = await runtime.steerSession(sessionId, "first pending", []);
-    const second = await runtime.steerSession(
-        sessionId,
-        "second pending",
-        [{ base64: btoa("pending-image"), mimeType: "image/png" }],
-    );
+    const second = await runtime.steerSession(sessionId, "second pending", [
+        { base64: btoa("pending-image"), mimeType: "image/png" },
+    ]);
 
     const transitionId = hostedSession.beginAgentTransition();
     rootSession.clearQueue();
 
     assertEquals(rootSession.getSteeringMessages(), []);
     assertEquals(statuses, ["queued", "queued"]);
-    assertEquals(runtime.getQueuedMessages(sessionId).map((message) => message.id), [
-        first.message?.id,
-        second.message?.id,
-    ]);
+    assertEquals(
+        runtime.getQueuedMessages(sessionId).map((message) => message.id),
+        [first.message?.id, second.message?.id],
+    );
     const transferred = hostedSession.consumeAgentTransitionSteering();
-    assertEquals(transferred.map((entry) => entry.message?.id), [first.message?.id, second.message?.id]);
+    assertEquals(
+        transferred.map((entry) => entry.message?.id),
+        [first.message?.id, second.message?.id],
+    );
     assertEquals(transferred[1].images, [{ base64: btoa("pending-image"), mimeType: "image/png" }]);
     hostedSession.restoreAgentTransitionSteering(transferred);
     hostedSession.completeAgentTransition(transitionId);
@@ -3678,7 +3757,10 @@ test("SessionRuntime dequeue restores remaining steering onto original source wh
     assertEquals(dequeued.message?.text, "recall from child");
     assertEquals(foregroundSession.getSteeringMessages(), ["keep on child"]);
     assertEquals(otherForegroundSession.getSteeringMessages(), []);
-    assertEquals(runtime.getQueuedMessages(sessionId).map((message) => message.text), ["keep on child"]);
+    assertEquals(
+        runtime.getQueuedMessages(sessionId).map((message) => message.text),
+        ["keep on child"],
+    );
     hostedSession.popSteeringTargetSession(otherTargetId);
 });
 
@@ -3691,10 +3773,10 @@ test("SessionRuntime tracks steering before preparation and preserves submission
     const first = runtime.steerSession(sessionId, "first steering", []);
     const second = runtime.steerSession(sessionId, "second steering", []);
 
-    assertEquals(runtime.getQueuedMessages(sessionId).map((message) => message.text), [
-        "first steering",
-        "second steering",
-    ]);
+    assertEquals(
+        runtime.getQueuedMessages(sessionId).map((message) => message.text),
+        ["first steering", "second steering"],
+    );
     assertEquals((await first).queued, true);
     assertEquals((await second).queued, true);
     assertEquals(agentSession.getSteeringMessages(), ["first steering", "second steering"]);
@@ -3708,11 +3790,9 @@ test("SessionRuntime keeps pending steering ahead of newer transition steering",
     const hostedSession = sessionHost.requireSession(sessionId);
 
     await runtime.steerSession(sessionId, "first pending before handoff", []);
-    await runtime.steerSession(
-        sessionId,
-        "second pending before handoff",
-        [{ base64: btoa("pending-image"), mimeType: "image/png" }],
-    );
+    await runtime.steerSession(sessionId, "second pending before handoff", [
+        { base64: btoa("pending-image"), mimeType: "image/png" },
+    ]);
     hostedSession.beginAgentTransition();
     const duringHandoff = runtime.steerSession(sessionId, "newer transition steering", []);
     await Promise.resolve();
@@ -3790,7 +3870,7 @@ test("SessionRuntime moves image steering into the handoff after asynchronous pr
     const projectSettingsPath = join(projectRoot, ".wld", "settings.json");
     const originalModels = await fsReadFile(modelsPath, "utf8");
     const originalProjectSettings = await fsReadFile(projectSettingsPath, "utf8").catch((error) => {
-        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return null;
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
         throw error;
     });
     const modelConfiguration = JSON.parse(originalModels);
@@ -3812,11 +3892,9 @@ test("SessionRuntime moves image steering into the handoff after asynchronous pr
         );
         const sessionId = await attachExternalAgentSession(runtime, sessionHost, agentSession);
         const hostedSession = sessionHost.requireSession(sessionId);
-        const steering = runtime.steerSession(
-            sessionId,
-            "Image instruction prepared while handoff starts.",
-            [{ base64: btoa("async-image"), mimeType: "image/png" }],
-        );
+        const steering = runtime.steerSession(sessionId, "Image instruction prepared while handoff starts.", [
+            { base64: btoa("async-image"), mimeType: "image/png" },
+        ]);
         void steering.catch(() => undefined);
 
         await Promise.race([
@@ -4053,11 +4131,7 @@ test("SessionRuntime emits canceled lifecycle for an already-aborted interaction
     const controller = new AbortController();
     controller.abort();
 
-    const response = await runtime.requestInteraction(
-        sessionId,
-        { type: "text", prompt: "Name?" },
-        controller.signal,
-    );
+    const response = await runtime.requestInteraction(sessionId, { type: "text", prompt: "Name?" }, controller.signal);
 
     assertEquals(response.outcome, "canceled");
     assertEquals(types, [RuntimeEventTypes.INTERACTION_REQUESTED, RuntimeEventTypes.INTERACTION_CANCELED]);
@@ -4216,32 +4290,35 @@ test("SessionRuntime loadSession returns opaque metadata and redacted replay eve
     assertEquals("hostedSession" in result, false);
     assertEquals("sessionManager" in result, false);
     assertEquals(result.sessionManagerId, "persisted-1");
-    assertEquals(result.replayEvents.map((event) => event.type), [
-        RuntimeEventTypes.USER_MESSAGE,
-        RuntimeEventTypes.ASSISTANT_THINKING_DELTA,
-        RuntimeEventTypes.ASSISTANT_THINKING_END,
-        RuntimeEventTypes.ASSISTANT_TEXT_DELTA,
-        RuntimeEventTypes.TOOL_START,
-        RuntimeEventTypes.TOOL_END,
-        RuntimeEventTypes.TOOL_START,
-        RuntimeEventTypes.TOOL_END,
-        RuntimeEventTypes.SYSTEM_STATUS,
-        RuntimeEventTypes.SYSTEM_STATUS,
-    ]);
     assertEquals(
-        result.replayEvents.filter((event) => event.type === RuntimeEventTypes.SYSTEM_STATUS).map((event) =>
-            event.message
-        ),
+        result.replayEvents.map((event) => event.type),
+        [
+            RuntimeEventTypes.USER_MESSAGE,
+            RuntimeEventTypes.ASSISTANT_THINKING_DELTA,
+            RuntimeEventTypes.ASSISTANT_THINKING_END,
+            RuntimeEventTypes.ASSISTANT_TEXT_DELTA,
+            RuntimeEventTypes.TOOL_START,
+            RuntimeEventTypes.TOOL_END,
+            RuntimeEventTypes.TOOL_START,
+            RuntimeEventTypes.TOOL_END,
+            RuntimeEventTypes.SYSTEM_STATUS,
+            RuntimeEventTypes.SYSTEM_STATUS,
+        ],
+    );
+    assertEquals(
+        result.replayEvents
+            .filter((event) => event.type === RuntimeEventTypes.SYSTEM_STATUS)
+            .map((event) => event.message),
         ["Model changed: test/later", "Thinking level changed: medium"],
     );
-    const modernToolEnd =
-        /** @type {any} */ (result.replayEvents.find((event) =>
-            event.type === RuntimeEventTypes.TOOL_END && event.toolCallId === "tool-2"
-        ));
-    const modernToolStart =
-        /** @type {any} */ (result.replayEvents.find((event) =>
-            event.type === RuntimeEventTypes.TOOL_START && event.toolCallId === "tool-2"
-        ));
+    const modernToolEnd = /** @type {any} */ (
+        result.replayEvents.find((event) => event.type === RuntimeEventTypes.TOOL_END && event.toolCallId === "tool-2")
+    );
+    const modernToolStart = /** @type {any} */ (
+        result.replayEvents.find(
+            (event) => event.type === RuntimeEventTypes.TOOL_START && event.toolCallId === "tool-2",
+        )
+    );
     assertEquals(modernToolStart?.title, "read README.md");
     assertEquals(modernToolStart?.kind, "read");
     assertEquals(modernToolEnd?.output, "actual tool output");
@@ -4253,11 +4330,15 @@ test("SessionRuntime loadSession returns opaque metadata and redacted replay eve
         result.replayEvents.find((event) => event.type === RuntimeEventTypes.ASSISTANT_TEXT_DELTA)
     );
     assertEquals(assistantMessage?.agentName, "Planner");
-    const replayThinkingEvents = result.replayEvents.filter((event) =>
-        event.type === RuntimeEventTypes.ASSISTANT_THINKING_DELTA ||
-        event.type === RuntimeEventTypes.ASSISTANT_THINKING_END
+    const replayThinkingEvents = result.replayEvents.filter(
+        (event) =>
+            event.type === RuntimeEventTypes.ASSISTANT_THINKING_DELTA ||
+            event.type === RuntimeEventTypes.ASSISTANT_THINKING_END,
     );
-    assertEquals(replayThinkingEvents.map((event) => /** @type {any} */ (event).agentName), ["Planner", "Planner"]);
+    assertEquals(
+        replayThinkingEvents.map((event) => /** @type {any} */ (event).agentName),
+        ["Planner", "Planner"],
+    );
     assertEquals(JSON.stringify(result.replayEvents).includes("secret"), false);
     assertEquals(JSON.stringify(result.replayEvents).includes("[object Object]"), false);
     assertEquals(JSON.stringify(result.replayEvents).includes("runwield.active_agent"), false);
@@ -4313,20 +4394,18 @@ test("SessionRuntime replays persisted task_completed summaries and manual QA ch
         sessionId: "persisted-workflow",
         sessionPath,
     });
-    const workflowMessages = result.replayEvents.filter((event) =>
-        event.type === RuntimeEventTypes.ASSISTANT_TEXT_DELTA &&
-        /** @type {any} */ (event).messageKind === "workflow"
+    const workflowMessages = result.replayEvents.filter(
+        (event) =>
+            event.type === RuntimeEventTypes.ASSISTANT_TEXT_DELTA &&
+            /** @type {any} */ (event).messageKind === "workflow",
     );
 
-    assertEquals(workflowMessages.map((event) => /** @type {any} */ (event).workflowMessage), [
-        "task_completed",
-        "manual_qa_checklist",
-    ]);
-    assertEquals(/** @type {any} */ (workflowMessages[0]).delta, "**Task completed.**\n\n- Implemented the fix.");
     assertEquals(
-        /** @type {any} */ (workflowMessages[1]).delta,
-        "Manual verification steps for fix\n- Check resume.",
+        workflowMessages.map((event) => /** @type {any} */ (event).workflowMessage),
+        ["task_completed", "manual_qa_checklist"],
     );
+    assertEquals(/** @type {any} */ (workflowMessages[0]).delta, "**Task completed.**\n\n- Implemented the fix.");
+    assertEquals(/** @type {any} */ (workflowMessages[1]).delta, "Manual verification steps for fix\n- Check resume.");
 });
 
 test("SessionRuntime close operations dispose sessions by id", async () => {
@@ -4438,7 +4517,10 @@ test("user-authorized agent switch releases active workflows", async () => {
     assertEquals(snapshot?.activeAgent, "planner");
     assertEquals(snapshot?.activeExecutionWorkflow, null);
     assertEquals(snapshot?.workflowContext?.planName, "release-plan");
-    assertEquals(notices.some((message) => message.includes("/load-plan")), true);
+    assertEquals(
+        notices.some((message) => message.includes("/load-plan")),
+        true,
+    );
 });
 
 test("SessionRuntime rejects image user turns before submission events", async () => {
@@ -4552,11 +4634,13 @@ test("managed Plan review requests persist the container before the adapter star
             assertEquals((await request("first-id", "first")).outcome, "canceled");
             assertEquals(seenAtLaunch[0]?.planId, "first-id");
             assertEquals(
-                (await request("child-id", "child", {
-                    reviewContainerPlanId: "sequence-id",
-                    reviewContainerPlanName: "sequence",
-                    planningAgentName: "architect",
-                })).outcome,
+                (
+                    await request("child-id", "child", {
+                        reviewContainerPlanId: "sequence-id",
+                        reviewContainerPlanName: "sequence",
+                        planningAgentName: "architect",
+                    })
+                ).outcome,
                 "canceled",
             );
             assertEquals(seenAtLaunch[1]?.planId, "sequence-id");

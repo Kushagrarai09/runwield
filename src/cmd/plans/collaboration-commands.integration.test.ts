@@ -1,3 +1,4 @@
+import { getCwd } from "../../constants.js";
 import { tmpdir } from "node:os";
 import { test } from "node:test";
 import {
@@ -88,8 +89,14 @@ async function createLinkedCheckout(projectRoot: string, linkedRoot: string): Pr
     await fsRm(join(projectRoot, ".wld", "internal"), { recursive: true }).catch(() => {});
     await git(projectRoot, ["add", "."]);
     await git(projectRoot, ["commit", "-m", "collaboration fixture"]);
-    await fsRm(linkedRoot, { recursive: true });
-    await git(projectRoot, ["worktree", "add", "-b", `linked-${crypto.randomUUID()}`, linkedRoot]);
+    const previousCwd = getCwd();
+    process.chdir(projectRoot);
+    try {
+        await fsRm(linkedRoot, { recursive: true });
+        await git(projectRoot, ["worktree", "add", "-b", `linked-${crypto.randomUUID()}`, linkedRoot]);
+    } finally {
+        process.chdir(previousCwd);
+    }
 }
 
 test("Plan collaboration argument parsers accept their public command forms", () => {
@@ -124,7 +131,7 @@ test("share, push, pull, and unshare compose through real Plan, crypto, secret, 
 
                 process.chdir(projectRoot);
                 const sharedOutput = await captureConsole(() =>
-                    runPlansShareCommand(["demo-plan", "--plan-server", serverUrl])
+                    runPlansShareCommand(["demo-plan", "--plan-server", serverUrl]),
                 );
                 const reviewerUrl = findRoleUrl(sharedOutput.logs, "reviewer");
                 const maintainerUrl = findRoleUrl(sharedOutput.logs, "maintainer");
@@ -149,9 +156,11 @@ test("share, push, pull, and unshare compose through real Plan, crypto, secret, 
                 assertEquals(storedSecret.maintainerCapability, maintainer.bearerCapability);
 
                 const storedRemoteText = JSON.stringify(
-                    adapter.database.handle.prepare(
-                        "SELECT payload_ciphertext, capability_hash FROM space_revisions CROSS JOIN space_capabilities",
-                    ).all(),
+                    adapter.database.handle
+                        .prepare(
+                            "SELECT payload_ciphertext, capability_hash FROM space_revisions CROSS JOIN space_capabilities",
+                        )
+                        .all(),
                 );
                 assertEquals(storedRemoteText.includes("Initial fixture body"), false);
                 assertEquals(storedRemoteText.includes(reviewer.bearerCapability), false);
@@ -171,13 +180,16 @@ test("share, push, pull, and unshare compose through real Plan, crypto, secret, 
                     fetch: SYSTEM_COLLABORATION_FETCH,
                 });
                 const commentKey = await importContentKey(reviewer.contentKey);
-                const commentCiphertext = await encryptJsonPayload({
-                    schemaVersion: 1,
-                    type: "global_comment",
-                    displayName: "Fixture Reviewer",
-                    body: "Please preserve the fixture behavior.",
-                    createdAt: "2026-08-03T12:00:00.000Z",
-                }, commentKey);
+                const commentCiphertext = await encryptJsonPayload(
+                    {
+                        schemaVersion: 1,
+                        type: "global_comment",
+                        displayName: "Fixture Reviewer",
+                        body: "Please preserve the fixture behavior.",
+                        createdAt: "2026-08-03T12:00:00.000Z",
+                    },
+                    commentKey,
+                );
                 await reviewerClient.appendComment(reviewer.spaceId, 2, { ciphertext: commentCiphertext });
 
                 process.chdir(alternateRoot);
@@ -191,7 +203,7 @@ test("share, push, pull, and unshare compose through real Plan, crypto, secret, 
                         runPlansPullCommand([maintainerUrl, "--to", "pulled-demo"], {
                             sessionRuntime: runtime,
                             sessionId,
-                        })
+                        }),
                     );
                     assertStringIncludes(pulledOutput.logs.join("\n"), "revision 2");
                     assertStringIncludes(pulledOutput.logs.join("\n"), "Decrypted 1 comments (0 unreadable)");
@@ -270,10 +282,12 @@ test("named pull and push use a linked checkout's migrated 0.10 capability", asy
                     const created = adapter.createSharedSpace({
                         planId,
                         payloadCiphertext,
-                        capabilities: [{
-                            scope: MAINTAINER_SCOPE,
-                            capabilityHash: await hashCapability(maintainerCapability),
-                        }],
+                        capabilities: [
+                            {
+                                scope: MAINTAINER_SCOPE,
+                                capabilityHash: await hashCapability(maintainerCapability),
+                            },
+                        ],
                     });
                     await updatePlanCollaborationMetadata(
                         alternateRoot,
@@ -317,24 +331,22 @@ test("named pull and push use a linked checkout's migrated 0.10 capability", asy
 
                     const recordKey = `${planId}:${created.spaceId}`;
                     const legacyStorePath = join(alternateRoot, ".wld", "collaboration-secrets.json");
-                    const legacyStoreBytes = `${
-                        JSON.stringify(
-                            {
-                                schemaVersion: 1,
-                                records: {
-                                    [recordKey]: {
-                                        planId,
-                                        spaceId: created.spaceId,
-                                        contentKey,
-                                        maintainerCapability,
-                                        updatedAt: "2026-01-01T00:00:00.000Z",
-                                    },
+                    const legacyStoreBytes = `${JSON.stringify(
+                        {
+                            schemaVersion: 1,
+                            records: {
+                                [recordKey]: {
+                                    planId,
+                                    spaceId: created.spaceId,
+                                    contentKey,
+                                    maintainerCapability,
+                                    updatedAt: "2026-01-01T00:00:00.000Z",
                                 },
                             },
-                            null,
-                            2,
-                        )
-                    }\n`;
+                        },
+                        null,
+                        2,
+                    )}\n`;
                     await fsMkdir(dirname(legacyStorePath), { recursive: true });
                     await fsWriteFile(legacyStorePath, legacyStoreBytes, { mode: 0o600 });
                     await fsChmod(legacyStorePath, 0o600).catch(() => {});
@@ -352,7 +364,10 @@ test("named pull and push use a linked checkout's migrated 0.10 capability", asy
                         assertEquals(Object.keys(migratedStore.records), [recordKey]);
                         assertEquals((await loadPlan(alternateRoot, planName))?.body, storedBody);
                         const pulledOutput = await captureConsole(() =>
-                            runPlansPullCommand([planName, "--project-secrets"], { sessionRuntime: runtime, sessionId })
+                            runPlansPullCommand([planName, "--project-secrets"], {
+                                sessionRuntime: runtime,
+                                sessionId,
+                            }),
                         );
                         assertStringIncludes(pulledOutput.logs.join("\n"), "revision 2");
                     } finally {
@@ -373,14 +388,14 @@ test("named pull and push use a linked checkout's migrated 0.10 capability", asy
                     assert(pulledPlan);
                     await fsWriteFile(pulledPlan.path, injectFrontMatter(pushedBody, pulledPlan.attrs));
                     const pushedOutput = await captureConsole(() =>
-                        runPlansPushCommand([planName, "--project-secrets"])
+                        runPlansPushCommand([planName, "--project-secrets"]),
                     );
                     assertStringIncludes(pushedOutput.logs.join("\n"), "revision 3");
                     assertEquals(adapter.getSharedSpace(created.spaceId).latestRevision, 3);
                     assertEquals(
-                        adapter.database.handle.prepare(
-                            "SELECT capability_hash FROM space_capabilities WHERE space_id = ? AND scope = ?",
-                        ).get(created.spaceId, MAINTAINER_SCOPE)?.capability_hash,
+                        adapter.database.handle
+                            .prepare("SELECT capability_hash FROM space_capabilities WHERE space_id = ? AND scope = ?")
+                            .get(created.spaceId, MAINTAINER_SCOPE)?.capability_hash,
                         await hashCapability(maintainerCapability),
                     );
                     assertEquals(await fsReadFile(primaryStorePath, "utf8"), legacyStoreBytes);
@@ -425,23 +440,21 @@ test("project-local collaboration commands share one primary store across linked
                 );
                 const globalPath = getGlobalSecretStorePath();
                 await fsMkdir(dirname(globalPath), { recursive: true });
-                const globalBefore = `${
-                    JSON.stringify(
-                        {
-                            schemaVersion: 1,
-                            records: {
-                                "global-plan:global-space": {
-                                    planId: "global-plan",
-                                    spaceId: "global-space",
-                                    contentKey: "global-key",
-                                    updatedAt: "2026-01-01T00:00:00.000Z",
-                                },
+                const globalBefore = `${JSON.stringify(
+                    {
+                        schemaVersion: 1,
+                        records: {
+                            "global-plan:global-space": {
+                                planId: "global-plan",
+                                spaceId: "global-space",
+                                contentKey: "global-key",
+                                updatedAt: "2026-01-01T00:00:00.000Z",
                             },
                         },
-                        null,
-                        2,
-                    )
-                }\n`;
+                    },
+                    null,
+                    2,
+                )}\n`;
                 await fsWriteFile(globalPath, globalBefore);
 
                 await withCollaborationServer(async ({ serverUrl }) => {
@@ -463,7 +476,7 @@ test("project-local collaboration commands share one primary store across linked
                     await assertRejects(() => fsStat(join(alternateRoot, ".wld", "collaboration-secrets.json")));
                     await assertRejects(() => fsStat(join(projectRoot, ".wld", "collaboration-secrets.json")));
                     await assertRejects(() =>
-                        fsStat(join(alternateRoot, ".wld", "internal", "collaboration-secrets.json"))
+                        fsStat(join(alternateRoot, ".wld", "internal", "collaboration-secrets.json")),
                     );
                     assertEquals(await fsReadFile(globalPath, "utf8"), globalBefore);
 
@@ -503,23 +516,21 @@ test("project-local collaboration commands share one primary store across linked
 
                     await fsWriteFile(
                         primaryStorePath,
-                        `${
-                            JSON.stringify(
-                                {
-                                    schemaVersion: 1,
-                                    records: {
-                                        ...projectStore.records,
-                                        "other-plan:other-space": {
-                                            ...projectStore.records[recordKey],
-                                            planId: "other-plan",
-                                            spaceId: "other-space",
-                                        },
+                        `${JSON.stringify(
+                            {
+                                schemaVersion: 1,
+                                records: {
+                                    ...projectStore.records,
+                                    "other-plan:other-space": {
+                                        ...projectStore.records[recordKey],
+                                        planId: "other-plan",
+                                        spaceId: "other-space",
                                     },
                                 },
-                                null,
-                                2,
-                            )
-                        }\n`,
+                            },
+                            null,
+                            2,
+                        )}\n`,
                     );
                     const result = await unsharePlan({
                         target: "project-secret-plan",
@@ -609,17 +620,16 @@ test("project share does not write local secrets when primary ignore protection 
                 await fsRm(join(projectRoot, ".gitignore")).catch(() => {});
                 await fsMkdir(join(projectRoot, ".gitignore"));
                 await withCollaborationServer(async ({ serverUrl }) => {
-                    await assertRejects(
-                        () =>
-                            sharePlanForReview({
-                                target: "ignore-failure-plan",
-                                cwd: alternateRoot,
-                                planServer: serverUrl,
-                                projectSecrets: true,
-                            }),
+                    await assertRejects(() =>
+                        sharePlanForReview({
+                            target: "ignore-failure-plan",
+                            cwd: alternateRoot,
+                            planServer: serverUrl,
+                            projectSecrets: true,
+                        }),
                     );
                     await assertRejects(() =>
-                        fsStat(resolveProjectRuntimeLayout(alternateRoot).primary.projectSecretStorePath)
+                        fsStat(resolveProjectRuntimeLayout(alternateRoot).primary.projectSecretStorePath),
                     );
                 });
             } finally {
@@ -703,11 +713,7 @@ test("push observes real remote revision and lifecycle conflicts", async () => {
                 Error,
                 "Run `wld plans pull` before pushing",
             );
-            await assertRejects(
-                () => pushPlanRevision({ target: "closed-remote", cwd: projectRoot }),
-                Error,
-                "closed",
-            );
+            await assertRejects(() => pushPlanRevision({ target: "closed-remote", cwd: projectRoot }), Error, "closed");
 
             await unsharePlan({ target: "stale-remote", cwd: projectRoot, force: true });
             await unsharePlan({ target: "closed-remote", cwd: projectRoot, force: true });

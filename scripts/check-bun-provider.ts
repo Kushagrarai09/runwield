@@ -19,6 +19,26 @@ if (argv.length < 3 || argv.length > 4) {
     throw new Error("Usage: check-bun-provider.ts <executable> [helper-fixture-path]");
 }
 const home = await mkdtemp(join(tmpdir(), "compiled-provider-"));
+async function removeProviderHome(): Promise<void> {
+    // Windows can briefly retain an executable mapping after the process close event.
+    for (let attempt = 0; ; attempt++) {
+        try {
+            await rm(home, { recursive: true, force: true });
+            break;
+        } catch (error) {
+            if (
+                platform !== "win32" ||
+                attempt >= 50 ||
+                !(error instanceof Error) ||
+                !("code" in error) ||
+                (error.code !== "EBUSY" && error.code !== "EPERM")
+            )
+                throw error;
+            await new Promise((done) => setTimeout(done, 100));
+        }
+    }
+}
+
 const marker = "Compiled provider turn completed.";
 const requestTexts: string[] = [];
 const server = createServer(async (request, response) => {
@@ -184,6 +204,5 @@ try {
 } finally {
     server.closeAllConnections();
     await new Promise<void>((done) => server.close(() => done()));
-    // Windows can briefly retain an executable mapping after the process close event.
-    await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    await removeProviderHome();
 }

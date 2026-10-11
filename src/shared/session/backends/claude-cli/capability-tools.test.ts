@@ -1,7 +1,8 @@
+import { writeRuntimeExecutableFixture } from "../../../../testing/runtime-executable-fixture.ts";
 import { delimiter } from "node:path";
 import { getCwd } from "../../../../constants.js";
 import process from "node:process";
-import { chmod as fsChmod, mkdtemp as fsMkdtemp, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
+import { mkdtemp as fsMkdtemp, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
 import { test } from "node:test";
 import { tmpdir } from "node:os";
 import { assertArrayIncludes, assertEquals, assertMatch } from "@std/assert";
@@ -11,8 +12,9 @@ import type { ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { withProcessGlobalTestLock } from "../../../../testing/process-global-lock.ts";
 
 async function writeExecutable(path: string, content: string): Promise<void> {
-    await fsWriteFile(path, content, { mode: 0o755 });
-    await fsChmod(path, 0o755);
+    const source = `${path}.ts`;
+    await fsWriteFile(source, content);
+    await writeRuntimeExecutableFixture(path, source);
 }
 
 function getTool(tools: ReturnType<typeof createClaudeCliCapabilityTools>, name: string) {
@@ -33,7 +35,10 @@ async function executeText(tool: ReturnType<typeof getTool>, params: Record<stri
 test("Claude CLI capability factory returns the canonical capability tool names", () => {
     const tools = createClaudeCliCapabilityTools({ cwd: getCwd() });
 
-    assertEquals(tools.map((tool) => tool.name), [...CLAUDE_CLI_CAPABILITY_TOOL_NAMES]);
+    assertEquals(
+        tools.map((tool) => tool.name),
+        [...CLAUDE_CLI_CAPABILITY_TOOL_NAMES],
+    );
 });
 
 test("Claude CLI capability tools execute PATH helper binaries", () =>
@@ -41,15 +46,15 @@ test("Claude CLI capability tools execute PATH helper binaries", () =>
         const tempDir = await fsMkdtemp(join(tmpdir(), "portable-fixture-"));
         const oldPath = process.env["PATH"] || "";
         try {
-            await writeExecutable(join(tempDir, "git"), "#!/bin/sh\necho /repo/runwield/.git\n");
+            await writeExecutable(join(tempDir, "git"), 'console.log("/repo/runwield/.git");');
             await writeExecutable(
                 join(tempDir, "mnemoteca"),
-                '#!/bin/sh\nif [ "$1" = search ]; then echo memory-hit; else echo ok; fi\n',
+                'console.log(process.argv[2] === "search" ? "memory-hit" : "ok");',
             );
-            await writeExecutable(join(tempDir, "cymbal"), "#!/bin/sh\necho cymbal:$*\n");
+            await writeExecutable(join(tempDir, "cymbal"), 'console.log("cymbal:" + process.argv.slice(2).join(" "));');
             await writeExecutable(
                 join(tempDir, "ketch"),
-                '#!/bin/sh\necho \'[{"title":"Web","url":"https://example.test"}]\'\n',
+                'console.log(JSON.stringify([{title: "Web", url: "https://example.test"}]));',
             );
             process.env["PATH"] = `${tempDir}${delimiter}${oldPath}`;
             const tools = createClaudeCliCapabilityTools({ cwd: tempDir });
@@ -75,8 +80,8 @@ test("Claude CLI memory capability reports missing mnemoteca binary", () =>
         const tempDir = await fsMkdtemp(join(tmpdir(), "portable-fixture-"));
         const oldPath = process.env["PATH"] || "";
         try {
-            await writeExecutable(join(tempDir, "git"), "#!/bin/sh\nexit 1\n");
-            await writeExecutable(join(tempDir, "cymbal"), "#!/bin/sh\necho ok\n");
+            await writeExecutable(join(tempDir, "git"), "process.exit(1);");
+            await writeExecutable(join(tempDir, "cymbal"), 'console.log("ok");');
             process.env["PATH"] = tempDir;
             const tools = createClaudeCliCapabilityTools({ cwd: tempDir });
 
@@ -90,12 +95,8 @@ test("Claude CLI memory capability reports missing mnemoteca binary", () =>
     }));
 
 test("Claude CLI capability list includes memory, code, and web families", () => {
-    assertArrayIncludes([...CLAUDE_CLI_CAPABILITY_TOOL_NAMES], [
-        "memory",
-        "code_investigate",
-        "web_search",
-        "web_fetch",
-        "web_code_search",
-        "web_docs_search",
-    ]);
+    assertArrayIncludes(
+        [...CLAUDE_CLI_CAPABILITY_TOOL_NAMES],
+        ["memory", "code_investigate", "web_search", "web_fetch", "web_code_search", "web_docs_search"],
+    );
 });

@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { execPath, versions } from "node:process";
+import { execPath, platform, versions } from "node:process";
 import { captureForegroundProcess } from "../captured-process.ts";
 import { mkdtemp as fsMkdtemp, readFile as fsReadFile, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
 import { test } from "node:test";
@@ -16,6 +16,13 @@ async function fixture() {
     return {
         cwd,
         session,
+        command: async (source: string) => {
+            const script = join(cwd, `${crypto.randomUUID()}.mjs`);
+            await fsWriteFile(script, source);
+            return [execPath, ...(versions.deno ? ["run", "-A"] : ["--no-env-file", "--no-install"]), script]
+                .map((value) => (platform === "win32" ? `"${value}"` : `'${value.replaceAll("'", "'\"'\"'")}'`))
+                .join(" ");
+        },
         tasks: session.backgroundTasks as BackgroundTasks,
         cleanup: async () => {
             await session.backgroundTasks.cancelAllAndSuppress();
@@ -27,7 +34,12 @@ async function fixture() {
 test("shell start returns before exit and publishes a final result after its logs close", async () => {
     const f = await fixture();
     try {
-        const task = f.tasks.startShell({ command: "echo ready; sleep 0.3; echo done >&2", cwd: f.cwd });
+        const task = f.tasks.startShell({
+            command: await f.command(
+                'process.stdout.write("ready\\n"); await new Promise(r => setTimeout(r, 300)); process.stderr.write("done\\n");',
+            ),
+            cwd: f.cwd,
+        });
         assertEquals(task.state, "running");
         const final = await f.tasks.wait(task.task_id);
         assertEquals(final.state, "completed");
@@ -50,7 +62,8 @@ test("five running tasks hold slots until settlement; other Sessions cannot cont
     const a = await fixture();
     const b = await fixture();
     try {
-        const starts = Array.from({ length: 5 }, () => a.tasks.startShell({ command: "sleep 20", cwd: a.cwd }));
+        const sleeper = await a.command("await new Promise(r => setTimeout(r, 20000));");
+        const starts = Array.from({ length: 5 }, () => a.tasks.startShell({ command: sleeper, cwd: a.cwd }));
         assertEquals(a.tasks.activeCount, 5);
         try {
             a.tasks.startShell({ command: "echo extra", cwd: a.cwd });
@@ -77,7 +90,9 @@ test("another host process has its own slots and cannot control this process's t
     const f = await fixture();
     const script = `${f.cwd}/another-host.ts`;
     try {
-        const parents = Array.from({ length: 5 }, () => f.tasks.startShell({ command: "sleep 20", cwd: f.cwd }));
+        const sleeper = await f.command("await new Promise(r => setTimeout(r, 20000));");
+        const childCommand = await f.command('process.stdout.write("child");');
+        const parents = Array.from({ length: 5 }, () => f.tasks.startShell({ command: sleeper, cwd: f.cwd }));
         const hostedSessionUrl = new URL("./hosted-session.js", import.meta.url).href;
         await fsWriteFile(
             script,
@@ -89,7 +104,7 @@ const session = new HostedSession({ id, cwd });
 try {
     let refused = false;
     try { session.backgroundTasks.status(foreignId); } catch { refused = true; }
-    const own = session.backgroundTasks.startShell({ command: "printf child", cwd });
+    const own = session.backgroundTasks.startShell({ command: ${JSON.stringify(childCommand)}, cwd });
     const result = await session.backgroundTasks.wait(own.task_id);
     console.log(JSON.stringify({ refused, output: result.output, state: result.state }));
 } finally { await session.dispose(); }
@@ -123,12 +138,15 @@ test("output at exactly 8192 UTF-8 bytes is inline and empty output is explicit"
     const f = await fixture();
     try {
         const exact = await f.tasks.wait(
-            f.tasks.startShell({ command: "printf 'é'; head -c 8190 /dev/zero | tr '\\0' x", cwd: f.cwd }).task_id,
+            f.tasks.startShell({
+                command: await f.command('process.stdout.write("é" + "x".repeat(8190));'),
+                cwd: f.cwd,
+            }).task_id,
         );
         assertEquals(exact.byte_count, 8192);
         assertEquals(exact.output?.length, 8191);
         assertEquals(exact.output?.startsWith("é"), true);
-        const empty = await f.tasks.wait(f.tasks.startShell({ command: "true", cwd: f.cwd }).task_id);
+        const empty = await f.tasks.wait(f.tasks.startShell({ command: await f.command(""), cwd: f.cwd }).task_id);
         assertEquals(empty.output, "(No output.)");
     } finally {
         await f.cleanup();
@@ -139,7 +157,10 @@ test("presented output removes terminal control bytes without changing its log",
     const f = await fixture();
     try {
         const final = await f.tasks.wait(
-            f.tasks.startShell({ command: "printf '\\033[31mred\\033[0m\\n'", cwd: f.cwd }).task_id,
+            f.tasks.startShell({
+                command: await f.command('process.stdout.write("\\u001b[31mred\\u001b[0m\\n");'),
+                cwd: f.cwd,
+            }).task_id,
         );
         assertEquals(final.output, "red\n");
         assertEquals(await fsReadFile(final.log_path, "utf8"), "\u001b[31mred\u001b[0m\n");
@@ -152,7 +173,10 @@ test("large UTF-8 output uses the complete log; a final unterminated line counts
     const f = await fixture();
     try {
         const final = await f.tasks.wait(
-            f.tasks.startShell({ command: "printf 'é'; head -c 8191 /dev/zero | tr '\\0' x", cwd: f.cwd }).task_id,
+            f.tasks.startShell({
+                command: await f.command('process.stdout.write("é" + "x".repeat(8191));'),
+                cwd: f.cwd,
+            }).task_id,
         );
         assertEquals(final.byte_count, 8193);
         assertEquals(final.line_count, 1);
@@ -177,7 +201,11 @@ test("timeout and nonzero exit release slots", async () => {
     const f = await fixture();
     try {
         const timed = await f.tasks.wait(
-            f.tasks.startShell({ command: "sleep 20", cwd: f.cwd, timeoutMs: 30 }).task_id,
+            f.tasks.startShell({
+                command: await f.command("await new Promise(r => setTimeout(r, 20000));"),
+                cwd: f.cwd,
+                timeoutMs: 30,
+            }).task_id,
         );
         assertEquals(timed.state, "timed_out");
         const failed = await f.tasks.wait(f.tasks.startShell({ command: "exit 7", cwd: f.cwd }).task_id);

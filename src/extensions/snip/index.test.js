@@ -1,3 +1,4 @@
+import { bashFixtureExecutable } from "../../../scripts/bash-fixture.ts";
 import { captureForegroundProcess } from "../../shared/captured-process.ts";
 import { getCwd } from "../../constants.js";
 import { readFile as fsReadFile, rm as fsRm } from "node:fs/promises";
@@ -122,9 +123,8 @@ test("snip extension filters the no-filter notice without changing output or exi
     const successCommand = __testing.rewriteCommand("printf success && printf chained");
     if (!successCommand) throw new Error("Expected success command to be rewritten.");
 
-    const fakeSnip =
-        `snip() { shift 2; printf 'snip: no filter for "printf", passing through -- you can run "printf" directly\\n' >&2; "$@"; }; `;
-    const success = await captureForegroundProcess("/bin/bash", {
+    const fakeSnip = `snip() { shift 2; printf 'snip: no filter for "printf", passing through -- you can run "printf" directly\\n' >&2; "$@"; }; `;
+    const success = await captureForegroundProcess(bashFixtureExecutable(), {
         args: ["-c", `${fakeSnip}${successCommand}`],
         cwd: getCwd(),
     });
@@ -134,7 +134,7 @@ test("snip extension filters the no-filter notice without changing output or exi
 
     const stderrCommand = __testing.rewriteCommand("printf visible-error >&2");
     if (!stderrCommand) throw new Error("Expected stderr command to be rewritten.");
-    const stderrResult = await captureForegroundProcess("/bin/bash", {
+    const stderrResult = await captureForegroundProcess(bashFixtureExecutable(), {
         args: ["-c", `${fakeSnip}${stderrCommand}`],
         cwd: getCwd(),
     });
@@ -144,7 +144,7 @@ test("snip extension filters the no-filter notice without changing output or exi
 
     const failureCommand = __testing.rewriteCommand("false && printf should-not-run");
     if (!failureCommand) throw new Error("Expected failure command to be rewritten.");
-    const failure = await captureForegroundProcess("/bin/bash", {
+    const failure = await captureForegroundProcess(bashFixtureExecutable(), {
         args: ["-c", `${fakeSnip}${failureCommand}`],
         cwd: getCwd(),
     });
@@ -156,9 +156,8 @@ test("snip extension filters the no-filter notice without changing output or exi
 test("snip extension stores only filtered Deno failure diagnostics", async () => {
     const command = __testing.rewriteCommand("deno test sample.test.ts");
     if (!command) throw new Error("Expected Deno test command to be rewritten.");
-    const fakeSnip =
-        `snip() { printf '%s\\n' 'Check sample.test.ts' 'running 2 tests from ./sample.test.ts' 'passing ... ok (1ms)' 'failure ... FAILED (2ms)' 'AssertionError: expected true' 'FAILED | 1 passed | 1 failed (3ms)'; return 1; }; `;
-    const result = await captureForegroundProcess("/bin/bash", {
+    const fakeSnip = `snip() { printf '%s\\n' 'Check sample.test.ts' 'running 2 tests from ./sample.test.ts' 'passing ... ok (1ms)' 'failure ... FAILED (2ms)' 'AssertionError: expected true' 'FAILED | 1 passed | 1 failed (3ms)'; return 1; }; `;
+    const result = await captureForegroundProcess(bashFixtureExecutable(), {
         args: ["-c", `${fakeSnip}${command}`],
         cwd: getCwd(),
     });

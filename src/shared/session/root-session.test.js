@@ -55,7 +55,10 @@ test("root-session persists a new transcript without Pi's private rewrite method
             }
             const transcriptPath = await resolveCreatedRootSessionPath(cwd, manager);
             manager.appendModelChange("anthropic", "test-model");
-            const lines = (await fsReadFile(transcriptPath, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+            const lines = (await fsReadFile(transcriptPath, "utf8"))
+                .trim()
+                .split("\n")
+                .map((line) => JSON.parse(line));
             assertEquals(lines[0].id, manager.getSessionId());
             assertEquals(lines[1].type, "model_change");
 
@@ -82,9 +85,9 @@ test("root-session persists a new transcript without Pi's private rewrite method
 });
 
 test("root-session cwd directory encoding stays inside filename limits for long worktree paths", () => {
-    const longWorktreeCwd = `/tmp/${"deep-directory-name-".repeat(12)}/.wld/worktrees/${
-        "nested-project-path-".repeat(10)
-    }/follow-up-repaint`;
+    const longWorktreeCwd = `/tmp/${"deep-directory-name-".repeat(12)}/.wld/worktrees/${"nested-project-path-".repeat(
+        10,
+    )}/follow-up-repaint`;
     const encoded = encodeCwdForSessionDir(longWorktreeCwd);
     assertEquals(encoded.length < 255, true);
     assertEquals(encoded.startsWith("--follow-up-repaint-"), true);
@@ -100,8 +103,8 @@ test("root-session opens a validated transcript stored under the Project session
         let opened;
         try {
             const { SessionManager } = await import("@earendil-works/pi-coding-agent");
-            const projectRoot = `${home}/repo`;
-            const worktreeRoot = `${home}/worktree`;
+            const projectRoot = join(home, `repo`);
+            const worktreeRoot = join(home, `worktree`);
             await fsMkdir(projectRoot, { recursive: true });
             await fsMkdir(worktreeRoot, { recursive: true });
             const projectSessionDir = getRunWieldSessionDir(projectRoot);
@@ -183,8 +186,8 @@ test("root-session opens a validated transcript stored under the Project session
                 "Persisted session not found",
             );
         } finally {
-            await Promise.resolve((/** @type {any} */ (opened?.sessionManager))?.dispose?.());
-            await Promise.resolve((/** @type {any} */ (manager))?.dispose?.());
+            await Promise.resolve(/** @type {any} */ (opened?.sessionManager)?.dispose?.());
+            await Promise.resolve(/** @type {any} */ (manager)?.dispose?.());
             if (previousHome === undefined) delete process.env["HOME"];
             else process.env["HOME"] = previousHome;
             await removeTempDirBestEffort(home);
@@ -199,12 +202,12 @@ test("root-session persisted helpers list open and guard cwd paths", async () =>
         process.env["HOME"] = home;
         try {
             const { SessionManager } = await import("@earendil-works/pi-coding-agent");
-            const cwd = `${home}/repo`;
+            const cwd = join(home, `repo`);
             await fsMkdir(cwd, { recursive: true });
             const sessionDir = getRunWieldSessionDir(cwd);
             assertEquals(
                 getRunWieldSessionMemoryBackupDir(cwd, "persisted-test"),
-                `${sessionDir}/persisted-test_memory-backups`,
+                join(sessionDir, `persisted-test_memory-backups`),
             );
             const manager = SessionManager.create(cwd, sessionDir, { id: "persisted-test" });
             manager.appendMessage(
@@ -257,7 +260,7 @@ test("root-session persisted helpers list open and guard cwd paths", async () =>
                     openPersistedRootSession({
                         cwd,
                         sessionId: "persisted-test",
-                        sessionPath: `${home}/outside.jsonl`,
+                        sessionPath: join(home, `outside.jsonl`),
                     }),
                 Error,
                 "outside the RunWield session directory",
@@ -276,8 +279,8 @@ test("root-session helpers create list and open through canonical cwd aliases", 
         const home = await fsMkdtemp(join(tmpdir(), "runwield-fixture-"));
         process.env["HOME"] = home;
         try {
-            const realCwd = `${home}/repo`;
-            const linkedCwd = `${home}/repo-link`;
+            const realCwd = join(home, `repo`);
+            const linkedCwd = join(home, `repo-link`);
             await fsMkdir(realCwd, { recursive: true });
             await fsSymlink(realCwd, linkedCwd);
             const manager = await createRootSessionManager("new", linkedCwd);
@@ -298,7 +301,10 @@ test("root-session helpers create list and open through canonical cwd aliases", 
             const sessionId = manager.getSessionId();
 
             const sessions = await listPersistedRootSessions(realCwd);
-            assertEquals(sessions.some((session) => session.id === sessionId), true);
+            assertEquals(
+                sessions.some((session) => session.id === sessionId),
+                true,
+            );
             const opened = await openPersistedRootSession({ cwd: realCwd, sessionId });
             assertEquals(opened.sessionManager.getSessionId(), sessionId);
         } finally {
@@ -316,7 +322,7 @@ test("root-session helpers reopen Claude CLI entries in the existing RunWield JS
         process.env["HOME"] = home;
         try {
             const { SessionManager } = await import("@earendil-works/pi-coding-agent");
-            const cwd = `${home}/repo`;
+            const cwd = join(home, `repo`);
             await fsMkdir(cwd, { recursive: true });
             const sessionDir = getRunWieldSessionDir(cwd);
             const manager = SessionManager.create(cwd, sessionDir, { id: "claude-root" });
@@ -361,18 +367,22 @@ test("catalog-safe root session locators read only header metadata and preserve 
         const home = await fsMkdtemp(join(tmpdir(), "runwield-fixture-"));
         process.env["HOME"] = home;
         try {
-            const cwd = `${home}/repo`;
+            const cwd = join(home, `repo`);
             await fsMkdir(cwd, { recursive: true });
             const sessionDir = getRunWieldSessionDir(cwd);
             await fsMkdir(sessionDir, { recursive: true });
-            const sessionPath = `${sessionDir}/2026-01-01T00-00-00-000Z_pi-safe.jsonl`;
-            const text = JSON.stringify({
-                type: "session",
-                version: 3,
-                id: "pi-safe",
-                timestamp: "2026-01-01T00:00:00.000Z",
-                cwd,
-            }) + "\n" + JSON.stringify({ type: "message", message: { role: "user", content: "secret" } }) + "\n";
+            const sessionPath = join(sessionDir, `2026-01-01T00-00-00-000Z_pi-safe.jsonl`);
+            const text =
+                JSON.stringify({
+                    type: "session",
+                    version: 3,
+                    id: "pi-safe",
+                    timestamp: "2026-01-01T00:00:00.000Z",
+                    cwd,
+                }) +
+                "\n" +
+                JSON.stringify({ type: "message", message: { role: "user", content: "secret" } }) +
+                "\n";
             await fsWriteFile(sessionPath, text);
             const before = await fsStat(sessionPath);
 
@@ -400,11 +410,11 @@ test("catalog-safe root session locator validates exact Pi filename structure", 
         const home = await fsMkdtemp(join(tmpdir(), "runwield-fixture-"));
         process.env["HOME"] = home;
         try {
-            const cwd = `${home}/repo`;
+            const cwd = join(home, `repo`);
             await fsMkdir(cwd, { recursive: true });
             const sessionDir = getRunWieldSessionDir(cwd);
             await fsMkdir(sessionDir, { recursive: true });
-            const substringPath = `${sessionDir}/2026-01-01T00-00-00-000Z_not-pi-safe.jsonl`;
+            const substringPath = join(sessionDir, `2026-01-01T00-00-00-000Z_not-pi-safe.jsonl`);
             await fsWriteFile(
                 substringPath,
                 JSON.stringify({
@@ -421,7 +431,7 @@ test("catalog-safe root session locator validates exact Pi filename structure", 
                 "exactly match",
             );
 
-            const timestampPath = `${sessionDir}/2026-01-02T00-00-00-000Z_pi-safe.jsonl`;
+            const timestampPath = join(sessionDir, `2026-01-02T00-00-00-000Z_pi-safe.jsonl`);
             await fsWriteFile(
                 timestampPath,
                 JSON.stringify({
@@ -451,11 +461,11 @@ test("catalog-safe root session locator rejects headers that exceed the catalog 
         const home = await fsMkdtemp(join(tmpdir(), "runwield-fixture-"));
         process.env["HOME"] = home;
         try {
-            const cwd = `${home}/repo`;
+            const cwd = join(home, `repo`);
             await fsMkdir(cwd, { recursive: true });
             const sessionDir = getRunWieldSessionDir(cwd);
             await fsMkdir(sessionDir, { recursive: true });
-            const sessionPath = `${sessionDir}/2026-01-01T00-00-00-000Z_pi-long.jsonl`;
+            const sessionPath = join(sessionDir, `2026-01-01T00-00-00-000Z_pi-long.jsonl`);
             await fsWriteFile(
                 sessionPath,
                 `{"type":"session","id":"pi-long","cwd":"${cwd}","padding":"${"x".repeat(256)}`,
@@ -479,18 +489,18 @@ test("catalog-safe root session locator list limits header reads to newest candi
         const home = await fsMkdtemp(join(tmpdir(), "runwield-fixture-"));
         process.env["HOME"] = home;
         try {
-            const cwd = `${home}/repo`;
+            const cwd = join(home, `repo`);
             await fsMkdir(cwd, { recursive: true });
             const sessionDir = getRunWieldSessionDir(cwd);
             await fsMkdir(sessionDir, { recursive: true });
-            const oldMalformed = `${sessionDir}/malformed.jsonl`;
+            const oldMalformed = join(sessionDir, `malformed.jsonl`);
             await fsWriteFile(oldMalformed, "not-json\n");
             const oldTime = new Date(Date.UTC(2025, 0, 1));
             await fsUtimes(oldMalformed, oldTime, oldTime);
             for (let index = 0; index < 31; index++) {
                 const timestamp = new Date(Date.UTC(2026, 0, 1, 0, 0, index)).toISOString();
                 const id = `pi-${String(index).padStart(2, "0")}`;
-                const sessionPath = `${sessionDir}/${timestamp.replace(/[:.]/g, "-")}_${id}.jsonl`;
+                const sessionPath = join(sessionDir, `${timestamp.replace(/[:.]/g, "-")}_${id}.jsonl`);
                 await fsWriteFile(
                     sessionPath,
                     JSON.stringify({ type: "session", version: 3, id, timestamp, cwd }) + "\n",
@@ -503,7 +513,10 @@ test("catalog-safe root session locator list limits header reads to newest candi
 
             assertEquals(listed.diagnostics, []);
             assertEquals(listed.locators.length, 30);
-            assertEquals(listed.locators.some((locator) => locator.sessionPath === oldMalformed), false);
+            assertEquals(
+                listed.locators.some((locator) => locator.sessionPath === oldMalformed),
+                false,
+            );
         } finally {
             if (previousHome === undefined) delete process.env["HOME"];
             else process.env["HOME"] = previousHome;
@@ -518,28 +531,28 @@ test("catalog-safe root session locator rejects malformed or out-of-directory fi
         const home = await fsMkdtemp(join(tmpdir(), "runwield-fixture-"));
         process.env["HOME"] = home;
         try {
-            const cwd = `${home}/repo`;
+            const cwd = join(home, `repo`);
             await fsMkdir(cwd, { recursive: true });
             const sessionDir = getRunWieldSessionDir(cwd);
             await fsMkdir(sessionDir, { recursive: true });
-            const malformed = `${sessionDir}/malformed.jsonl`;
+            const malformed = join(sessionDir, `malformed.jsonl`);
             await fsWriteFile(malformed, "not-json\n");
             const listed = await listCatalogSafeRootSessionLocators(cwd);
             assertEquals(listed.locators, []);
             assertEquals(listed.diagnostics.length, 1);
 
             await assertRejects(
-                () => readCatalogSafeRootSessionLocator({ cwd, sessionPath: `${home}/outside.jsonl` }),
+                () => readCatalogSafeRootSessionLocator({ cwd, sessionPath: join(home, `outside.jsonl`) }),
                 Error,
                 "outside the RunWield session directory",
             );
 
-            const outsideTarget = `${home}/outside-target.jsonl`;
+            const outsideTarget = join(home, `outside-target.jsonl`);
             await fsWriteFile(
                 outsideTarget,
                 JSON.stringify({ type: "session", version: 3, id: "outside-target", cwd }) + "\n",
             );
-            const symlinkPath = `${sessionDir}/2026-01-01T00-00-00-000Z_outside-target.jsonl`;
+            const symlinkPath = join(sessionDir, `2026-01-01T00-00-00-000Z_outside-target.jsonl`);
             await fsSymlink(outsideTarget, symlinkPath);
             await assertRejects(
                 () => readCatalogSafeRootSessionLocator({ cwd, sessionPath: symlinkPath }),
@@ -565,7 +578,7 @@ async function removeTempDirBestEffort(path) {
             await fsRm(path, { recursive: true });
             return;
         } catch (error) {
-            if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return;
+            if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
             if (attempt === 4) throw error;
             await new Promise((resolve) => setTimeout(resolve, 25));
         }

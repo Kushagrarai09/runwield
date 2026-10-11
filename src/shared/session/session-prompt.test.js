@@ -1,7 +1,7 @@
+import { writeRuntimeExecutableFixture } from "../../testing/runtime-executable-fixture.ts";
 import { getCwd } from "../../constants.js";
 import process from "node:process";
 import {
-    chmod as fsChmod,
     mkdir as fsMkdir,
     mkdtemp as fsMkdtemp,
     readFile as fsReadFile,
@@ -87,24 +87,14 @@ sessionPromptTest("assembleFinalSystemPrompt includes the Session naming reminde
         const agentDef = await loadAgentDef(AGENTS.GUIDE, projectRoot);
         const sessionManager = SessionManager.inMemory(projectRoot);
 
-        const unnamed = await assembleFinalSystemPrompt(
-            agentDef,
-            agentDef.tools,
-            [],
-            projectRoot,
-            "",
-            { sessionManager },
-        );
+        const unnamed = await assembleFinalSystemPrompt(agentDef, agentDef.tools, [], projectRoot, "", {
+            sessionManager,
+        });
 
         sessionManager.appendSessionInfo("router supplied name");
-        const named = await assembleFinalSystemPrompt(
-            agentDef,
-            agentDef.tools,
-            [],
-            projectRoot,
-            "",
-            { sessionManager },
-        );
+        const named = await assembleFinalSystemPrompt(agentDef, agentDef.tools, [], projectRoot, "", {
+            sessionManager,
+        });
 
         assertStringIncludes(unnamed, reminder);
         assertStringIncludes(unnamed, "set_session_name");
@@ -123,14 +113,9 @@ sessionPromptTest("assembleFinalSystemPrompt suppresses the Session naming remin
         const sessionManager = SessionManager.inMemory(projectRoot);
         sessionManager.appendSessionInfo("  router\n\tsupplied name  ");
 
-        const prompt = await assembleFinalSystemPrompt(
-            agentDef,
-            agentDef.tools,
-            [],
-            projectRoot,
-            "",
-            { sessionManager },
-        );
+        const prompt = await assembleFinalSystemPrompt(agentDef, agentDef.tools, [], projectRoot, "", {
+            sessionManager,
+        });
 
         assertEquals(prompt.includes(reminder), false);
         assertEquals(prompt.includes("{{SESSION_NAME_REMINDER}}"), false);
@@ -272,12 +257,21 @@ sessionPromptTest("assembleFinalSystemPromptWithContextProjection attributes res
         assertStringIncludes(prompt, "Runtime project state");
         assertStringIncludes(prompt, "visible-skill");
         assertEquals(prompt.includes("hidden-skill"), false);
-        assertEquals(projection.instructionFiles.map((file) => file.source), ["home", "local"]);
-        assertEquals(projection.skills.some((skill) => skill.name === "visible-skill"), true);
-        assertEquals(projection.skills.some((skill) => skill.name === "hidden-skill"), false);
-        const customToolItem = projection.categories.find((category) => category.id === "tools")?.items?.find((item) =>
-            item.name === "custom_tool"
+        assertEquals(
+            projection.instructionFiles.map((file) => file.source),
+            ["home", "local"],
         );
+        assertEquals(
+            projection.skills.some((skill) => skill.name === "visible-skill"),
+            true,
+        );
+        assertEquals(
+            projection.skills.some((skill) => skill.name === "hidden-skill"),
+            false,
+        );
+        const customToolItem = projection.categories
+            .find((category) => category.id === "tools")
+            ?.items?.find((item) => item.name === "custom_tool");
         assertEquals(typeof customToolItem?.tokens, "number");
         assertEquals(
             (customToolItem?.tokens || 0) >
@@ -288,7 +282,10 @@ sessionPromptTest("assembleFinalSystemPromptWithContextProjection attributes res
             projection.categories.some((category) => category.id === "project_state" && category.tokens > 0),
             true,
         );
-        assertEquals(projection.categories.some((category) => category.id === "tools" && category.tokens > 0), true);
+        assertEquals(
+            projection.categories.some((category) => category.id === "tools" && category.tokens > 0),
+            true,
+        );
     } finally {
         await fsRm(tempHome, { recursive: true }).catch(() => {});
         await fsRm(projectRoot, { recursive: true }).catch(() => {});
@@ -303,18 +300,18 @@ sessionPromptTest("assembleFinalSystemPromptWithContextProjection includes Core 
     const pathSeparator = process.platform === "win32" ? ";" : ":";
     try {
         await fsMkdir(fakeBin);
+        const source = join(fakeBin, "mnemoteca.ts");
         await fsWriteFile(
-            join(fakeBin, "mnemoteca"),
-            `#!/usr/bin/env bash
-set -euo pipefail
-printf 'args=%s\n' "$*" > '${commandLog}'
-if [[ "$*" != 'list -t core -f plain' ]]; then
-  exit 64
-fi
-printf 'Core memory from Mnemoteca\nSecond core memory\n'
+            source,
+            `
+import { writeFileSync } from "node:fs";
+const args = process.argv.slice(2).join(" ");
+writeFileSync(${JSON.stringify(commandLog)}, "args=" + args + "\\n");
+if (args !== "list -t core -f plain") process.exit(64);
+console.log("Core memory from Mnemoteca\\nSecond core memory");
 `,
         );
-        await fsChmod(join(fakeBin, "mnemoteca"), 0o755);
+        await writeRuntimeExecutableFixture(join(fakeBin, "mnemoteca"), source);
         process.env["PATH"] = previousPath ? `${fakeBin}${pathSeparator}${previousPath}` : fakeBin;
 
         const { prompt, projection } = await assembleFinalSystemPromptWithContextProjection(
@@ -378,8 +375,14 @@ sessionPromptTest("assembleFinalSystemPromptWithContextProjection excludes omitt
         assertEquals(prompt.includes("Image Attachments"), false);
         assertEquals(projection.instructionFiles, []);
         assertEquals(projection.skills, []);
-        assertEquals(projection.categories.some((category) => category.id === "project_state"), false);
-        assertEquals(projection.categories.some((category) => category.id === "skill_catalog"), false);
+        assertEquals(
+            projection.categories.some((category) => category.id === "project_state"),
+            false,
+        );
+        assertEquals(
+            projection.categories.some((category) => category.id === "skill_catalog"),
+            false,
+        );
         const agentItem = projection.categories.find((category) => category.id === "agent_instructions")?.items?.[0];
         const timezoneLine = `Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`;
         assertEquals(
@@ -441,16 +444,16 @@ sessionPromptTest("readGlobalAgentMd can disable ~/.agents/AGENTS.md fallback", 
 
 sessionPromptTest("getGlobalAgentMdPaths stays inside ~/.wld", () => {
     assertEquals(getGlobalAgentMdPaths("/tmp/home", { includeExternal: false }), [
-        "/tmp/home/.wld/RUNWIELD.md",
-        "/tmp/home/.wld/AGENTS.md",
+        join("/tmp/home", ".wld/RUNWIELD.md"),
+        join("/tmp/home", ".wld/AGENTS.md"),
     ]);
 });
 
 sessionPromptTest("getGlobalAgentMdPaths includes shared ~/.agents/AGENTS.md when enabled", () => {
     assertEquals(getGlobalAgentMdPaths("/tmp/home", { includeExternal: true }), [
-        "/tmp/home/.wld/RUNWIELD.md",
-        "/tmp/home/.wld/AGENTS.md",
-        "/tmp/home/.agents/AGENTS.md",
+        join("/tmp/home", ".wld/RUNWIELD.md"),
+        join("/tmp/home", ".wld/AGENTS.md"),
+        join("/tmp/home", ".agents/AGENTS.md"),
     ]);
 });
 
@@ -483,20 +486,26 @@ sessionPromptTest("applyAttentionNudge only injects scheduled long-lived agent n
 
 sessionPromptTest("shouldReuseExistingRootSession ignores undefined optional overrides", () => {
     assertEquals(
-        shouldReuseExistingRootSession({
-            agentName: AGENTS.OPERATOR,
-            userRequest: "commit",
-            modelOverride: undefined,
-        }, AGENTS.OPERATOR),
+        shouldReuseExistingRootSession(
+            {
+                agentName: AGENTS.OPERATOR,
+                userRequest: "commit",
+                modelOverride: undefined,
+            },
+            AGENTS.OPERATOR,
+        ),
         true,
     );
 
     assertEquals(
-        shouldReuseExistingRootSession({
-            agentName: AGENTS.OPERATOR,
-            userRequest: "commit",
-            modelOverride: "test/model",
-        }, AGENTS.OPERATOR),
+        shouldReuseExistingRootSession(
+            {
+                agentName: AGENTS.OPERATOR,
+                userRequest: "commit",
+                modelOverride: "test/model",
+            },
+            AGENTS.OPERATOR,
+        ),
         false,
     );
 });
@@ -691,11 +700,13 @@ sessionPromptTest("runPrompt sends fallback image markers without raw image cont
             agentName: "operator",
             userRequest: "please inspect",
             finalSystemPrompt: "system",
-            images: /** @type {import('./types.js').ImageAttachment[]} */ ([{
-                base64: "abc",
-                mimeType: "image/png",
-                ref: "attachment:123",
-            }]),
+            images: /** @type {import('./types.js').ImageAttachment[]} */ ([
+                {
+                    base64: "abc",
+                    mimeType: "image/png",
+                    ref: "attachment:123",
+                },
+            ]),
             subscriberState,
         });
 

@@ -34,7 +34,10 @@ test("two project roots keep local catalogs settings and Plans isolated", async 
     const alpha = await fsMkdtemp(join(tmpdir(), "runwield-project-alpha-"));
     const beta = await fsMkdtemp(join(tmpdir(), "runwield-project-beta-"));
     try {
-        for (const [root, marker] of [[alpha, "alpha"], [beta, "beta"]]) {
+        for (const [root, marker] of [
+            [alpha, "alpha"],
+            [beta, "beta"],
+        ]) {
             await fsMkdir(join(root, ".wld", "prompts"), { recursive: true });
             await fsMkdir(join(root, ".wld", "skills", "local-skill"), { recursive: true });
             await fsMkdir(join(root, ".wld", "agents"), { recursive: true });
@@ -71,8 +74,14 @@ test("two project roots keep local catalogs settings and Plans isolated", async 
         assertEquals(betaPrompts.find((item) => item.name === "local-prompt")?.description, "beta prompt");
         assertEquals(alphaSkills.find((item) => item.name === "local-skill")?.description, "alpha skill");
         assertEquals(betaSkills.find((item) => item.name === "local-skill")?.description, "beta skill");
-        assertEquals(alphaAgents.some((item) => item.name === "local-agent"), true);
-        assertEquals(betaAgents.some((item) => item.name === "local-agent"), true);
+        assertEquals(
+            alphaAgents.some((item) => item.name === "local-agent"),
+            true,
+        );
+        assertEquals(
+            betaAgents.some((item) => item.name === "local-agent"),
+            true,
+        );
         assertEquals(getAgentDisplayName("local-agent", alpha), "alpha Agent");
         assertEquals(getAgentDisplayName("local-agent", beta), "beta Agent");
         assertEquals(getCustomSetting("marker", "project", alpha), "alpha");
@@ -165,16 +174,18 @@ test("listPromptTemplates includes installed package prompts after RunWield prom
         );
 
         const templates = await listPromptTemplates({
-            packagePromptResources: [{
-                path: promptPath,
-                enabled: true,
-                metadata: {
-                    source: "npm:@example/prompts",
-                    scope: "user",
-                    origin: "package",
-                    baseDir: tempDir,
+            packagePromptResources: [
+                {
+                    path: promptPath,
+                    enabled: true,
+                    metadata: {
+                        source: "npm:@example/prompts",
+                        scope: "user",
+                        origin: "package",
+                        baseDir: tempDir,
+                    },
                 },
-            }],
+            ],
         });
         const template = templates.find((item) => item.name === "explain");
 
@@ -192,23 +203,10 @@ test("listPromptTemplates includes installed package prompts after RunWield prom
 test("expandPromptTemplate strips front matter and appends user instructions", async () => {
     const path = await makeTempFile({ prefix: "runwield-template-", suffix: ".md" });
     try {
-        await fsWriteFile(
-            path,
-            [
-                "---",
-                'description: "Template"',
-                "---",
-                "Template body",
-                "",
-            ].join("\n"),
-        );
+        await fsWriteFile(path, ["---", 'description: "Template"', "---", "Template body", ""].join("\n"));
 
         assertEquals(await expandPromptTemplate(path, "Extra instructions"), "Template body\n\nExtra instructions");
-        await assertRejects(
-            () => expandPromptTemplate(`${path}.missing`),
-            Error,
-            "Failed to read prompt template",
-        );
+        await assertRejects(() => expandPromptTemplate(`${path}.missing`), Error, "Failed to read prompt template");
     } finally {
         await fsRm(path).catch(() => {});
     }
@@ -243,11 +241,7 @@ test("listSkills and expandSkillCommand read local skill definitions", async () 
         assertStringIncludes(expanded, "Use this skill carefully.");
         assertStringIncludes(expanded, "User extra");
 
-        await assertRejects(
-            () => expandSkillCommand("missing-skill"),
-            Error,
-            "Unknown skill: missing-skill",
-        );
+        await assertRejects(() => expandSkillCommand("missing-skill"), Error, "Unknown skill: missing-skill");
     } finally {
         await fsRm(projectRoot, { recursive: true }).catch(() => {});
     }
@@ -261,8 +255,8 @@ test("listSkills advertises bundled skills from the runtime-readable cache", asy
         assertEquals(research?.source, "bundled");
         const researchPath = research?.path ?? "";
         assertEquals(
-            researchPath.includes(".wld/bundled-skills/research/SKILL.md") ||
-                researchPath.includes("src/skills/research/SKILL.md"),
+            researchPath.includes(join(".wld", "bundled-skills", "research", "SKILL.md")) ||
+                researchPath.includes(join("src", "skills", "research", "SKILL.md")),
             true,
         );
     });
@@ -356,11 +350,13 @@ test("assembleFinalSystemPrompt fills tools, instruction files, skills, and bund
                     ].join("\n"),
                 }),
                 ["read", "custom_tool", "unknown_tool"],
-                /** @type {any[]} */ ([{
-                    name: "custom_tool",
-                    description: "custom description",
-                    promptSnippet: "custom snippet",
-                }]),
+                /** @type {any[]} */ ([
+                    {
+                        name: "custom_tool",
+                        description: "custom description",
+                        promptSnippet: "custom snippet",
+                    },
+                ]),
                 projectRoot,
                 "",
                 { homeDir: tempHome },
@@ -403,10 +399,12 @@ test("steerRootSession sends image content only while root is streaming", async 
         await steerRootSession(hostedSession, "interrupt", [{ base64: "abc123", mimeType: "image/png" }]),
         true,
     );
-    assertEquals(steerCalls, [{
-        text: "interrupt",
-        images: [{ type: "image", data: "abc123", mimeType: "image/png" }],
-    }]);
+    assertEquals(steerCalls, [
+        {
+            text: "interrupt",
+            images: [{ type: "image", data: "abc123", mimeType: "image/png" }],
+        },
+    ]);
     assertEquals(await steerRootSessionWithTarget(hostedSession, "targeted"), session);
 });
 
