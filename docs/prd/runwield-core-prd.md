@@ -2027,7 +2027,8 @@ Windows WinGet requirements:
 - keep model and browser payload downloads in per-user first-use locations
 - make `wld update` and `wld upgrade` print `winget upgrade --id Gandazgul.RunWield --exact`
 - reject Candidate tags for Stable WinGet manifest generation and external submission
-- submit each Stable manifest to `microsoft/winget-pkgs` from the release workflow with a repository secret
+- prepare Stable manifest artifacts; automatic submission to `microsoft/winget-pkgs` is paused until further owner
+  notice and must not require a submission credential while paused
 - include `https://runwield.dev/privacy/` as `PrivacyUrl` in the WinGet package metadata
 - keep public install docs marked pending until Microsoft accepts the listing
 
@@ -2039,8 +2040,9 @@ Windows WinGet requirements:
   does not run the shell installer.
 - Given a WinGet-owned `wld`, when the user runs `wld update`, RunWield prints
   `winget upgrade --id Gandazgul.RunWield --exact` and does not run the shell installer.
-- Given a Stable release, when its Windows package and manifest jobs pass, the release workflow submits a PR to
-  `microsoft/winget-pkgs`; given a Candidate release, it does not submit one.
+- Given a Stable release while WinGet submission is paused, the workflow prepares manifest artifacts without submitting
+  a PR to `microsoft/winget-pkgs` or requiring a submission credential. Recovery also preserves this pause. Candidate
+  releases do not prepare Stable manifests or submit PRs.
 - Given a generated WinGet manifest, its package metadata links to the published RunWield privacy policy.
 - Given a standalone Unix install, when the user runs `wld update`, RunWield can still use the tag-pinned shell
   installer.
