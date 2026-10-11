@@ -13,11 +13,11 @@ concurrency:
 
 jobs:
     native:
-        name: Bun Windows ${{ matrix.arch }}
+        name: Bun Windows ${{ matrix.arch }} ${{ matrix.phase }}
         # These exact labels are standard, free public-repository runners.
         if: github.event.repository.private == false
         runs-on: ${{ matrix.runner }}
-        timeout-minutes: 60
+        timeout-minutes: ${{ matrix.phase == 'source' && 60 || 20 }}
         strategy:
             fail-fast: false
             matrix:
@@ -25,9 +25,19 @@ jobs:
                     - runner: windows-2025
                       arch: x64
                       asset: x64
+                      phase: source
                     - runner: windows-11-arm
                       arch: arm64
                       asset: aarch64
+                      phase: source
+                    - runner: windows-2025
+                      arch: x64
+                      asset: x64
+                      phase: package
+                    - runner: windows-11-arm
+                      arch: arm64
+                      asset: aarch64
+                      phase: package
         env:
             WLD_TEST_CONCURRENCY: "4"
             WLD_TEST_FILE_TIMEOUT_MS: "120000"
@@ -54,18 +64,32 @@ jobs:
                   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
                   & "$bin/bun.exe" -e 'if (process.arch !== "${{ matrix.arch }}" || process.versions.bun !== "1.4.3") throw new Error("Wrong native Bun runtime")'
                   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            - name: Install current production Deno for lock interoperability
+              if: matrix.phase == 'package'
+              uses: denoland/setup-deno@v2
+              with:
+                  deno-version: v2.9.7
             - name: Install separate frozen root and docs graphs
               id: install
               run: bun run install:locked
             - name: Check all source and test types
+              if: matrix.phase == 'source'
               run: bun run check
+            - name: Verify Bun and Deno share native lock ownership
+              if: ${{ matrix.phase == 'package' && !cancelled() && steps.install.outcome == 'success' }}
+              timeout-minutes: 2
+              run: bun scripts/check-lock-interoperability.ts (Get-Command deno).Source
             - name: Run complete isolated Bun test inventory
-              if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+              if: ${{ matrix.phase == 'source' && !cancelled() && steps.install.outcome == 'success' }}
               timeout-minutes: 40
               run: bun run test:bun
+            - name: Qualify native locking, process trees and compiled identity
+              if: ${{ matrix.phase == 'package' && !cancelled() && steps.install.outcome == 'success' }}
+              timeout-minutes: 5
+              run: bun scripts/run-bun-tests.ts src/shared/native-file-lock.test.ts src/shared/foreground-process.test.ts src/shared/runtime-identity.test.ts
             - name: Compile native executable and embedded Workspace
               id: compile
-              if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+              if: ${{ matrix.phase == 'package' && !cancelled() && steps.install.outcome == 'success' }}
               timeout-minutes: 10
               run: bun run compile:bun bin/wld-bun.exe bun-windows-${{ matrix.arch }}
             - name: Qualify relocated package
@@ -80,7 +104,7 @@ jobs:
               if: always()
               uses: actions/upload-artifact@v5
               with:
-                  name: bun-windows-${{ matrix.arch }}-${{ github.run_attempt }}
+                  name: bun-windows-${{ matrix.arch }}-${{ matrix.phase }}-${{ github.run_attempt }}
                   retention-days: 3
                   include-hidden-files: true
                   if-no-files-found: warn

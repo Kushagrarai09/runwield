@@ -9,7 +9,9 @@ export function isStandaloneExecutable(): boolean {
         const runtime: DenoBuildRuntime = Reflect.get(globalThis, String("Deno"));
         return runtime.build.standalone;
     }
-    // Bun compiled modules live in its embedded filesystem. Source execution
-    // cannot obtain this URL merely by placing a build identity next to source.
-    return Boolean(versions.bun && new URL(import.meta.url).pathname.startsWith("/$bunfs/"));
+    if (!versions.bun) return false;
+    // Bun exposes this directly on every supported target, including Windows.
+    // Embedded filesystem path spellings differ by platform.
+    const runtime: { isStandaloneExecutable: boolean } = Reflect.get(globalThis, String("Bun"));
+    return runtime.isStandaloneExecutable;
 }
