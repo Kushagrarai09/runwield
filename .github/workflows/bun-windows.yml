@@ -39,16 +39,17 @@ jobs:
                       asset: aarch64
                       phase: package
         env:
-            # Keep disposable Git worktree paths below Windows' legacy path limit.
-            TEMP: ${{ runner.temp }}
-            TMP: ${{ runner.temp }}
-            TMPDIR: ${{ runner.temp }}
             WLD_TEST_CONCURRENCY: "4"
             WLD_TEST_FILE_TIMEOUT_MS: "120000"
         defaults:
             run:
                 shell: pwsh
         steps:
+            - name: Keep disposable Git worktree paths within Windows limits
+              run: |
+                  "TEMP=$env:RUNNER_TEMP" >> $env:GITHUB_ENV
+                  "TMP=$env:RUNNER_TEMP" >> $env:GITHUB_ENV
+                  "TMPDIR=$env:RUNNER_TEMP" >> $env:GITHUB_ENV
             - uses: actions/checkout@v5
               with:
                   submodules: recursive
