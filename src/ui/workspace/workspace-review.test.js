@@ -1,4 +1,4 @@
-import { writeRuntimeExecutableFixture } from "../../testing/runtime-executable-fixture.ts";
+import { removeExecutableFixtureDirectory, writeRuntimeExecutableFixture } from "../../testing/runtime-executable-fixture.ts";
 import { delimiter } from "node:path";
 import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
 import { captureForegroundProcess } from "../../shared/captured-process.ts";
@@ -450,7 +450,7 @@ test("review guide jobs prefer WLD over external agent host CLIs", async () => {
             else process.env["RUNWIELD_GUIDED_REVIEW_COMMAND"] = previousCommand;
             if (previousModel === undefined) delete process.env["RUNWIELD_GUIDED_REVIEW_MODEL"];
             else process.env["RUNWIELD_GUIDED_REVIEW_MODEL"] = previousModel;
-            await fsRm(binDir, { recursive: true });
+            await removeExecutableFixtureDirectory(binDir);
         }
     });
 });
@@ -565,7 +565,7 @@ test("default review guide usage frames update a running job and remain after co
             else process.env["RUNWIELD_GUIDED_REVIEW_COMMAND"] = previousCommand;
             if (previousModel === undefined) delete process.env["RUNWIELD_GUIDED_REVIEW_MODEL"];
             else process.env["RUNWIELD_GUIDED_REVIEW_MODEL"] = previousModel;
-            await fsRm(fixtureRoot, { recursive: true });
+            await removeExecutableFixtureDirectory(fixtureRoot);
         }
     });
 });
@@ -640,7 +640,7 @@ test("custom review guide commands do not interpret stderr usage-like text", asy
         } finally {
             if (previousCommand === undefined) delete process.env["RUNWIELD_GUIDED_REVIEW_COMMAND"];
             else process.env["RUNWIELD_GUIDED_REVIEW_COMMAND"] = previousCommand;
-            await fsRm(fixtureRoot, { recursive: true });
+            await removeExecutableFixtureDirectory(fixtureRoot);
         }
     });
 });
@@ -701,7 +701,7 @@ test("failed default review guide commands report subprocess stderr and keep par
             else process.env["RUNWIELD_GUIDED_REVIEW_COMMAND"] = previousCommand;
             if (previousModel === undefined) delete process.env["RUNWIELD_GUIDED_REVIEW_MODEL"];
             else process.env["RUNWIELD_GUIDED_REVIEW_MODEL"] = previousModel;
-            await fsRm(fixtureRoot, { recursive: true });
+            await removeExecutableFixtureDirectory(fixtureRoot);
         }
     });
 });
@@ -744,7 +744,7 @@ test("default review guide commands fail clearly on malformed usage frames", asy
             else process.env["RUNWIELD_GUIDED_REVIEW_COMMAND"] = previousCommand;
             if (previousModel === undefined) delete process.env["RUNWIELD_GUIDED_REVIEW_MODEL"];
             else process.env["RUNWIELD_GUIDED_REVIEW_MODEL"] = previousModel;
-            await fsRm(fixtureRoot, { recursive: true });
+            await removeExecutableFixtureDirectory(fixtureRoot);
         }
     });
 });

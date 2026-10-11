@@ -5,6 +5,7 @@ import { mkdir as fsMkdir, writeFile as fsWriteFile } from "node:fs/promises";
  */
 
 import { dirname, isAbsolute, join } from "@std/path";
+import { openNativeFileLock } from "../native-file-lock.ts";
 import { getHomeDir, RUNWIELD_DIR_NAME } from "../../constants.js";
 import { resolvePrimaryCheckoutRoot } from "../primary-checkout.ts";
 import { encodeCwdForSessionDir } from "../session/root-session.js";
@@ -784,7 +785,20 @@ export async function recordWorkflowMetric(metric, cwd) {
         metricsWriteQueue = metricsWriteQueue.then(async () => {
             try {
                 await fsMkdir(dirname(filePath), { recursive: true });
-                await fsWriteFile(filePath, serialized, { flag: "a" });
+                // The queue orders this producer only. Keep a persistent sidecar so
+                // every process appends under the same OS-backed lock identity.
+                const lock = openNativeFileLock(`${filePath}.lock`);
+                try {
+                    const deadline = performance.now() + 1000;
+                    while (!lock.tryLockSync(true)) {
+                        // Metrics remain optional even when another writer stalls.
+                        if (performance.now() >= deadline) return;
+                        await new Promise((resolve) => setTimeout(resolve, 10));
+                    }
+                    await fsWriteFile(filePath, serialized, { flag: "a" });
+                } finally {
+                    lock.close();
+                }
             } catch {
                 // Fail-open: metric writes must never disrupt execution.
             }
