@@ -432,6 +432,7 @@ test("restoreWorktreeTree keeps a matching checkout unchanged", async () => {
     const dir = await fsMkdtemp(join(tmpdir(), "runwield-snapshot-test-"));
     try {
         await git(dir, ["init"]);
+        await git(dir, ["config", "core.autocrlf", "false"]);
         await fsWriteFile(`${dir}/kept.js`, "baseline\n");
         const baselineTree = await captureWorktreeTree(dir);
 

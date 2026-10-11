@@ -125,7 +125,10 @@ test("direct Plan retains explicit verification through skipped Init, reload, an
                     undefined,
                     EXTENSION_CONTEXT,
                 );
-            const command = `  CHECK='whole suite' sh -c 'printf "%s" "$CHECK"' && printf '%s' '-ok'  `;
+            const command =
+                process.platform === "win32"
+                    ? `  (echo whole suite-ok) && (exit /b 0)  `
+                    : `  CHECK='whole suite' sh -c 'printf "%s" "$CHECK"' && printf '%s' '-ok'  `;
             await submit(command, "user_selected");
             assertEquals(getExactProjectCustomSetting("verification_command", projectRoot), command);
             const reloaded = new HostedSession({ id: "command-reloaded", cwd: projectRoot });
@@ -143,7 +146,7 @@ test("direct Plan retains explicit verification through skipped Init, reload, an
                     assertEquals(result.exitCode, 0);
                     assertStringIncludes(result.output, "whole suite-ok");
                 }
-                const escapedSpace = "printf '%s' verify\\ ";
+                const escapedSpace = process.platform === "win32" ? "echo verify^ " : "printf '%s' verify\\ ";
                 await submit(escapedSpace, "user_selected");
                 assertEquals(getExactProjectCustomSetting("verification_command", projectRoot), escapedSpace);
                 const escapedResult = await runLocalCI({

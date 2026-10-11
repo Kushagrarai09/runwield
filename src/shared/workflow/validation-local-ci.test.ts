@@ -117,13 +117,17 @@ test("runLocalCI exact-project mode uses the linked worktree command and cwd", a
         await git(primaryRoot, ["worktree", "add", "-b", "local-ci-side", worktreePath, "main"]);
         await setCustomSetting(
             "verification_command",
-            `printf primary > ${JSON.stringify(primaryMarker)}`,
+            IS_WINDOWS
+                ? `<nul set /p "=primary" > "${primaryMarker}"`
+                : `printf primary > ${JSON.stringify(primaryMarker)}`,
             "project",
             primaryRoot,
         );
         setExactProjectCustomSetting(
             "verification_command",
-            `printf worktree > ${JSON.stringify(worktreeMarker)}; pwd > ${JSON.stringify(cwdMarker)}`,
+            IS_WINDOWS
+                ? `<nul set /p "=worktree" > "${worktreeMarker}" & cd > "${cwdMarker}"`
+                : `printf worktree > ${JSON.stringify(worktreeMarker)}; pwd > ${JSON.stringify(cwdMarker)}`,
             worktreePath,
         );
         const hostedSession = new HostedSession({ id: "local-ci-exact-worktree-test", cwd: worktreePath });
@@ -133,10 +137,7 @@ test("runLocalCI exact-project mode uses the linked worktree command and cwd", a
         assertEquals(result.kind, "completed");
         if (result.kind !== "completed") throw new Error("CI should complete.");
         assertEquals(await fsReadFile(worktreeMarker, "utf8"), "worktree");
-        assertEquals(
-            await fsRealpath((await fsReadFile(cwdMarker, "utf8")).trim()),
-            await fsRealpath(worktreePath),
-        );
+        assertEquals(await fsRealpath((await fsReadFile(cwdMarker, "utf8")).trim()), await fsRealpath(worktreePath));
         assertEquals(await fsReadFile(primaryMarker, "utf8").catch(() => "absent"), "absent");
     } finally {
         await git(primaryRoot, ["worktree", "remove", "--force", worktreePath]).catch(() => {});
@@ -147,8 +148,9 @@ test("runLocalCI exact-project mode uses the linked worktree command and cwd", a
 test("runLocalCI inherits an uncommitted project command and preserves checkout-local settings and repairs", async () => {
     const primaryRoot = await linkedWorktreeCiRepo.checkout({ prefix: "runwield-local-ci-inherit-" });
     const worktreePath = `${primaryRoot}-ci-worktree`;
+    const inheritedCommand = IS_WINDOWS ? "echo inherited & exit /b 1" : "printf inherited; exit 1";
     try {
-        await setCustomSetting("verification_command", "printf inherited; exit 1", "project", primaryRoot);
+        await setCustomSetting("verification_command", inheritedCommand, "project", primaryRoot);
         await setCustomSetting("codereview", "ask", "project", primaryRoot);
         await git(primaryRoot, ["worktree", "add", "-b", "local-ci-inherit", worktreePath, "main"]);
         setExactProjectCustomSetting("codereview", "none", worktreePath);
@@ -159,7 +161,7 @@ test("runLocalCI inherits an uncommitted project command and preserves checkout-
         if (first.kind !== "completed") throw new Error("Inherited command must run without user input.");
         assertEquals(first.exitCode, 1);
         assertStringIncludes(first.output, "inherited");
-        assertEquals(getExactProjectCustomSetting("verification_command", worktreePath), "printf inherited; exit 1");
+        assertEquals(getExactProjectCustomSetting("verification_command", worktreePath), inheritedCommand);
         assertEquals(getExactProjectCustomSetting("codereview", worktreePath), "none");
 
         setExactProjectCustomSetting("verification_command", "printf repaired", worktreePath);
@@ -173,7 +175,7 @@ test("runLocalCI inherits an uncommitted project command and preserves checkout-
         if (second.kind !== "completed") throw new Error("Repaired command must run without user input.");
         assertEquals(second.exitCode, 0);
         assertStringIncludes(second.output, "repaired");
-        assertEquals(getExactProjectCustomSetting("verification_command", primaryRoot), "printf inherited; exit 1");
+        assertEquals(getExactProjectCustomSetting("verification_command", primaryRoot), inheritedCommand);
     } finally {
         await git(primaryRoot, ["worktree", "remove", "--force", worktreePath]).catch(() => {});
         await fsRm(primaryRoot, { recursive: true }).catch(() => {});
@@ -222,7 +224,13 @@ test(
             const resultPromise = runLocalCI({ hostedSession, cwd });
             while (!descendantPid) {
                 await new Promise((resolve) => setTimeout(resolve, 10));
-                descendantPid = Number(await fsReadFile(pidFile, "utf8").then((text) => text.trim(), () => "")) || 0;
+                descendantPid =
+                    Number(
+                        await fsReadFile(pidFile, "utf8").then(
+                            (text) => text.trim(),
+                            () => "",
+                        ),
+                    ) || 0;
             }
             assertEquals(processAlive(descendantPid), true, "CI descendant should be running before cancellation");
 

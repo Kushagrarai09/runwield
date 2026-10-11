@@ -866,3 +866,11 @@ All 17 affected regression files pass on macOS Bun and in the separate Deno chec
 (Deno: 87.0 seconds). Types pass across 1,303 entries; lint passes across 1,437 files.
 Independent Spec and Standards reviews approved all 17 changed code/workflow paths with
 zero findings. The next native Windows run must establish the actual platform result.
+
+The ARM64 source baseline also completed all 649 files: 538 passed and 111 failed.
+All eight shard artifacts are preserved. A subsequent eight-file fixture correction keeps
+real Git and shell execution while selecting Git Bash paths, native cmd compound commands,
+Windows-valid pathspec-sensitive filenames, and explicit CRLF expectations. Both Bun and
+Deno pass all eight files; types and lint pass. Independent Spec and Standards reviews
+approved all eight paths with zero findings. These local checks do not replace the next
+native Windows source run.

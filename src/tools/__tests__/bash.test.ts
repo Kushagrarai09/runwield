@@ -1,3 +1,4 @@
+import { bashFixtureExecutable } from "../../../scripts/bash-fixture.ts";
 import { captureForegroundProcess } from "../../shared/captured-process.ts";
 import { test } from "node:test";
 import {
@@ -57,44 +58,50 @@ test("restricted Pi bash executes inspection and rejects mutations before shell 
             "ls",
         ]);
         const execute = (command: string) =>
-            tool.execute(
-                "call",
-                { command },
-                new AbortController().signal,
-                () => {},
-                { sessionManager: SessionManager.inMemory(cwd) } as never,
-            );
+            tool.execute("call", { command }, new AbortController().signal, () => {}, {
+                sessionManager: SessionManager.inMemory(cwd),
+            } as never);
         const log = await execute("git log -2 --oneline");
         assertStringIncludes(
-            log.content.filter((item) => item.type === "text").map((item) => item.text).join("\n"),
+            log.content
+                .filter((item) => item.type === "text")
+                .map((item) => item.text)
+                .join("\n"),
             "inspection marker",
         );
-        for (
-            const [command, marker] of [
-                ["git show HEAD:'file with spaces.txt'", "inspection content"],
-                ["git diff -- 'file with spaces.txt'", "unstaged marker"],
-                ["git diff --cached -- staged.txt", "staged marker"],
-                ["git -C . status --short", "staged.txt"],
-                ["git branch --list", "main"],
-                ["git worktree list", "main"],
-                ["ls", "file with spaces.txt"],
-            ]
-        ) {
+        for (const [command, marker] of [
+            ["git show HEAD:'file with spaces.txt'", "inspection content"],
+            ["git diff -- 'file with spaces.txt'", "unstaged marker"],
+            ["git diff --cached -- staged.txt", "staged marker"],
+            ["git -C . status --short", "staged.txt"],
+            ["git branch --list", "main"],
+            ["git worktree list", "main"],
+            ["ls", "file with spaces.txt"],
+        ]) {
             const result = await execute(command);
             assertStringIncludes(
-                result.content.filter((item) => item.type === "text").map((item) => item.text).join("\n"),
+                result.content
+                    .filter((item) => item.type === "text")
+                    .map((item) => item.text)
+                    .join("\n"),
                 marker,
             );
         }
         await execute("git remote -v");
         const cat = await execute("cat 'file with spaces.txt'");
         assertStringIncludes(
-            cat.content.filter((item) => item.type === "text").map((item) => item.text).join("\n"),
+            cat.content
+                .filter((item) => item.type === "text")
+                .map((item) => item.text)
+                .join("\n"),
             "inspection content",
         );
         const status = await execute("git status --short");
         assertStringIncludes(
-            status.content.filter((item) => item.type === "text").map((item) => item.text).join("\n"),
+            status.content
+                .filter((item) => item.type === "text")
+                .map((item) => item.text)
+                .join("\n"),
             "file with spaces.txt",
         );
         const denied = await assertRejects(() => execute("git status && touch sentinel"), Error, "report a blocker");
@@ -108,10 +115,17 @@ test("restricted Pi bash executes inspection and rejects mutations before shell 
         assertEquals((await fsReadFile(join(cwd, "file with spaces.txt"), "utf8")).includes("unstaged marker"), true);
         const index = await captureForegroundProcess("git", { cwd, args: ["diff", "--cached", "--name-only"] });
         assertEquals(new TextDecoder().decode(index.stdout).trim(), "staged.txt");
-        assertEquals(await fsStat(join(cwd, "sentinel")).then(() => true, () => false), false);
         assertEquals(
-            await captureForegroundProcess("git", { cwd, args: ["branch", "--list", "unwanted"] })
-                .then((result) => new TextDecoder().decode(result.stdout).trim()),
+            await fsStat(join(cwd, "sentinel")).then(
+                () => true,
+                () => false,
+            ),
+            false,
+        );
+        assertEquals(
+            await captureForegroundProcess("git", { cwd, args: ["branch", "--list", "unwanted"] }).then((result) =>
+                new TextDecoder().decode(result.stdout).trim(),
+            ),
             "",
         );
     } finally {
@@ -123,7 +137,7 @@ test("custom bash retains configured shell path and command prefix when unrestri
     const cwd = await fsMkdtemp(join(tmpdir(), "runwield-bash-settings-"));
     try {
         const tool = createRunWieldBashToolDefinition(cwd, undefined, {
-            shellPath: "/bin/sh",
+            shellPath: bashFixtureExecutable(),
             commandPrefix: "printf 'prefix marker' > prefix.txt; ",
         });
         await tool.execute(
@@ -146,13 +160,9 @@ test("empty policy denies all while absent policy retains Pi shell", async () =>
         const empty = createRunWieldBashToolDefinition(cwd, []);
         await assertRejects(
             () =>
-                empty.execute(
-                    "call",
-                    { command: "pwd" },
-                    new AbortController().signal,
-                    () => {},
-                    { sessionManager: SessionManager.inMemory(cwd) } as never,
-                ),
+                empty.execute("call", { command: "pwd" }, new AbortController().signal, () => {}, {
+                    sessionManager: SessionManager.inMemory(cwd),
+                } as never),
             Error,
             "(none)",
         );

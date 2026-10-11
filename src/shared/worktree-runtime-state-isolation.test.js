@@ -1,3 +1,4 @@
+import process from "node:process";
 import { mkdir as fsMkdir, readFile as fsReadFile, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
 import { test } from "node:test";
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
@@ -289,7 +290,8 @@ test("checkpoint keeps current runtime untracked while committing user wld files
 test("checkpoint commits safe pathspec-like names while leaving runtime untracked", async () => {
     const cwd = await repo.checkout();
     const worktreePath = await makeWorktree(cwd, "pathspec-like-safe-files");
-    const safePath = join(worktreePath, ":(glob) safe [file].txt");
+    const safeName = process.platform === "win32" ? "safe [file].txt" : ":(glob) safe [file].txt";
+    const safePath = join(worktreePath, safeName);
     try {
         await fsWriteFile(safePath, "safe\n");
         await fsMkdir(join(worktreePath, ".wld", "internal"), { recursive: true });
@@ -298,7 +300,7 @@ test("checkpoint commits safe pathspec-like names while leaving runtime untracke
         await checkpointExecutionWorktree({ worktreePath, branch: "pathspec-like-safe-files" });
 
         const committedPaths = await git(worktreePath, ["ls-tree", "-r", "--name-only", "HEAD"]);
-        assertStringIncludes(committedPaths, ":(glob) safe [file].txt");
+        assertStringIncludes(committedPaths, safeName);
         assertEquals(committedPaths.includes(".wld/internal/state.json"), false);
     } finally {
         await git(cwd, ["worktree", "remove", "--force", worktreePath]).catch(() => {});

@@ -1,5 +1,9 @@
+import { bashFixtureExecutable, bashFixturePath } from "../../../../scripts/bash-fixture.ts";
 import { delimiter } from "node:path";
-import { writeWorkflowBinaryFixtures, assertWorkflowBinaryCallsSupported } from "../../../testing/workflow-binary-fixtures.ts";
+import {
+    writeWorkflowBinaryFixtures,
+    assertWorkflowBinaryCallsSupported,
+} from "../../../testing/workflow-binary-fixtures.ts";
 import { runtimeSourceArgs } from "../../../testing/runtime-source-args.ts";
 import { captureForegroundProcess } from "../../captured-process.ts";
 import { makeTempFile } from "../../../testing/temp-file.ts";
@@ -35,20 +39,24 @@ import { startMcpIntegration } from "../../mcp/integration.ts";
 
 let helperRoot = "";
 let priorHelperPath = "";
-before(() => withProcessGlobalTestLock(async () => {
-    priorHelperPath = process.env.PATH || "";
-    helperRoot = await fsMkdtemp(join(tmpdir(), "session-policy-helpers-"));
-    const bin = await writeWorkflowBinaryFixtures(helperRoot);
-    process.env.PATH = `${bin}${delimiter}${priorHelperPath}`;
-}));
-after(() => withProcessGlobalTestLock(async () => {
-    process.env.PATH = priorHelperPath;
-    try {
-        await assertWorkflowBinaryCallsSupported(helperRoot);
-    } finally {
-        await fsRm(helperRoot, { recursive: true });
-    }
-}));
+before(() =>
+    withProcessGlobalTestLock(async () => {
+        priorHelperPath = process.env.PATH || "";
+        helperRoot = await fsMkdtemp(join(tmpdir(), "session-policy-helpers-"));
+        const bin = await writeWorkflowBinaryFixtures(helperRoot);
+        process.env.PATH = `${bin}${delimiter}${priorHelperPath}`;
+    }),
+);
+after(() =>
+    withProcessGlobalTestLock(async () => {
+        process.env.PATH = priorHelperPath;
+        try {
+            await assertWorkflowBinaryCallsSupported(helperRoot);
+        } finally {
+            await fsRm(helperRoot, { recursive: true });
+        }
+    }),
+);
 
 // Anchored to this file, not Deno.cwd(): test realms share one process, so a
 // concurrent test file's chdir would otherwise point these at its temp dir.
@@ -71,13 +79,15 @@ async function startRealMcpFixtureTools(cwd) {
     const logPath = await makeTempFile({ prefix: "runwield-real-mcp-policy-" });
     const result = await startMcpIntegration({
         cwd,
-        servers: [{
-            name: "fixture",
-            command: process.execPath,
-            args: runtimeSourceArgs(["run", "-A", MCP_FIXTURE_SERVER]),
-            env: { RUNWIELD_MCP_FIXTURE_LOG: logPath },
-            source: "request",
-        }],
+        servers: [
+            {
+                name: "fixture",
+                command: process.execPath,
+                args: runtimeSourceArgs(["run", "-A", MCP_FIXTURE_SERVER]),
+                env: { RUNWIELD_MCP_FIXTURE_LOG: logPath },
+                source: "request",
+            },
+        ],
     });
     assertEquals(result.warnings, []);
     return { pool: result.integration, tools: result.integration.getTools(), logPath };
@@ -90,7 +100,7 @@ async function removeTempDir(path) {
             await fsRm(path, { recursive: true });
             return;
         } catch (error) {
-            if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return;
+            if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
             if (attempt === 4) throw error;
             await delay(20 * (attempt + 1));
         }
@@ -150,14 +160,7 @@ test("loadAgentDef keeps filename identity separate from frontmatter display nam
     await fsMkdir(agentDirectory, { recursive: true });
     await fsWriteFile(
         join(agentDirectory, "case-contract.md"),
-        [
-            "---",
-            "name: Arbitrary Frontmatter Display Name",
-            "tools: []",
-            "---",
-            "",
-            "Fixture prompt.",
-        ].join("\n"),
+        ["---", "name: Arbitrary Frontmatter Display Name", "tools: []", "---", "", "Fixture prompt."].join("\n"),
     );
 
     try {
@@ -389,12 +392,30 @@ test("Claude CLI and Agy CLI bridge the session name tool", async () => {
             cwd: tempHome,
         });
 
-        assertEquals(claudeTools.some((tool) => tool.name === "set_session_name"), true);
-        assertEquals(agyTools.some((tool) => tool.name === "set_session_name"), true);
-        assertEquals(claudeTools.some((tool) => tool.name === "background_task"), true);
-        assertEquals(agyTools.some((tool) => tool.name === "background_task"), true);
-        assertEquals(claudeTools.some((tool) => tool.name === "delegate_agent"), false);
-        assertEquals(agyTools.some((tool) => tool.name === "delegate_agent"), false);
+        assertEquals(
+            claudeTools.some((tool) => tool.name === "set_session_name"),
+            true,
+        );
+        assertEquals(
+            agyTools.some((tool) => tool.name === "set_session_name"),
+            true,
+        );
+        assertEquals(
+            claudeTools.some((tool) => tool.name === "background_task"),
+            true,
+        );
+        assertEquals(
+            agyTools.some((tool) => tool.name === "background_task"),
+            true,
+        );
+        assertEquals(
+            claudeTools.some((tool) => tool.name === "delegate_agent"),
+            false,
+        );
+        assertEquals(
+            agyTools.some((tool) => tool.name === "delegate_agent"),
+            false,
+        );
     } finally {
         await removeTempDir(tempHome);
     }
@@ -437,17 +458,15 @@ test("resolveSessionToolNames allows workflow runtime custom tools", () => {
 test("resolveEffectiveSessionToolNames does not special-case removed tool names", () => {
     const agentTools = ["read", "memory"];
 
-    assertEquals(
-        resolveEffectiveSessionToolNames(agentTools, undefined, []),
-        ["read", "memory"],
-    );
+    assertEquals(resolveEffectiveSessionToolNames(agentTools, undefined, []), ["read", "memory"]);
 });
 
 test("resolveEffectiveSessionToolNames normalizes legacy multi replace tool name", () => {
-    assertEquals(
-        resolveEffectiveSessionToolNames(["read", "edit", "multi_replace_file_content"], undefined, []),
-        ["read", "edit", "multi_file_edit"],
-    );
+    assertEquals(resolveEffectiveSessionToolNames(["read", "edit", "multi_replace_file_content"], undefined, []), [
+        "read",
+        "edit",
+        "multi_file_edit",
+    ]);
 });
 
 test("root Pi Agent builds keep MCP tools when using a subagent definition", async () => {
@@ -512,7 +531,10 @@ test("bounded Pi and Claude subagent builds do not inherit root MCP tools", asyn
             });
             session = built.session;
             assertEquals(built.tools.includes(mcpTool.name), false);
-            assertEquals(built.finalCustomTools.some((tool) => tool.name === mcpTool.name), false);
+            assertEquals(
+                built.finalCustomTools.some((tool) => tool.name === mcpTool.name),
+                false,
+            );
 
             const agentDef = await loadAgentDef(AGENTS.GUIDE, tempHome);
             const rootClaudeTools = await composeClaudeCliBridgedTools({
@@ -532,7 +554,10 @@ test("bounded Pi and Claude subagent builds do not inherit root MCP tools", asyn
                 mcpRootTools: [],
             });
             assert(rootClaudeTools.some((tool) => tool.name === mcpTool.name));
-            assertEquals(isolatedClaudeTools.some((tool) => tool.name === mcpTool.name), false);
+            assertEquals(
+                isolatedClaudeTools.some((tool) => tool.name === mcpTool.name),
+                false,
+            );
         } finally {
             session?.dispose();
             await mcpFixture?.pool.close();
@@ -613,8 +638,9 @@ test("buildAgentSession wires task_completed with an event-only HostedSession", 
             const tool = finalCustomTools.find((candidate) => candidate.name === "task_completed");
             assert(tool, "expected task_completed to be wired");
             const execute =
-                /** @type {(id: string, params: { message?: string }, signal: AbortSignal, onUpdate: () => void, context: object) => Promise<unknown>} */ (tool
-                    .execute);
+                /** @type {(id: string, params: { message?: string }, signal: AbortSignal, onUpdate: () => void, context: object) => Promise<unknown>} */ (
+                    tool.execute
+                );
 
             await execute("tool-call-1", { message: "Done." }, new AbortController().signal, () => {}, {});
 
@@ -1097,7 +1123,10 @@ test("buildAgentSession wires bundled background shell and retained delegate too
                 modelOverride: "test/vision",
             });
             sessions.push(disabled.session);
-            assertEquals(disabled.finalCustomTools.some((tool) => tool.name === "delegate_agent"), false);
+            assertEquals(
+                disabled.finalCustomTools.some((tool) => tool.name === "delegate_agent"),
+                false,
+            );
             assert(disabled.finalCustomTools.some((tool) => tool.name === "background_task"));
         } finally {
             for (const session of sessions) session.dispose();
@@ -1243,14 +1272,7 @@ test("bundled Work Record tools are protected for planning roles and excluded fr
     await fsMkdir(localAgentsDir, { recursive: true });
     await fsWriteFile(
         plannerOverridePath,
-        [
-            "---",
-            "name: Planner",
-            "tools:",
-            "  - read",
-            "---",
-            "Local planner override.",
-        ].join("\n"),
+        ["---", "name: Planner", "tools:", "  - read", "---", "Local planner override."].join("\n"),
     );
     try {
         const planner = await loadAgentDef(AGENTS.PLANNER, projectRoot);
@@ -1315,15 +1337,15 @@ test("buildAgentSession auto-wires Work Record tools with role access modes", as
                 assert(built.finalCustomTools.find((tool) => tool.name === "work_record_read"));
             }
 
-            const guideSearch = /** @type {any} */ (guideBuilt.finalCustomTools.find((tool) =>
-                tool.name === "work_record_search"
-            ));
-            const plannerSearch = /** @type {any} */ (plannerBuilt.finalCustomTools.find((tool) =>
-                tool.name === "work_record_search"
-            ));
-            const customRead = /** @type {any} */ (customBuilt.finalCustomTools.find((tool) =>
-                tool.name === "work_record_read"
-            ));
+            const guideSearch = /** @type {any} */ (
+                guideBuilt.finalCustomTools.find((tool) => tool.name === "work_record_search")
+            );
+            const plannerSearch = /** @type {any} */ (
+                plannerBuilt.finalCustomTools.find((tool) => tool.name === "work_record_search")
+            );
+            const customRead = /** @type {any} */ (
+                customBuilt.finalCustomTools.find((tool) => tool.name === "work_record_read")
+            );
             assertEquals(
                 (await guideSearch.execute("1", { query: "" }, undefined, undefined, {})).details.accessMode,
                 "all",
@@ -1351,9 +1373,8 @@ test("Guide bash policy reaches Pi and background tools and refreshes after root
     await withProcessGlobalTestLock(async () => {
         const originalHome = process.env["HOME"];
         const cwd = await fsMkdtemp(join(tmpdir(), "runwield-guide-bash-policy-"));
-        const { ensureRootAgentSession, getRootSessionRebuildOptions, __getRootSessionMetadataForTests } = await import(
-            "../session.js"
-        );
+        const { ensureRootAgentSession, getRootSessionRebuildOptions, __getRootSessionMetadataForTests } =
+            await import("../session.js");
         const overrideDir = join(cwd, ".wld", "agents");
         const overridePath = join(overrideDir, "guide.md");
         const hostedSession = new HostedSession({ id: "guide-bash-policy", cwd });
@@ -1365,8 +1386,9 @@ test("Guide bash policy reaches Pi and background tools and refreshes after root
         /** @param {string} name */
         const findTool = (name) => {
             const metadata = __getRootSessionMetadataForTests(/** @type {any} */ (hostedSession.getRootAgentSession()));
-            return /** @type {import("@earendil-works/pi-coding-agent").ToolDefinition[]} */ (metadata
-                ?.finalCustomTools || []).find((tool) => tool.name === name);
+            return /** @type {import("@earendil-works/pi-coding-agent").ToolDefinition[]} */ (
+                metadata?.finalCustomTools || []
+            ).find((tool) => tool.name === name);
         };
         try {
             process.env["HOME"] = cwd;
@@ -1376,7 +1398,7 @@ test("Guide bash policy reaches Pi and background tools and refreshes after root
             assert(init.success);
             await fsWriteFile(join(cwd, "dirty.txt"), "visible in status\n");
             await setPolicy("[pwd]");
-            getSettingsManager(cwd).setShellPath("/bin/sh");
+            getSettingsManager(cwd).setShellPath(bashFixtureExecutable());
             getSettingsManager(cwd).setShellCommandPrefix("printf 'configured shell' > shell-prefix.txt; ");
             await ensureRootAgentSession({ hostedSession, agentName: AGENTS.GUIDE, modelOverride: "test/text" });
             /** @param {import("@earendil-works/pi-coding-agent").ToolDefinition | undefined} tool
@@ -1392,8 +1414,8 @@ test("Guide bash policy reaches Pi and background tools and refreshes after root
                 );
             };
             assertEquals(
-                (await execute(findTool("bash"), { command: "pwd" })).content.some((item) =>
-                    item.type === "text" && item.text.includes(cwd)
+                (await execute(findTool("bash"), { command: "pwd" })).content.some(
+                    (item) => item.type === "text" && item.text.includes(bashFixturePath(cwd)),
                 ),
                 true,
             );
@@ -1407,8 +1429,9 @@ test("Guide bash policy reaches Pi and background tools and refreshes after root
             );
             assert(findTool("bash")?.description.includes("pwd"));
             assert(
-                __getRootSessionMetadataForTests(/** @type {any} */ (hostedSession.getRootAgentSession()))?.promptState
-                    .text.includes("Allowed commands: pwd"),
+                __getRootSessionMetadataForTests(
+                    /** @type {any} */ (hostedSession.getRootAgentSession()),
+                )?.promptState.text.includes("Allowed commands: pwd"),
             );
             await setPolicy("[git status]");
             await ensureRootAgentSession({
@@ -1426,12 +1449,13 @@ test("Guide bash policy reaches Pi and background tools and refreshes after root
             assert(taskId);
             await hostedSession.backgroundTasks.wait(taskId);
             assert(
-                (await execute(findTool("background_task"), { action: "status", task_id: taskId })).details?.output
-                    .includes("dirty.txt"),
+                (
+                    await execute(findTool("background_task"), { action: "status", task_id: taskId })
+                ).details?.output.includes("dirty.txt"),
             );
             assert(
-                (await execute(findTool("background_task"), { action: "start", command: "pwd" })).content.some((item) =>
-                    item.type === "text" && item.text.includes("git status")
+                (await execute(findTool("background_task"), { action: "start", command: "pwd" })).content.some(
+                    (item) => item.type === "text" && item.text.includes("git status"),
                 ),
             );
             await setPolicy("[]");
@@ -1520,7 +1544,10 @@ test("read and write delegated Pi sessions inherit only the parent's available b
             );
             const noBash = await build(SUBAGENTS.DELEGATED_READ, ["read"], undefined);
             assertEquals(noBash.tools.includes("bash"), false);
-            assertEquals(noBash.finalCustomTools.some((tool) => tool.name === "bash"), false);
+            assertEquals(
+                noBash.finalCustomTools.some((tool) => tool.name === "bash"),
+                false,
+            );
             const unrestrictedWrite = await build(SUBAGENTS.DELEGATED, ["bash", "read"], undefined);
             const unrestrictedBash = unrestrictedWrite.finalCustomTools.find((tool) => tool.name === "bash");
             assert(unrestrictedBash);
@@ -1563,7 +1590,13 @@ test("read and write delegated Pi sessions inherit only the parent's available b
                 Error,
                 "report a blocker",
             );
-            assertEquals(await fsStat(join(cwd, "forbidden")).then(() => true, () => false), false);
+            assertEquals(
+                await fsStat(join(cwd, "forbidden")).then(
+                    () => true,
+                    () => false,
+                ),
+                false,
+            );
         } finally {
             for (const session of sessions) session.dispose();
             if (originalHome === undefined) delete process.env["HOME"];
@@ -1621,7 +1654,13 @@ test("external CLI bridge filters RunWield background starts but not native host
             /** @type {any} */ ({}),
         );
         assert(result.content.some((item) => item.type === "text" && item.text.includes("report a blocker")));
-        assertEquals(await fsStat(join(cwd, "bridge-sentinel")).then(() => true, () => false), false);
+        assertEquals(
+            await fsStat(join(cwd, "bridge-sentinel")).then(
+                () => true,
+                () => false,
+            ),
+            false,
+        );
     } finally {
         await hostedSession.backgroundTasks.cancelAllAndSuppress();
         await removeTempDir(cwd);

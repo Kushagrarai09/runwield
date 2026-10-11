@@ -96,7 +96,7 @@ test("renderBootBanner reports fixture prompts, skills, settings, context, and b
             assertStringIncludes(output, "Theme: fixture-theme");
             assertStringIncludes(output, "Runtime Optimizers: Snip");
             assertStringIncludes(output, "Context:");
-            assertStringIncludes(output, "./RUNWIELD.md");
+            assertStringIncludes(output.replaceAll("\\", "/"), "./RUNWIELD.md");
             assertStringIncludes(output, "./.wld/prompts/help.md command can't be invoked");
             assertStringIncludes(output, "package prompt /theme from npm:@example/prompts");
         } finally {

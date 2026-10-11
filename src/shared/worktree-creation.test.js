@@ -39,7 +39,7 @@ test("resolveWorktreeParent keeps overrides and home placement while no-home fal
             process.env.HOME = "/Users/alice";
             assertEquals(
                 resolveWorktreeParent("/Users/alice/Documents/web/runwield", undefined),
-                "/Users/alice/.wld/worktrees/--Users-alice-Documents-web-runwield--",
+                join("/Users/alice", ".wld", "worktrees", "--Users-alice-Documents-web-runwield--"),
             );
             assertEquals(resolveWorktreeParent(projectRoot, "/tmp/worktrees"), "/tmp/worktrees");
 
@@ -178,7 +178,7 @@ test("createTestWorktreeAttempt leaves created Git evidence when registry settle
         assertMatch(error.message, /inspect .* on branch worktree\/settled-plan-/);
 
         const created = [];
-        for await (const item of (await readdir(worktreeRoot, { withFileTypes: true }))) {
+        for await (const item of await readdir(worktreeRoot, { withFileTypes: true })) {
             if (item.isDirectory() && item.name.includes("settled-plan")) created.push(item.name);
         }
         assertEquals(created.length, 1);
@@ -218,7 +218,7 @@ test("createTestWorktreeAttempt initializes submodules", async () => {
             });
 
             assertEquals(
-                await fsReadFile(`${worktree.path}/third_party/demo/module.css`, "utf8"),
+                (await fsReadFile(`${worktree.path}/third_party/demo/module.css`, "utf8")).replaceAll("\r\n", "\n"),
                 "body { color: red; }\n",
             );
             await removeWorktreeGitArtifacts({
