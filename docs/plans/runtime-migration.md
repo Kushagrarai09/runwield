@@ -912,3 +912,12 @@ The first complete x64 source shard at `17eb7c790` improved from 134/162 to 156/
 passing files. Its remaining failures are remote-target fixtures, two SessionRuntime cleanup
 cases, a Bash cwd assertion, and three Golden workflow files. Full eight-shard results are
 still pending.
+
+The complete x64 source run at `17eb7c790` passes 605/649 files (150/163,
+149/162, 150/162, 156/162), compared with 543/649 at the previous baseline.
+ARM64 source jobs remain running; both architectures already pass package qualification.
+Five affected Session/Golden files pass locally under Bun and Deno (122.3 seconds).
+Caller-owned Session stores now close before sandbox removal, and native cmd fixtures
+preserve validation failures and retries. The next Windows run retains bounded Golden
+failure and timeout state for diagnosis. Types/lint pass; independent Spec/Standards
+review approved the three changed paths after correcting the timeout diagnostic filename.

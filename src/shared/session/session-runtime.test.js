@@ -563,6 +563,13 @@ test("SessionRuntime keeps dormant managed image persistence read-only but allow
         await fsMkdir(cwd, { recursive: true });
         ensureRuntimeModelFixture();
         const sessionHost = new SessionHost();
+        const store = openOwnerCoordinationStore();
+        const runtime = new SessionRuntime({
+            sessionHost,
+            sessionStore: store,
+            ownerProcessKind: "test",
+            ownerInstanceId: crypto.randomUUID(),
+        });
         try {
             const session = sessionHost.createSession({
                 id: "managed-image-runtime",
@@ -582,7 +589,6 @@ test("SessionRuntime keeps dormant managed image persistence read-only but allow
                 },
             });
             assertEquals(session.getRootSessionManager(), null);
-            const runtime = makeRuntime({ sessionHost });
 
             const dormantResult = await runtime.persistSessionImage(session.id, {
                 base64: btoa("img"),
@@ -632,10 +638,18 @@ test("SessionRuntime keeps dormant managed image persistence read-only but allow
 
             const persistedPath = persisted.path || "";
             assertEquals(persisted.ref?.startsWith("attachment:"), true);
-            assertEquals(persistedPath.startsWith(`${getRunWieldSessionDir(cwd)}/pi-managed-image_images/`), true);
+            assertEquals(
+                persistedPath.startsWith(
+                    join(getRunWieldSessionDir(cwd), "pi-managed-image_images") +
+                        (process.platform === "win32" ? "\\" : "/"),
+                ),
+                true,
+            );
             assertEquals(new TextDecoder().decode(await fsReadFile(persistedPath)), "img");
             assertEquals(await runtime.preflightSessionImages(session.id, [persisted]), { ok: true, mode: "direct" });
         } finally {
+            await runtime.closeAllSessionsWhenIdle();
+            store.close();
             process.env["HOME"] = previousHome;
             await removeTempDir(home);
         }
@@ -2480,7 +2494,14 @@ test("SessionRuntime persists pending prompt images once a live manager exists",
         process.env["HOME"] = home;
         const cwd = `${home}/project`;
         await fsMkdir(cwd, { recursive: true });
-        const runtime = makeRuntime();
+        ensureRuntimeModelFixture();
+        const store = openOwnerCoordinationStore();
+        const runtime = new SessionRuntime({
+            sessionHost: new SessionHost(),
+            sessionStore: store,
+            ownerProcessKind: "test",
+            ownerInstanceId: crypto.randomUUID(),
+        });
         try {
             const sessionId = await runtime.createPromptReadySession({ cwd });
             /** @type {any[]} */
@@ -2500,6 +2521,8 @@ test("SessionRuntime persists pending prompt images once a live manager exists",
             assertEquals(eventImage?.ref?.startsWith("attachment:"), true);
             assertEquals(new TextDecoder().decode(await fsReadFile(eventImage.path)), "img");
         } finally {
+            await runtime.closeAllSessionsWhenIdle();
+            store.close();
             process.env["HOME"] = previousHome;
             await removeTempDir(home);
         }
