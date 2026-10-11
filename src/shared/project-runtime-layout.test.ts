@@ -1,3 +1,6 @@
+import { Buffer } from "node:buffer";
+import { createRequire } from "node:module";
+import { toNamespacedPath } from "node:path";
 import { writeRuntimeExecutableFixture } from "../testing/runtime-executable-fixture.ts";
 import { delimiter } from "node:path";
 import fsPromises from "node:fs/promises";
@@ -2149,4 +2152,90 @@ async function readChildStdout(child: NativeProcess): Promise<string> {
     ]);
     if (!status.success) throw new Error(`Driver failed: ${stderr}`);
     return stdout.trim();
+}
+
+
+interface DirectoryHandleSymbols {
+    CreateFileW(
+        path: Uint8Array,
+        access: number,
+        share: number,
+        security: number,
+        disposition: number,
+        flags: number,
+        template: bigint,
+    ): bigint;
+    CloseHandle(handle: bigint): number;
+    GetLastError(): number;
+}
+interface DirectoryHandleLibrary {
+    symbols: DirectoryHandleSymbols;
+    close(): void;
+}
+interface DirectoryHandleFunction {
+    args: string[];
+    returns: string;
+}
+interface DirectoryHandleFFI {
+    dlopen(path: string, functions: Record<string, DirectoryHandleFunction>): DirectoryHandleLibrary;
+}
+
+for (const releaseDuringScan of [true, false]) {
+    test(
+        `Windows runtime scan preserves locked-directory evidence: release=${releaseDuringScan}`,
+        {
+            skip: process.platform !== "win32" || !process.versions.bun,
+        },
+        async () => {
+            const project = await makeMigrationProject();
+            const ffi: DirectoryHandleFFI = createRequire(import.meta.url)("bun:ffi");
+            const library = ffi.dlopen("kernel32.dll", {
+                CreateFileW: { args: ["buffer", "u32", "u32", "ptr", "u32", "u32", "u64"], returns: "u64" },
+                CloseHandle: { args: ["u64"], returns: "i32" },
+                GetLastError: { args: [], returns: "u32" },
+            });
+            let handle = 0n;
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            let closeResult = 1;
+            try {
+                const layout = await enterProjectRuntime(project.selectedRoot);
+                const held = join(layout.primary.publicationStagingRoot, "retiring-checkout", ".wld");
+                await fsMkdir(held, { recursive: true });
+                // Open an actual Win32 directory without sharing, reproducing the
+                // permission error seen while a staging directory is being retired.
+                handle = library.symbols.CreateFileW(
+                    Buffer.from(toNamespacedPath(held) + "\0", "utf16le"),
+                    0x81,
+                    0,
+                    0,
+                    3,
+                    0x02000000,
+                    0n,
+                );
+                assert(
+                    handle !== 0n && handle !== 0xffffffffffffffffn,
+                    `CreateFileW: ${library.symbols.GetLastError()}`,
+                );
+                const blocked = await assertRejects(() => fsReaddir(held), Error);
+                assert("code" in blocked && ["EPERM", "EACCES", "EBUSY"].includes(String(blocked.code)));
+                if (releaseDuringScan) {
+                    timer = setTimeout(() => {
+                        closeResult = library.symbols.CloseHandle(handle);
+                        handle = 0n;
+                    }, 500);
+                    await enterProjectRuntime(project.selectedRoot);
+                    assertEquals(handle, 0n);
+                    assertEquals(closeResult, 1);
+                } else {
+                    const denied = await assertRejects(() => enterProjectRuntime(project.selectedRoot), Error);
+                    assert("code" in denied && ["EPERM", "EACCES", "EBUSY"].includes(String(denied.code)));
+                }
+            } finally {
+                if (timer) clearTimeout(timer);
+                if (handle !== 0n && handle !== 0xffffffffffffffffn) library.symbols.CloseHandle(handle);
+                library.close();
+                await project.cleanup();
+            }
+        },
+    );
 }

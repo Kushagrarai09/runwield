@@ -1146,14 +1146,28 @@ async function collectSymlinks(
     symlinks: string[],
     repositoryContainers: Set<string> = new Set(),
 ): Promise<void> {
-    const info = await lstatOrNull(path);
-    if (!info) return;
-    if (info.isSymbolicLink()) {
-        symlinks.push(path);
-        return;
+    let entries: Dirent[] | null;
+    for (let attempt = 0;; attempt++) {
+        try {
+            // A staging checkout can be disappearing during publication cleanup.
+            // Recheck its type on every retry so a replacement symlink still blocks.
+            const info = await lstatOrNull(path);
+            if (!info) return;
+            if (info.isSymbolicLink()) {
+                symlinks.push(path);
+                return;
+            }
+            if (!info.isDirectory()) return;
+            entries = await safeReadDir(path);
+            break;
+        } catch (error) {
+            if (
+                platform !== "win32" || attempt >= 10 || !(error instanceof Error) || !("code" in error) ||
+                (error.code !== "EPERM" && error.code !== "EACCES" && error.code !== "EBUSY")
+            ) throw error;
+            await new Promise((resolve) => setTimeout(resolve, 25 * (attempt + 1)));
+        }
     }
-    if (!info.isDirectory()) return;
-    const entries = await safeReadDir(path);
     if (!entries) return;
     if (repositoryContainers.has(path)) {
         for (const entry of entries) {
