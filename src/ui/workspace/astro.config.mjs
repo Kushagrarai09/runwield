@@ -6,7 +6,7 @@ globalThis.module = globalThis.module || { exports: globalThis.exports };
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, passthroughImageService } from "astro/config";
-import { versions } from "node:process";
+import { argv, versions } from "node:process";
 import bunAdapter from "./integrations/bun-adapter.ts";
 import deno from "@deno/astro-adapter";
 import react from "./integrations/deno-react.mjs";
@@ -48,6 +48,8 @@ export default defineConfig({
         checkOrigin: false,
     },
     vite: {
+        // CI checks and builds run concurrently; each optimizer needs its own cache.
+        cacheDir: resolve(WORKSPACE_DIR, "node_modules", argv.includes("check") ? ".vite-check" : ".vite"),
         plugins: [reviewCollapseStatePlugin(), tailwindcss()],
         define: { "process.env.NODE_ENV": '"development"' },
         build: {
