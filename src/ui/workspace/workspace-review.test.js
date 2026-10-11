@@ -1,13 +1,8 @@
+import { writeRuntimeExecutableFixture } from "../../testing/runtime-executable-fixture.ts";
 import { delimiter } from "node:path";
 import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
 import { captureForegroundProcess } from "../../shared/captured-process.ts";
-import {
-    chmod as fsChmod,
-    mkdir as fsMkdir,
-    mkdtemp as fsMkdtemp,
-    rm as fsRm,
-    writeFile as fsWriteFile,
-} from "node:fs/promises";
+import { mkdir as fsMkdir, mkdtemp as fsMkdtemp, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { getCwd } from "../../constants.js";
 import { test } from "node:test";
@@ -54,11 +49,13 @@ function makeGuideJson(title = "Fixture guide") {
     return JSON.stringify({
         schemaVersion: "1.0",
         title,
-        sections: [{
-            title: "Core",
-            role: "core",
-            blocks: [{ type: "diff", file: "src/a.js", summary: "Review the changed export." }],
-        }],
+        sections: [
+            {
+                title: "Core",
+                role: "core",
+                blocks: [{ type: "diff", file: "src/a.js", summary: "Review the changed export." }],
+            },
+        ],
         everythingElse: [],
     });
 }
@@ -71,7 +68,32 @@ function makeGuideReviewPayload() {
 }
 
 function shellQuote(value) {
-    return `'${value.replaceAll("'", "'\\''")}'`;
+    return process.platform === "win32" ? `"${value}"` : `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+/**
+ * @typedef {Object} GuideCommandFixture
+ * @property {string} stdout
+ * @property {string[]} [stderr]
+ * @property {string} [gatePath]
+ * @property {number} [exitCode]
+ */
+/** @param {string} path @param {GuideCommandFixture} fixture */
+async function writeGuideCommandFixture(path, fixture) {
+    const source = `${path}.mjs`;
+    await fsWriteFile(
+        source,
+        `
+import { existsSync } from "node:fs";
+const fixture = ${JSON.stringify(fixture)};
+for await (const chunk of process.stdin) { void chunk; }
+for (const line of fixture.stderr || []) process.stderr.write(line + "\\n");
+while (fixture.gatePath && !existsSync(fixture.gatePath)) await new Promise(resolve => setTimeout(resolve, 20));
+process.stdout.write(fixture.stdout + "\\n");
+process.exitCode = fixture.exitCode || 0;
+`,
+    );
+    return await writeRuntimeExecutableFixture(path, source);
 }
 
 async function runReviewGuideJob(state) {
@@ -124,10 +146,14 @@ test("review request forwarding does not inherit Deno.serve's legacy abort signa
     });
 
     assertEquals(output.success, true);
-    const stderr = new TextDecoder().decode(output.stderr).split("\n").filter((line) => {
-        if (line.includes("Download")) return false;
-        return !line.includes("Blocking") || !line.includes("waiting for file lock on node_modules directory");
-    }).join("\n");
+    const stderr = new TextDecoder()
+        .decode(output.stderr)
+        .split("\n")
+        .filter((line) => {
+            if (line.includes("Download")) return false;
+            return !line.includes("Blocking") || !line.includes("waiting for file lock on node_modules directory");
+        })
+        .join("\n");
     assertEquals(stderr, "");
 });
 
@@ -256,38 +282,39 @@ test("review guide and widget APIs require token and serve explainer state", asy
             guidedReviewFixture: {
                 schemaVersion: "1.0",
                 title: "Fixture guide",
-                sections: [{
-                    title: "Fixture",
-                    role: "core",
-                    blocks: [
-                        { type: "diff", file: "src/a.js", summary: "Check the fixture diff." },
-                        {
-                            type: "widget",
-                            id: "fixture",
-                            entry: "index.html",
-                            title: "Fixture",
-                            html:
-                                '<!doctype html><link rel="stylesheet" href="widget.css"><img src="asset.svg" alt="fixture"><script src="widget.js"></script>',
-                            assets: [
-                                {
-                                    name: "asset.svg",
-                                    contentType: "image/svg+xml",
-                                    content: '<svg xmlns="http://www.w3.org/2000/svg"></svg>',
-                                },
-                                {
-                                    name: "widget.css",
-                                    contentType: "text/css",
-                                    content: "img{width:16px}",
-                                },
-                                {
-                                    name: "widget.js",
-                                    contentType: "application/javascript",
-                                    content: "document.body.dataset.ready = 'true';",
-                                },
-                            ],
-                        },
-                    ],
-                }],
+                sections: [
+                    {
+                        title: "Fixture",
+                        role: "core",
+                        blocks: [
+                            { type: "diff", file: "src/a.js", summary: "Check the fixture diff." },
+                            {
+                                type: "widget",
+                                id: "fixture",
+                                entry: "index.html",
+                                title: "Fixture",
+                                html: '<!doctype html><link rel="stylesheet" href="widget.css"><img src="asset.svg" alt="fixture"><script src="widget.js"></script>',
+                                assets: [
+                                    {
+                                        name: "asset.svg",
+                                        contentType: "image/svg+xml",
+                                        content: '<svg xmlns="http://www.w3.org/2000/svg"></svg>',
+                                    },
+                                    {
+                                        name: "widget.css",
+                                        contentType: "text/css",
+                                        content: "img{width:16px}",
+                                    },
+                                    {
+                                        name: "widget.js",
+                                        contentType: "application/javascript",
+                                        content: "document.body.dataset.ready = 'true';",
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                ],
                 everythingElse: [],
             },
         },
@@ -370,8 +397,7 @@ test("review guide jobs prefer WLD over external agent host CLIs", async () => {
         try {
             for (const command of ["wld", "claude"]) {
                 const commandPath = `${binDir}/${command}`;
-                await fsWriteFile(commandPath, "#!/bin/sh\necho '{}'\n");
-                await fsChmod(commandPath, 0o755);
+                await writeGuideCommandFixture(commandPath, { stdout: "{}" });
             }
             process.env["PATH"] = previousPath ? `${binDir}${delimiter}${previousPath}` : binDir;
             delete process.env["RUNWIELD_GUIDED_REVIEW_COMMAND"];
@@ -386,11 +412,13 @@ test("review guide jobs prefer WLD over external agent host CLIs", async () => {
                     guidedReviewFixture: {
                         schemaVersion: "1.0",
                         title: "WLD guide",
-                        sections: [{
-                            title: "Core",
-                            role: "core",
-                            blocks: [{ type: "diff", file: "src/a.js" }],
-                        }],
+                        sections: [
+                            {
+                                title: "Core",
+                                role: "core",
+                                blocks: [{ type: "diff", file: "src/a.js" }],
+                            },
+                        ],
                         everythingElse: [],
                     },
                 },
@@ -439,53 +467,41 @@ test("default review guide usage frames update a running job and remain after co
         const commandPath = join(binDir, "wld");
         try {
             await fsMkdir(binDir, { recursive: true });
-            const firstFrame = `${GUIDE_EVENT_PREFIX}${
-                JSON.stringify({
-                    version: 1,
-                    type: "usage",
-                    usage: {
-                        inputTokens: 1200,
-                        outputTokens: 200,
-                        cacheReadTokens: 30,
-                        cacheWriteTokens: 4,
-                        costUsd: 0.1,
-                    },
-                })
-            }`;
-            const secondFrame = `${GUIDE_EVENT_PREFIX}${
-                JSON.stringify({
-                    version: 1,
-                    type: "usage",
-                    usage: {
-                        inputTokens: 40,
-                        outputTokens: 50,
-                        cacheReadTokens: 70,
-                        cacheWriteTokens: 6,
-                        costUsd: 0.025,
-                    },
-                })
-            }`;
-            await fsWriteFile(
-                commandPath,
-                [
-                    "#!/bin/sh",
-                    `echo '${firstFrame}' >&2`,
-                    `echo '${secondFrame}' >&2`,
-                    `echo '${
-                        encodeGuidedReviewMetadata({
-                            provider: "test-provider",
-                            model: "test-model",
-                            thinkingLevel: "high",
-                        }).trim()
-                    }' >&2`,
-                    `while [ ! -f '${gatePath}' ]; do sleep 0.05; done`,
-                    `cat <<'JSON'`,
-                    makeGuideJson("Usage guide"),
-                    "JSON",
-                    "",
-                ].join("\n"),
-            );
-            await fsChmod(commandPath, 0o755);
+            const firstFrame = `${GUIDE_EVENT_PREFIX}${JSON.stringify({
+                version: 1,
+                type: "usage",
+                usage: {
+                    inputTokens: 1200,
+                    outputTokens: 200,
+                    cacheReadTokens: 30,
+                    cacheWriteTokens: 4,
+                    costUsd: 0.1,
+                },
+            })}`;
+            const secondFrame = `${GUIDE_EVENT_PREFIX}${JSON.stringify({
+                version: 1,
+                type: "usage",
+                usage: {
+                    inputTokens: 40,
+                    outputTokens: 50,
+                    cacheReadTokens: 70,
+                    cacheWriteTokens: 6,
+                    costUsd: 0.025,
+                },
+            })}`;
+            await writeGuideCommandFixture(commandPath, {
+                stdout: makeGuideJson("Usage guide"),
+                stderr: [
+                    firstFrame,
+                    secondFrame,
+                    encodeGuidedReviewMetadata({
+                        provider: "test-provider",
+                        model: "test-model",
+                        thinkingLevel: "high",
+                    }).trim(),
+                ],
+                gatePath,
+            });
             process.env["PATH"] = previousPath ? `${binDir}${delimiter}${previousPath}` : binDir;
             delete process.env["RUNWIELD_GUIDED_REVIEW_COMMAND"];
             delete process.env["RUNWIELD_GUIDED_REVIEW_MODEL"];
@@ -600,22 +616,13 @@ test("custom review guide commands do not interpret stderr usage-like text", asy
     await withProcessGlobalTestLock(async () => {
         const previousCommand = process.env["RUNWIELD_GUIDED_REVIEW_COMMAND"];
         const fixtureRoot = await fsMkdtemp(join(tmpdir(), "runwield-custom-guide-route-"));
-        const commandPath = join(fixtureRoot, "custom-guide");
+        const commandPath = join(fixtureRoot, "custom guide");
         try {
-            await fsWriteFile(
-                commandPath,
-                [
-                    "#!/bin/sh",
-                    "cat >/dev/null",
-                    `echo '${GUIDE_EVENT_PREFIX}{"version":1,"type":"usage","usage":{"inputTokens":999}}' >&2`,
-                    "cat <<'JSON'",
-                    makeGuideJson("Custom guide"),
-                    "JSON",
-                    "",
-                ].join("\n"),
-            );
-            await fsChmod(commandPath, 0o755);
-            process.env["RUNWIELD_GUIDED_REVIEW_COMMAND"] = shellQuote(commandPath);
+            const executable = await writeGuideCommandFixture(commandPath, {
+                stdout: makeGuideJson("Custom guide"),
+                stderr: [`${GUIDE_EVENT_PREFIX}{"version":1,"type":"usage","usage":{"inputTokens":999}}`],
+            });
+            process.env["RUNWIELD_GUIDED_REVIEW_COMMAND"] = shellQuote(executable);
 
             const state = createReviewAgentState({
                 cwd: REVIEW_AGENT_PROJECT_ROOT,
@@ -648,31 +655,22 @@ test("failed default review guide commands report subprocess stderr and keep par
         const commandPath = join(binDir, "wld");
         try {
             await fsMkdir(binDir, { recursive: true });
-            const usageFrame = `${GUIDE_EVENT_PREFIX}${
-                JSON.stringify({
-                    version: 1,
-                    type: "usage",
-                    usage: {
-                        inputTokens: 5,
-                        outputTokens: 6,
-                        cacheReadTokens: 7,
-                        cacheWriteTokens: 8,
-                        costUsd: 0.009,
-                    },
-                })
-            }`;
-            await fsWriteFile(
-                commandPath,
-                [
-                    "#!/bin/sh",
-                    "cat >/dev/null",
-                    `echo '${usageFrame}' >&2`,
-                    "echo 'plain provider failure' >&2",
-                    "exit 9",
-                    "",
-                ].join("\n"),
-            );
-            await fsChmod(commandPath, 0o755);
+            const usageFrame = `${GUIDE_EVENT_PREFIX}${JSON.stringify({
+                version: 1,
+                type: "usage",
+                usage: {
+                    inputTokens: 5,
+                    outputTokens: 6,
+                    cacheReadTokens: 7,
+                    cacheWriteTokens: 8,
+                    costUsd: 0.009,
+                },
+            })}`;
+            await writeGuideCommandFixture(commandPath, {
+                stdout: "",
+                stderr: [usageFrame, "plain provider failure"],
+                exitCode: 9,
+            });
             process.env["PATH"] = previousPath ? `${binDir}${delimiter}${previousPath}` : binDir;
             delete process.env["RUNWIELD_GUIDED_REVIEW_COMMAND"];
             delete process.env["RUNWIELD_GUIDED_REVIEW_MODEL"];
@@ -718,19 +716,10 @@ test("default review guide commands fail clearly on malformed usage frames", asy
         const commandPath = join(binDir, "wld");
         try {
             await fsMkdir(binDir, { recursive: true });
-            await fsWriteFile(
-                commandPath,
-                [
-                    "#!/bin/sh",
-                    "cat >/dev/null",
-                    `echo '${GUIDE_EVENT_PREFIX}{"version":1,"type":"usage","usage":{"inputTokens":999}}' >&2`,
-                    "cat <<'JSON'",
-                    makeGuideJson("Malformed frame guide"),
-                    "JSON",
-                    "",
-                ].join("\n"),
-            );
-            await fsChmod(commandPath, 0o755);
+            await writeGuideCommandFixture(commandPath, {
+                stdout: makeGuideJson("Malformed frame guide"),
+                stderr: [`${GUIDE_EVENT_PREFIX}{"version":1,"type":"usage","usage":{"inputTokens":999}}`],
+            });
             process.env["PATH"] = previousPath ? `${binDir}${delimiter}${previousPath}` : binDir;
             delete process.env["RUNWIELD_GUIDED_REVIEW_COMMAND"];
             delete process.env["RUNWIELD_GUIDED_REVIEW_MODEL"];
@@ -781,11 +770,13 @@ test("review guide jobs ground provider prompt in Plan payload", async () => {
                     stdout: JSON.stringify({
                         schemaVersion: "1.0",
                         title: "Prompt guide",
-                        sections: [{
-                            title: "Core",
-                            role: "core",
-                            blocks: [{ type: "diff", file: "src/a.js" }],
-                        }],
+                        sections: [
+                            {
+                                title: "Core",
+                                role: "core",
+                                blocks: [{ type: "diff", file: "src/a.js" }],
+                            },
+                        ],
                         everythingElse: [],
                     }),
                     provider: "test-provider",
@@ -829,11 +820,13 @@ test("review guide jobs record generation result metrics", async () => {
                 guidedReviewFixture: {
                     schemaVersion: "1.0",
                     title: "Metric guide",
-                    sections: [{
-                        title: "Core",
-                        role: "core",
-                        blocks: [{ type: "diff", file: "src/a.js" }],
-                    }],
+                    sections: [
+                        {
+                            title: "Core",
+                            role: "core",
+                            blocks: [{ type: "diff", file: "src/a.js" }],
+                        },
+                    ],
                     everythingElse: [],
                 },
             },
@@ -875,11 +868,13 @@ test("review guide failure metrics redact provider error details", async () => {
                 guidedReviewFixture: {
                     schemaVersion: "1.0",
                     title: "Bad guide",
-                    sections: [{
-                        title: "Core",
-                        role: "core",
-                        blocks: [{ type: "diff", file: "/Users/example/secret.js" }],
-                    }],
+                    sections: [
+                        {
+                            title: "Core",
+                            role: "core",
+                            blocks: [{ type: "diff", file: "/Users/example/secret.js" }],
+                        },
+                    ],
                     everythingElse: [],
                 },
             },
@@ -972,17 +967,19 @@ test("Code review approval preserves comments and attached images", async () => 
             reviewPayload: {},
             reviewType: "code",
         }).handler();
-        const annotations = [{
-            id: "code-approval-comment",
-            type: "comment",
-            scope: "general",
-            filePath: "",
-            lineStart: 0,
-            lineEnd: 0,
-            side: "new",
-            text: "Keep this implementation detail.",
-            images: [{ path: "/tmp/code-approval.png", name: "code-approval" }],
-        }];
+        const annotations = [
+            {
+                id: "code-approval-comment",
+                type: "comment",
+                scope: "general",
+                filePath: "",
+                lineStart: 0,
+                lineEnd: 0,
+                side: "new",
+                text: "Keep this implementation detail.",
+                images: [{ path: "/tmp/code-approval.png", name: "code-approval" }],
+            },
+        ];
 
         const response = await app(
             new Request("http://localhost/api/review/feedback", {
@@ -1078,12 +1075,14 @@ test("Plan approval preserves annotations, global images, and the edited Plan", 
             reviewPayload: {},
             reviewType: "plan",
         }).handler();
-        const annotations = [{
-            id: "approval-annotation",
-            type: "COMMENT",
-            text: "Keep the command wording.",
-            images: [{ path: "/tmp/approval-inline.png", name: "approval-inline" }],
-        }];
+        const annotations = [
+            {
+                id: "approval-annotation",
+                type: "COMMENT",
+                text: "Keep the command wording.",
+                images: [{ path: "/tmp/approval-inline.png", name: "approval-inline" }],
+            },
+        ];
         const globalAttachments = [{ path: "/tmp/approval-global.png", name: "approval-global" }];
 
         const response = await app(
@@ -1331,9 +1330,7 @@ test("code review host serves safe file content and disables unsupported open-in
     const headers = { referer: `http://localhost/review/code?token=${token}` };
 
     try {
-        const content = await app(
-            new Request("http://localhost/api/file-content?path=src%2Fexample.js", { headers }),
-        );
+        const content = await app(new Request("http://localhost/api/file-content?path=src%2Fexample.js", { headers }));
         assertEquals(content.status, 200);
         assertEquals(await content.json(), {
             oldContent: null,
@@ -1344,17 +1341,14 @@ test("code review host serves safe file content and disables unsupported open-in
         });
 
         const relativeContent = await app(
-            new Request(
-                "http://localhost/api/file-content?path=..%2F..%2Fsrc%2Fexample.js&base=docs%2Fplans",
-                { headers },
-            ),
+            new Request("http://localhost/api/file-content?path=..%2F..%2Fsrc%2Fexample.js&base=docs%2Fplans", {
+                headers,
+            }),
         );
         assertEquals(relativeContent.status, 200);
         assertEquals((await relativeContent.json()).filepath, "src/example.js");
 
-        const traversal = await app(
-            new Request("http://localhost/api/file-content?path=..%2Foutside.js", { headers }),
-        );
+        const traversal = await app(new Request("http://localhost/api/file-content?path=..%2Foutside.js", { headers }));
         assertEquals(traversal.status, 403);
 
         const apps = await app(new Request("http://localhost/api/open-in/apps", { headers }));

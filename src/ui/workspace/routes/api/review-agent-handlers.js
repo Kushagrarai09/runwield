@@ -79,18 +79,23 @@ export async function cleanupReviewAgentState(state) {
 export async function reviewAgentApi(request, url, state) {
     if (request.method === "GET" && url.pathname === "/api/agents/capabilities") {
         const provider = detectGuideProvider();
-        return Response.json({
-            mode: "review",
-            available: Boolean(provider),
-            providers: [{
-                id: "guide",
-                name: "Guided Review Explainer",
+        return Response.json(
+            {
+                mode: "review",
                 available: Boolean(provider),
-                provider: provider?.provider || null,
-                model: provider?.model || null,
-                costAvailable: false,
-            }],
-        }, noStore());
+                providers: [
+                    {
+                        id: "guide",
+                        name: "Guided Review Explainer",
+                        available: Boolean(provider),
+                        provider: provider?.provider || null,
+                        model: provider?.model || null,
+                        costAvailable: false,
+                    },
+                ],
+            },
+            noStore(),
+        );
     }
 
     if (request.method === "GET" && url.pathname === "/api/agents/jobs") {
@@ -104,19 +109,27 @@ export async function reviewAgentApi(request, url, state) {
     if (request.method === "POST" && url.pathname === "/api/agents/jobs") {
         const body = await request.json().catch(() => ({}));
         if (
-            !body || typeof body !== "object" || Array.isArray(body) || !Object.hasOwn(body, "provider") ||
+            !body ||
+            typeof body !== "object" ||
+            Array.isArray(body) ||
+            !Object.hasOwn(body, "provider") ||
             body.provider !== "guide"
         ) {
-            return Response.json({ error: "Only the guide provider is available in RunWield code review." }, {
-                status: 400,
-            });
+            return Response.json(
+                { error: "Only the guide provider is available in RunWield code review." },
+                {
+                    status: 400,
+                },
+            );
         }
         const provider = detectGuideProvider();
         if (!provider && !state.reviewPayload.guidedReviewFixture) {
-            return Response.json({
-                error:
-                    "No Guided Review provider available. Configure RUNWIELD_GUIDED_REVIEW_COMMAND or use RunWield model access.",
-            }, { status: 503 });
+            return Response.json(
+                {
+                    error: "No Guided Review provider available. Configure RUNWIELD_GUIDED_REVIEW_COMMAND or use RunWield model access.",
+                },
+                { status: 503 },
+            );
         }
         const entry = createGuideJob(state, provider);
         return Response.json({ job: entry.info }, { status: 202, headers: noStore().headers });
@@ -139,9 +152,12 @@ export async function reviewAgentApi(request, url, state) {
         const entry = state.jobs.get(decodeURIComponent(guideMatch[1]));
         if (!entry) return Response.json({ error: "Guide not found" }, { status: 404 });
         if (entry.info.status !== "done" || !entry.guide) {
-            return Response.json({ error: entry.info.error || "Guide is not ready", job: entry.info }, {
-                status: entry.info.status === "failed" ? 422 : 202,
-            });
+            return Response.json(
+                { error: entry.info.error || "Guide is not ready", job: entry.info },
+                {
+                    status: entry.info.status === "failed" ? 422 : 202,
+                },
+            );
         }
         return Response.json({ ...entry.guide, reviewed: entry.reviewed }, noStore());
     }
@@ -254,14 +270,16 @@ async function runGuideJob(state, entry, changedFiles) {
         } else {
             const prompt = buildGuidedReviewPrompt({
                 diffText: String(state.reviewPayload.rawPatch || ""),
-                gitRef: typeof state.reviewPayload.gitRef === "string"
-                    ? state.reviewPayload.gitRef
-                    : "RunWield code review diff",
+                gitRef:
+                    typeof state.reviewPayload.gitRef === "string"
+                        ? state.reviewPayload.gitRef
+                        : "RunWield code review diff",
                 changedFiles,
                 planContent: typeof state.reviewPayload.planContent === "string" ? state.reviewPayload.planContent : "",
-                planAttrs: state.reviewPayload.planAttrs && typeof state.reviewPayload.planAttrs === "object"
-                    ? /** @type {Record<string, unknown>} */ (state.reviewPayload.planAttrs)
-                    : {},
+                planAttrs:
+                    state.reviewPayload.planAttrs && typeof state.reviewPayload.planAttrs === "object"
+                        ? /** @type {Record<string, unknown>} */ (state.reviewPayload.planAttrs)
+                        : {},
             });
             const result = await state.runGuideCommand(prompt, entry.abortController.signal, state.cwd, {
                 onUsage: (usage) => addGuideJobUsage(state, entry, usage),
@@ -308,22 +326,25 @@ async function runGuideJob(state, entry, changedFiles) {
 /** @param {ReviewAgentState} state @param {ReviewGuideJobEntry} entry */
 async function recordGuideJobMetric(state, entry) {
     const info = /** @type {Record<string, unknown>} */ (withElapsed(entry.info));
-    await recordWorkflowMetric({
-        category: "validation",
-        event: "guided_review_generation_result",
-        details: {
-            status: info.status,
-            provider: info.providerName || info.engine,
-            model: info.model,
-            elapsedMs: info.elapsedMs,
-            tokensAvailable: Boolean(info.tokens),
-            costAvailable: Boolean(info.cost),
-            costUnavailable: Boolean(info.costUnavailable),
-            sectionCount: entry.guide && Array.isArray(entry.guide.sections) ? entry.guide.sections.length : 0,
-            hasError: typeof info.error === "string" && info.error.length > 0,
-            errorKind: classifyGuideJobError(info.error),
+    await recordWorkflowMetric(
+        {
+            category: "validation",
+            event: "guided_review_generation_result",
+            details: {
+                status: info.status,
+                provider: info.providerName || info.engine,
+                model: info.model,
+                elapsedMs: info.elapsedMs,
+                tokensAvailable: Boolean(info.tokens),
+                costAvailable: Boolean(info.cost),
+                costUnavailable: Boolean(info.costUnavailable),
+                sectionCount: entry.guide && Array.isArray(entry.guide.sections) ? entry.guide.sections.length : 0,
+                hasError: typeof info.error === "string" && info.error.length > 0,
+                errorKind: classifyGuideJobError(info.error),
+            },
         },
-    }, state.cwd);
+        state.cwd,
+    );
 }
 
 /** @param {unknown} error */
@@ -516,6 +537,7 @@ export async function runConfiguredGuideCommand(prompt, signal, cwd, progress = 
     const provider = configured ? "custom" : "wld";
     const child = spawnNativeProcess(command.command, {
         args: command.args,
+        windowsRawArguments: Boolean(configured) && process.platform === "win32",
         stdin: "piped",
         stdout: "piped",
         stderr: "piped",
@@ -542,7 +564,9 @@ export async function runConfiguredGuideCommand(prompt, signal, cwd, progress = 
         stdout: stdoutResult.value,
         stderr: stderrResult.value.stderr,
         provider: stderrResult.value.metadata?.provider || provider,
-        model: stderrResult.value.metadata?.model || process.env["RUNWIELD_GUIDED_REVIEW_MODEL"] ||
+        model:
+            stderrResult.value.metadata?.model ||
+            process.env["RUNWIELD_GUIDED_REVIEW_MODEL"] ||
             (configured ? "configured-command" : "wld"),
         thinkingLevel: stderrResult.value.metadata?.thinkingLevel,
         ...(stderrResult.value.usage
@@ -556,12 +580,14 @@ async function resolveRunWieldGuideCommand(cwd) {
     if (await commandExists("wld")) return { command: "wld", args: ["guided-review"] };
     return {
         command: process.execPath,
-        args: isStandaloneExecutable() ? ["guided-review"] : [
-            "run",
-            ...(process.versions.deno ? ["-A", "--unstable-no-legacy-abort"] : []),
-            "src/cli.ts",
-            "guided-review",
-        ],
+        args: isStandaloneExecutable()
+            ? ["guided-review"]
+            : [
+                  "run",
+                  ...(process.versions.deno ? ["-A", "--unstable-no-legacy-abort"] : []),
+                  "src/cli.ts",
+                  "guided-review",
+              ],
         cwd,
     };
 }
@@ -569,16 +595,16 @@ async function resolveRunWieldGuideCommand(cwd) {
 /** @param {string} command */
 async function commandExists(command) {
     const which = process.platform === "win32" ? "where" : "which";
-    const output = await captureForegroundProcess(which, { args: [command], cwd: getCwd() }).catch(
-        () => ({ success: false }),
-    );
+    const output = await captureForegroundProcess(which, { args: [command], cwd: getCwd() }).catch(() => ({
+        success: false,
+    }));
     return Boolean(output.success);
 }
 
 /** @param {string} configured */
 function shellCommand(configured) {
     return process.platform === "win32"
-        ? { command: "cmd", args: ["/c", configured] }
+        ? { command: "cmd", args: ["/d", "/s", "/c", `"${configured}"`] }
         : { command: "sh", args: ["-lc", configured] };
 }
 

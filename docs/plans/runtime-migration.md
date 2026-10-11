@@ -881,3 +881,12 @@ native Windows executable boundaries, workflow fixtures preserve real Git/cmd be
 and Bash cwd assertions request Windows spelling to avoid MSYS `/tmp` mount aliases.
 Spec and Standards reviews approved all eight files with zero findings. The native run
 at `17eb7c790` is still in progress; these subsequent corrections await a later native run.
+
+At `17eb7c790`, both native Windows package jobs and the ordinary PR gate pass. This
+includes ARM64 cleanup after all 22 focused files, native lock interoperability, compiled
+relocation, provider streaming and terminal restoration. Full source shards remain running.
+A subsequent Guided Review correction uses native external helpers and preserves raw cmd
+quoting for configured commands, including an executable path containing spaces. The docs
+publication race fixture now prepends its Git wrapper inside Bash after shell initialization.
+Both affected test files pass Bun and Deno (Deno: 48.8 seconds); types/lint and independent
+Spec/Standards review pass. This follow-up awaits native qualification.

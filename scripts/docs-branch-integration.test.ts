@@ -1,4 +1,4 @@
-import { delimiter } from "node:path";
+import { bashFixtureExecutable, bashFixturePath, quoteBashFixture } from "./bash-fixture.ts";
 import { prepareDocsFixtureDependencies } from "./docs-fixture-dependencies.ts";
 
 import { captureScriptProcess } from "./script-process.ts";
@@ -103,29 +103,28 @@ test("docs branch publishes Stable content, preserves corrections, and stops on 
         for (const path of PUBLIC_DOCS) {
             await write(join(work, "docs", path), `# ${path}\n\nSTABLE-A ${path}\n`);
         }
-        for (
-            const path of [
-                ".github/workflows/docs.yml",
-                ".gitignore",
-                "deno.json",
-                "deno.lock",
-                "scripts/public-docs.ts",
-                "scripts/check-public-docs.ts",
-                "scripts/docs-dev.ts",
-                "scripts/public-docs.test.ts",
-                "scripts/docs-workflow.test.ts",
-                "scripts/docs-branch-integration.test.ts",
-                "scripts/reconcile-docs-branch.sh",
-                "scripts/verify-docs-source.ts",
-            ]
-        ) {
-            const content = path === ".gitignore"
-                ? "# fixture\n"
-                : path === "deno.json"
-                ? '{"lock":false}\n'
-                : path === "deno.lock"
-                ? "{}\n"
-                : `${path}\n`;
+        for (const path of [
+            ".github/workflows/docs.yml",
+            ".gitignore",
+            "deno.json",
+            "deno.lock",
+            "scripts/public-docs.ts",
+            "scripts/check-public-docs.ts",
+            "scripts/docs-dev.ts",
+            "scripts/public-docs.test.ts",
+            "scripts/docs-workflow.test.ts",
+            "scripts/docs-branch-integration.test.ts",
+            "scripts/reconcile-docs-branch.sh",
+            "scripts/verify-docs-source.ts",
+        ]) {
+            const content =
+                path === ".gitignore"
+                    ? "# fixture\n"
+                    : path === "deno.json"
+                      ? '{"lock":false}\n'
+                      : path === "deno.lock"
+                        ? "{}\n"
+                        : `${path}\n`;
             await write(join(work, path), content);
         }
         await write(join(work, "src", "product.ts"), "export const product = 'STABLE-A';\n");
@@ -179,10 +178,7 @@ test("docs branch publishes Stable content, preserves corrections, and stops on 
         const live = join(root, "live");
         await publishDocs(work, live);
         assertStringIncludes(await fsReadFile(join(live, "quickstart", "index.html"), "utf8"), "v1.0.0");
-        assertStringIncludes(
-            await fsReadFile(join(live, "contributing", "index.html"), "utf8"),
-            "DOCS-CORRECTION",
-        );
+        assertStringIncludes(await fsReadFile(join(live, "contributing", "index.html"), "utf8"), "DOCS-CORRECTION");
 
         await run(work, "git", "checkout", "main");
         await write(join(work, "docs", "user-documentation", "quickstart.md"), "# Quickstart\n\nSTABLE-B\n");
@@ -237,7 +233,7 @@ test("docs branch publishes Stable content, preserves corrections, and stops on 
 
         const bin = join(root, "bin");
         const marker = join(root, "correction-pushed");
-        const realGit = await run(root, "bash", "-c", "command -v git");
+        const realGit = await run(root, bashFixtureExecutable(), "-c", "command -v git");
         await fsMkdir(bin);
         await write(
             join(bin, "git"),
@@ -256,13 +252,15 @@ exec "$REAL_GIT" "$@"
                 runWithEnv(
                     work,
                     {
-                        PATH: `${bin}${delimiter}${process.env["PATH"] ?? ""}`,
-                        RACE_MARKER: marker,
+                        RACE_MARKER: bashFixturePath(marker),
                         REAL_GIT: realGit,
-                        CORRECTION_WORK: correction,
+                        CORRECTION_WORK: bashFixturePath(correction),
                     },
-                    "bash",
-                    reconcileScript,
+                    bashFixtureExecutable(),
+                    "-c",
+                    `export PATH=${quoteBashFixture(bashFixturePath(bin))}:"$PATH"; exec bash "$@"`,
+                    "fixture",
+                    bashFixturePath(reconcileScript),
                     "v1.0.1",
                     "false",
                     stableBSha,
@@ -293,11 +291,7 @@ exec "$REAL_GIT" "$@"
         await run(work, "git", "tag", "v1.0.2");
         await run(work, "git", "push", "origin", "main", "--tags");
         const stableCSha = await run(work, "git", "rev-parse", "HEAD");
-        await assertRejects(
-            () => run(work, "bash", reconcileScript, "v1.0.2", "false", stableCSha),
-            Error,
-            "CONFLICT",
-        );
+        await assertRejects(() => run(work, "bash", reconcileScript, "v1.0.2", "false", stableCSha), Error, "CONFLICT");
         assertEquals(
             await run(work, "git", "ls-remote", "origin", "refs/heads/docs/stable"),
             `${beforeConflict}\trefs/heads/docs/stable`,
@@ -335,10 +329,7 @@ test("docs branch preserves corrections across divergent Stable release branches
         await run(work, "git", "add", "docs/user-documentation/index.md");
         await run(work, "git", "commit", "-m", "Publish Stable A docs");
         const previousSource = await run(work, "git", "rev-parse", "HEAD");
-        await write(
-            join(work, "docs-site", "release.json"),
-            `{"version":"v1.0.0","sourceRef":"${previousSource}"}\n`,
-        );
+        await write(join(work, "docs-site", "release.json"), `{"version":"v1.0.0","sourceRef":"${previousSource}"}\n`);
         await run(work, "git", "add", "docs-site/release.json");
         await run(work, "git", "commit", "-m", "Record Stable A docs source");
         await write(join(work, "docs", "user-documentation", "index.md"), "# Corrected guide\n");
@@ -399,11 +390,7 @@ test("docs source validation rejects stale and product-changing commits", async 
         await run(work, "git", "add", "docs/user-documentation/index.md");
         await run(work, "git", "commit", "-m", "Newer correction");
         await run(work, "git", "push", "origin", "docs/stable");
-        await assertRejects(
-            () => verifyDocsSource(work, "v1.0.0", firstSource),
-            Error,
-            "source is stale",
-        );
+        await assertRejects(() => verifyDocsSource(work, "v1.0.0", firstSource), Error, "source is stale");
         const correctedSource = await run(work, "git", "rev-parse", "HEAD");
         await verifyDocsSource(work, "v1.0.0", correctedSource);
 
@@ -412,11 +399,7 @@ test("docs source validation rejects stale and product-changing commits", async 
         await run(work, "git", "commit", "-m", "Forbidden product change");
         await run(work, "git", "push", "origin", "docs/stable");
         const productSource = await run(work, "git", "rev-parse", "HEAD");
-        await assertRejects(
-            () => verifyDocsSource(work, "v1.0.0", productSource),
-            Error,
-            "changes product path",
-        );
+        await assertRejects(() => verifyDocsSource(work, "v1.0.0", productSource), Error, "changes product path");
     } finally {
         await fsRm(root, { recursive: true });
     }
