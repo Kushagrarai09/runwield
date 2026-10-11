@@ -3,9 +3,9 @@ import { test } from "node:test";
  * @module acp/protocol-smoke.test
  */
 
-import { assert, assertEquals, assertStrictEquals } from "@std/assert";
+import { assert, assertEquals, assertStrictEquals, assertThrows } from "@std/assert";
 import { agent, methods, ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
-import { findAcpSchemaViolations } from "./schema-conformance.ts";
+import { assertAcpFrameSchema, findAcpSchemaViolations } from "./schema-conformance.ts";
 
 test("ACP SDK import exposes agent and NDJSON stream primitives under Deno", () => {
     const app = agent({ name: "RunWield ACP smoke" });
@@ -81,5 +81,28 @@ test("ACP terminal auth accepts the RunWield login descriptor", () => {
             args: ["login"],
         }),
         [],
+    );
+});
+
+test("assertAcpFrameSchema validates serialized NDJSON frames and handles malformed frames", () => {
+    const validFrame = JSON.stringify({ result: { amount: 10, currency: "USD" } });
+    assertAcpFrameSchema("Cost", validFrame, (message) => message.result);
+
+    assertThrows(
+        () => assertAcpFrameSchema("Cost", "{ not valid json", (message) => message.result),
+        Error,
+        "is not valid JSON",
+    );
+
+    assertThrows(
+        () => assertAcpFrameSchema("Cost", "null", (message) => message.result),
+        Error,
+        "must be a JSON object",
+    );
+
+    assertThrows(
+        () => assertAcpFrameSchema("Cost", "123", (message) => message.result),
+        Error,
+        "must be a JSON object",
     );
 });

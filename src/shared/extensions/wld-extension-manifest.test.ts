@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { tmpdir } from "node:os";
 import { assertEquals } from "@std/assert";
 import { join } from "@std/path";
+import type { ResolvedResource } from "../package-resources.ts";
 import {
     filterWldCompatibleExtensionResources,
     findPackageRootForExtensionResource,
@@ -52,7 +53,7 @@ test("filterWldCompatibleExtensionResources returns enabled package resources wi
         await fsWriteFile(join(incompatibleRoot, "package.json"), JSON.stringify({ pi: {} }));
         await fsWriteFile(incompatiblePath, "export default () => ({});\n");
 
-        const resources = [
+        const resources: ResolvedResource[] = [
             {
                 path: compatiblePath,
                 enabled: true,
@@ -75,7 +76,7 @@ test("filterWldCompatibleExtensionResources returns enabled package resources wi
             },
         ];
 
-        const compatible = await filterWldCompatibleExtensionResources(/** @type {any} */ (resources));
+        const compatible = await filterWldCompatibleExtensionResources(resources);
         assertEquals(getWldExtensionPaths(compatible), [compatiblePath]);
     } finally {
         await fsRm(root, { recursive: true }).catch(() => {});
@@ -92,13 +93,12 @@ test("findPackageRootForExtensionResource ascends from nested extension files", 
         await fsWriteFile(join(root, "package.json"), JSON.stringify({ pi: { wld: {} } }));
         await fsWriteFile(extensionPath, "export default () => ({});\n");
 
-        const packageRoot = await findPackageRootForExtensionResource(
-            /** @type {any} */ ({
-                path: extensionPath,
-                enabled: true,
-                metadata: { source: "npm:nested", scope: "user", origin: "package", baseDir: nested },
-            }),
-        );
+        const resource: ResolvedResource = {
+            path: extensionPath,
+            enabled: true,
+            metadata: { source: "npm:nested", scope: "user", origin: "package", baseDir: nested },
+        };
+        const packageRoot = await findPackageRootForExtensionResource(resource);
 
         assertEquals(packageRoot, root);
     } finally {

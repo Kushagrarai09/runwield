@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
+import type { RuntimeInteractionRequest } from "../shared/session/session-runtime-interactions.js";
 import { formatInterviewQuestion, parseInterviewReply } from "./interview-chat.ts";
 
 test("interview chat only matches a unique exact label or displayed number", () => {
-    /** @type {import('../shared/session/session-runtime-interactions.js').RuntimeInteractionRequest} */
-    const interaction = {
+    const interaction: RuntimeInteractionRequest = {
         type: "select",
         prompt: "Pick",
         otherOptionValue: "other",

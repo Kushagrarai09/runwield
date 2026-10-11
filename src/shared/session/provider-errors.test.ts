@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createAssistantMessageEventStream, normalizeContext } from "@earendil-works/pi-ai";
+import type { Api, AssistantMessage, Model } from "@earendil-works/pi-ai";
 import { formatProviderError, normalizeProviderStream } from "./provider-errors.ts";
 
-/** @type {import('@earendil-works/pi-ai').Model<import('@earendil-works/pi-ai').Api>} */
-const model = {
+const model: Model<Api> = {
     api: "fixture",
     provider: "fixture",
     id: "model",
@@ -25,8 +25,7 @@ const usage = {
     totalTokens: 8,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 };
-/** @type {import('@earendil-works/pi-ai').AssistantMessage} */
-const partial = {
+const partial: AssistantMessage = {
     role: "assistant",
     api: "fixture",
     provider: "fixture",
@@ -68,8 +67,7 @@ for (const failureKind of ["sync", "rejected", "iterator"]) {
     test(`${failureKind} provider failure settles with the last partial reply`, async () => {
         const source = createAssistantMessageEventStream();
         if (failureKind === "iterator") {
-            /** @type {import('@earendil-works/pi-ai').AssistantMessage} */
-            const emitted = {
+            const emitted: AssistantMessage = {
                 ...partial,
                 content: [
                     ...partial.content,
