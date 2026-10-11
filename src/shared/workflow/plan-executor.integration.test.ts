@@ -1,3 +1,4 @@
+import { isAbsolute, join } from "node:path";
 import { captureForegroundProcess } from "../captured-process.ts";
 import { test } from "node:test";
 import { readFile as fsReadFile, stat as fsStat, writeFile as fsWriteFile } from "node:fs/promises";
@@ -20,10 +21,7 @@ interface PlanExecutorSessionFixture {
 
 type InteractionHandler = (request: RuntimeInteractionRequest) => RuntimeInteractionResponse;
 
-function createSessionFixture(
-    projectRoot: string,
-    interaction?: InteractionHandler,
-): PlanExecutorSessionFixture {
+function createSessionFixture(projectRoot: string, interaction?: InteractionHandler): PlanExecutorSessionFixture {
     const sessionManager = SessionManager.inMemory(projectRoot);
     const hostedSession = new HostedSession({
         id: `plan-executor-${crypto.randomUUID()}`,
@@ -114,7 +112,10 @@ test("executePlan recovers a genuinely missing Plan through the HostedSession in
                 hostedSession: fixture.hostedSession,
             });
 
-            assertEquals(requests.map((request) => request.type), ["approval"]);
+            assertEquals(
+                requests.map((request) => request.type),
+                ["approval"],
+            );
             assertEquals(result.intentionalComplete, true);
             assertEquals(result.intentionalCompleteReason, "plan_not_found");
             assertEquals(await loadPlan(projectRoot, "missing"), null);
@@ -129,13 +130,17 @@ test("executePlan runs preparation, Engineer, checkpoint, lifecycle, and registr
         await initializeGitProject(projectRoot);
         await saveExecutablePlan(projectRoot, "feature");
         setModelMessages([
-            fauxAssistantMessage(fauxToolCall("write", {
-                path: "implemented.txt",
-                content: "implemented in execution worktree\n",
-            })),
-            fauxAssistantMessage(fauxToolCall("task_completed", {
-                message: "- Implemented the fixture.\n- Verified the fixture.",
-            })),
+            fauxAssistantMessage(
+                fauxToolCall("write", {
+                    path: "implemented.txt",
+                    content: "implemented in execution worktree\n",
+                }),
+            ),
+            fauxAssistantMessage(
+                fauxToolCall("task_completed", {
+                    message: "- Implemented the fixture.\n- Verified the fixture.",
+                }),
+            ),
         ]);
         const fixture = createSessionFixture(projectRoot);
 
@@ -156,7 +161,12 @@ test("executePlan runs preparation, Engineer, checkpoint, lifecycle, and registr
                 await fsReadFile(`${result.executionContext.executionCwd}/implemented.txt`, "utf8"),
                 "implemented in execution worktree\n",
             );
-            assertEquals(await fsStat(`${projectRoot}/implemented.txt`).then(() => true).catch(() => false), false);
+            assertEquals(
+                await fsStat(`${projectRoot}/implemented.txt`)
+                    .then(() => true)
+                    .catch(() => false),
+                false,
+            );
             const persisted = await loadPlan(result.executionContext.executionCwd, "feature");
             assertEquals(persisted?.attrs.status, "implemented");
             assertEquals(persisted?.attrs.executionReport, "- Implemented the fixture.\n- Verified the fixture.");
@@ -175,13 +185,17 @@ test("executePlan carries project validation settings without hiding the version
         await setCustomSetting("verification_command", "printf primary", "project", projectRoot);
         await saveExecutablePlan(projectRoot, "ci-settings");
         setModelMessages([
-            fauxAssistantMessage(fauxToolCall("write", {
-                path: "implemented.txt",
-                content: "implemented\n",
-            })),
-            fauxAssistantMessage(fauxToolCall("task_completed", {
-                message: "- Implemented the fixture.\n- Verified setup.",
-            })),
+            fauxAssistantMessage(
+                fauxToolCall("write", {
+                    path: "implemented.txt",
+                    content: "implemented\n",
+                }),
+            ),
+            fauxAssistantMessage(
+                fauxToolCall("task_completed", {
+                    message: "- Implemented the fixture.\n- Verified setup.",
+                }),
+            ),
         ]);
         const fixture = createSessionFixture(projectRoot);
 
@@ -204,7 +218,7 @@ test("executePlan carries project validation settings without hiding the version
             });
             assertEquals(exclude.code, 0);
             const rawExcludePath = new TextDecoder().decode(exclude.stdout).trim();
-            const excludePath = rawExcludePath.startsWith("/") ? rawExcludePath : `${executionCwd}/${rawExcludePath}`;
+            const excludePath = isAbsolute(rawExcludePath) ? rawExcludePath : join(executionCwd, rawExcludePath);
             const excludeText = await fsReadFile(excludePath, "utf8");
             assertEquals(excludeText.split(/\r?\n/).includes(".wld/settings.json"), false);
         } finally {

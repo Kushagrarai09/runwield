@@ -1,5 +1,9 @@
 import { delimiter } from "node:path";
-import { runtimeSourceArgs } from "../testing/runtime-source-args.ts";
+import { writeRuntimeExecutableFixture } from "../testing/runtime-executable-fixture.ts";
+import {
+    writeWorkflowBinaryFixtures,
+    assertWorkflowBinaryCallsSupported,
+} from "../testing/workflow-binary-fixtures.ts";
 import { serveHttp } from "../shared/http-server.ts";
 import { writeFileSync as fsWriteFileSync } from "node:fs";
 import { test } from "node:test";
@@ -100,16 +104,22 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>) {
             }
             if (fixture.response === "unauthorized") return new Response("unauthorized", { status: 401 });
             if (fixture.response === "model-denied") {
-                return Response.json({ error: { message: "Upstream request failed: Model access is disabled" } }, {
-                    status: 403,
-                });
+                return Response.json(
+                    { error: { message: "Upstream request failed: Model access is disabled" } },
+                    {
+                        status: 403,
+                    },
+                );
             }
             if (fixture.response === "server-error") return new Response("provider unavailable", { status: 500 });
             if (new URL(request.url).pathname.endsWith("/responses")) {
                 if (request.headers.get("authorization") !== "Bearer fixture-only") {
-                    return Response.json({ error: { message: "Missing configured provider credential" } }, {
-                        status: 401,
-                    });
+                    return Response.json(
+                        { error: { message: "Missing configured provider credential" } },
+                        {
+                            status: 401,
+                        },
+                    );
                 }
                 const item = {
                     type: "image_generation_call",
@@ -125,11 +135,8 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>) {
             const image = {
                 image_url: { url: `data:image/png;base64,${fixture.response === "invalid" ? "aGVsbG8=" : PNG}` },
             };
-            const images = fixture.response === "text"
-                ? []
-                : fixture.response === "multiple"
-                ? [image, image]
-                : [image];
+            const images =
+                fixture.response === "text" ? [] : fixture.response === "multiple" ? [image, image] : [image];
             return Response.json({ id: "fixture-image", choices: [{ message: { content: "fixture", images } }] });
         });
         try {
@@ -145,41 +152,34 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>) {
                         opencode: {
                             baseUrl: `http://127.0.0.1:${server.addr.port}/v1`,
                             apiKey: "fixture-only",
-                            models: [{
-                                id: "image-supervisor",
-                                api: "openai-responses",
-                                reasoning: true,
-                                input: ["text", "image"],
-                            }],
+                            models: [
+                                {
+                                    id: "image-supervisor",
+                                    api: "openai-responses",
+                                    reasoning: true,
+                                    input: ["text", "image"],
+                                },
+                            ],
                         },
                         fixture: {
                             baseUrl: "https://example.invalid/v1",
                             api: "openai-completions",
                             apiKey: "fixture-only",
-                            models: [{ id: "text", input: ["text"] }, { id: "vision", input: ["text", "image"] }],
+                            models: [
+                                { id: "text", input: ["text"] },
+                                { id: "vision", input: ["text", "image"] },
+                            ],
                         },
                     },
                 }),
             );
             await fixture.settings({ model: MODEL });
-            const bin = join(temp, "bin");
-            await fsMkdir(bin);
-            await fsWriteFile(
-                join(bin, "agy"),
-                `#!/bin/sh\nexec ${
-                    [process.execPath, ...runtimeSourceArgs(["run", "-A", CLI_FIXTURE])].map(shellQuote).join(" ")
-                } "$@"\n`,
-                { mode: 0o700 },
-            );
-            await fsWriteFile(
-                join(bin, "codex"),
-                `#!/bin/sh\nexec ${
-                    [process.execPath, ...runtimeSourceArgs(["run", "-A", CODEX_FIXTURE])].map(shellQuote).join(" ")
-                } "$@"\n`,
-                { mode: 0o700 },
-            );
+            const bin = await writeWorkflowBinaryFixtures(temp);
+            await writeRuntimeExecutableFixture(join(bin, "agy"), CLI_FIXTURE);
+            await writeRuntimeExecutableFixture(join(bin, "codex"), CODEX_FIXTURE);
             process.env["PATH"] = `${bin}${delimiter}${path || ""}`;
             await run(fixture);
+            await assertWorkflowBinaryCallsSupported(temp);
         } finally {
             await server.shutdown();
             process.chdir(cwd);
@@ -187,7 +187,7 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>) {
             if (path === undefined) delete process.env["PATH"];
             else process.env["PATH"] = path;
             envNames.forEach((key, index) =>
-                prior[index] === undefined ? (delete process.env[key]) : (process.env[key] = prior[index]!)
+                prior[index] === undefined ? delete process.env[key] : (process.env[key] = prior[index]!),
             );
             __resetSettingsForTests();
             await fsRm(temp, { recursive: true });
@@ -198,14 +198,17 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>) {
 test("create_image uses the real Pi adapter, mapped options, reference input and exact output path", () =>
     withFixture(async (f) => {
         await f.settings({ model: MODEL, thinkingLevel: "high", temperature: 0 });
-        await fsWriteFile(join(f.cwd, "source.png"), Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)));
+        await fsWriteFile(
+            join(f.cwd, "source.png"),
+            Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)),
+        );
         const result = await createImage({
             cwd: f.cwd,
             prompt: "Make it blue",
             outputPath: "assets/result.png",
             imageRefs: ["source.png"],
         });
-        assertEquals(result.path, "assets/result.png");
+        assertEquals(result.path, join("assets", "result.png"));
         assertEquals([result.width, result.height], [4, 2]);
         assertEquals(f.requests.length, 1);
         assertEquals(f.requests[0].temperature, 0);
@@ -260,16 +263,14 @@ test("create_image refuses no-image, invalid bytes, multiple images and provider
 
 test("create_image rejects unsupported options and vision-only models", () =>
     withFixture(async (f) => {
-        for (
-            const settings of [
-                { model: "openrouter/google/gemini-2.5-flash-image", thinkingLevel: "high" },
-                { model: MODEL, thinkingLevel: "medium" },
-                { model: MODEL, temperature: 3 },
-                { model: "openrouter/black-forest-labs/flux.2-pro", temperature: 1 },
-                { model: "google/gemini-3.1-pro" },
-                { model: "agy-cli/gemini-3.8-flash", temperature: 1 },
-            ]
-        ) {
+        for (const settings of [
+            { model: "openrouter/google/gemini-2.5-flash-image", thinkingLevel: "high" },
+            { model: MODEL, thinkingLevel: "medium" },
+            { model: MODEL, temperature: 3 },
+            { model: "openrouter/black-forest-labs/flux.2-pro", temperature: 1 },
+            { model: "google/gemini-3.1-pro" },
+            { model: "agy-cli/gemini-3.8-flash", temperature: 1 },
+        ]) {
             await f.settings(settings);
             await assertRejects(() => createImage({ cwd: f.cwd, prompt: "red", outputPath: "result.png" }));
         }
@@ -332,7 +333,10 @@ test("create_image does not trust Agy final SUCCESS or paths from other runs", (
     withFixture(async (f) => {
         await f.settings({ model: "agy-cli/gemini-3.8-flash" });
         process.env["RUNWIELD_IMAGE_FIXTURE_OUTSIDE"] = join(f.cwd, "existing.png");
-        await fsWriteFile(join(f.cwd, "existing.png"), Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)));
+        await fsWriteFile(
+            join(f.cwd, "existing.png"),
+            Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)),
+        );
         for (const mode of ["false-success", "outside"]) {
             process.env["RUNWIELD_IMAGE_FIXTURE_MODE"] = mode;
             await assertRejects(() => createImage({ cwd: f.cwd, prompt: "red", outputPath: `${mode}.png` }));
@@ -358,7 +362,7 @@ test("create_image tool returns text-only metadata when the primary model cannot
 test("create_image honors pre-cancellation without generating or saving", () =>
     withFixture(async (f) => {
         await assertRejects(() =>
-            createImage({ cwd: f.cwd, prompt: "red", outputPath: "cancelled.png", signal: AbortSignal.abort() })
+            createImage({ cwd: f.cwd, prompt: "red", outputPath: "cancelled.png", signal: AbortSignal.abort() }),
         );
         assertEquals(f.requests.length, 0);
         await assertRejects(() => fsStat(join(f.cwd, "cancelled.png")), Error, "ENOENT");
@@ -367,7 +371,10 @@ test("create_image honors pre-cancellation without generating or saving", () =>
 test("create_image rejects mismatched raster MIME and symlinked reference escapes", () =>
     withFixture(async (f) => {
         assertThrows(() => encodeCreatedImage({ type: "image", data: PNG, mimeType: "image/jpeg" }, "image/jpeg"));
-        await fsWriteFile(join(f.home, "private.png"), Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)));
+        await fsWriteFile(
+            join(f.home, "private.png"),
+            Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)),
+        );
         await fsSymlink(join(f.home, "private.png"), join(f.cwd, "source.png"));
         await assertRejects(
             () =>
@@ -394,7 +401,7 @@ test("create_image cancels an in-flight Pi request without saving or retrying", 
                 prompt: "red",
                 outputPath: "cancelled.png",
                 signal: abort.signal,
-            })
+            }),
         );
         assertEquals(f.requests.length, 1);
         await assertRejects(() => fsStat(join(f.cwd, "cancelled.png")), Error, "ENOENT");
@@ -413,7 +420,7 @@ test("create_image cancels a running Agy subprocess without saving", () =>
                 prompt: "red",
                 outputPath: "cancelled.png",
                 signal: abort.signal,
-            })
+            }),
         );
         try {
             const deadline = Date.now() + 5000;
@@ -488,7 +495,10 @@ test("create_image is available only to configured image or file-writing agents"
                 cwd: f.cwd,
                 mcpRootTools: [],
             });
-            assertEquals(tools.some((tool) => tool.name === "create_image"), names[0] !== "read");
+            assertEquals(
+                tools.some((tool) => tool.name === "create_image"),
+                names[0] !== "read",
+            );
         }
         await f.settings({ model: MODEL, enabled: false });
         const tools = await composeClaudeCliBridgedTools({
@@ -522,7 +532,10 @@ test("Pi Sessions inject create_image for writers and respect the primary model'
                     undefined,
                     {} as never,
                 );
-                assertEquals(result.content.some((block) => block.type === "image"), model === "vision");
+                assertEquals(
+                    result.content.some((block) => block.type === "image"),
+                    model === "vision",
+                );
                 assert((await fsStat(join(f.cwd, `${model}.png`))).isFile());
             } finally {
                 built.session.dispose();
@@ -555,18 +568,20 @@ test("Guide and write delegates get configured image tools in Pi and MCP; read d
                 toolNames: guide.tools,
                 eligible: true,
             },
-            ...await Promise.all((["write", "read"] as const).map(async (mode) => {
-                const id = mode === "write" ? SUBAGENTS.DELEGATED : SUBAGENTS.DELEGATED_READ;
-                const definition = await loadSubAgentDefinition(id);
-                assertEquals(definition.tools.includes("create_image"), mode === "write");
-                return {
-                    agentName: definition.name,
-                    definition,
-                    subAgentDefinition: { id },
-                    toolNames: resolveDelegatedToolNames(["read", "write", "create_image"], mode),
-                    eligible: mode === "write",
-                };
-            })),
+            ...(await Promise.all(
+                (["write", "read"] as const).map(async (mode) => {
+                    const id = mode === "write" ? SUBAGENTS.DELEGATED : SUBAGENTS.DELEGATED_READ;
+                    const definition = await loadSubAgentDefinition(id);
+                    assertEquals(definition.tools.includes("create_image"), mode === "write");
+                    return {
+                        agentName: definition.name,
+                        definition,
+                        subAgentDefinition: { id },
+                        toolNames: resolveDelegatedToolNames(["read", "write", "create_image"], mode),
+                        eligible: mode === "write",
+                    };
+                }),
+            )),
         ];
         for (const enabled of [true, false]) {
             await f.settings({ model: MODEL, enabled });
@@ -594,7 +609,10 @@ test("Guide and write delegates get configured image tools in Pi and MCP; read d
                     cwd: f.cwd,
                     mcpRootTools: [],
                 });
-                assertEquals(bridged.some((tool) => tool.name === "create_image"), enabled && target.eligible);
+                assertEquals(
+                    bridged.some((tool) => tool.name === "create_image"),
+                    enabled && target.eligible,
+                );
             }
         }
     }));
@@ -602,7 +620,10 @@ test("Guide and write delegates get configured image tools in Pi and MCP; read d
 test("OpenCode adapter uses existing provider config with the hosted image tool and reference bytes", () =>
     withFixture(async (f) => {
         await f.settings({ model: "opencode/image-supervisor", thinkingLevel: "low" });
-        await fsWriteFile(join(f.cwd, "source.png"), Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)));
+        await fsWriteFile(
+            join(f.cwd, "source.png"),
+            Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)),
+        );
         const image = await createImage({
             cwd: f.cwd,
             prompt: "make blue",
@@ -640,7 +661,7 @@ test("OpenCode adapter preserves cancellation and rejects unsupported controls b
         f.onRequest = () => abort.abort();
         f.response = "wait";
         await assertRejects(() =>
-            createImage({ cwd: f.cwd, prompt: "red", outputPath: "cancelled.png", signal: abort.signal })
+            createImage({ cwd: f.cwd, prompt: "red", outputPath: "cancelled.png", signal: abort.signal }),
         );
         await assertRejects(() => fsStat(join(f.cwd, "cancelled.png")), Error, "ENOENT");
     }));
@@ -661,7 +682,10 @@ test("Codex adapter uses official RPC, configured model/effort and exact referen
     withFixture(async (f) => {
         const log = join(f.cwd, "rpc.jsonl");
         process.env["RUNWIELD_CODEX_IMAGE_LOG"] = log;
-        await fsWriteFile(join(f.cwd, "source.png"), Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)));
+        await fsWriteFile(
+            join(f.cwd, "source.png"),
+            Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)),
+        );
         for (const provider of ["codex-cli", "openai-codex"]) {
             await f.settings({ model: `${provider}/fixture-model`, thinkingLevel: "low" });
             const image = await createImage({
@@ -672,9 +696,10 @@ test("Codex adapter uses official RPC, configured model/effort and exact referen
             });
             assertEquals(image.width, 4);
         }
-        const calls: RecordedCodexRequest[] = (await fsReadFile(log, "utf8")).trim().split("\n").map((line) =>
-            JSON.parse(line)
-        );
+        const calls: RecordedCodexRequest[] = (await fsReadFile(log, "utf8"))
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line));
         const thread = calls.find((call) => call.method === "thread/start");
         assertEquals(thread?.params?.model, "fixture-model");
         assertEquals(thread?.params?.modelProvider, "openai");
@@ -690,65 +715,72 @@ test("Codex adapter refuses unavailable capability, API-key billing, invalid out
     withFixture(async (f) => {
         await f.settings({ model: "codex-cli/fixture-model" });
         process.env["RUNWIELD_CODEX_IMAGE_OUTSIDE"] = join(f.cwd, "source.png");
-        await fsWriteFile(join(f.cwd, "source.png"), Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)));
-        for (
-            const mode of [
-                "api-key",
-                "unsupported",
-                "no-image",
-                "multiple",
-                "failed-image",
-                "failed-turn",
-                "wrong-turn",
-                "outside",
-                "stale",
-                "approval",
-                "malformed",
-                "exit",
-            ]
-        ) {
+        await fsWriteFile(
+            join(f.cwd, "source.png"),
+            Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)),
+        );
+        for (const mode of [
+            "api-key",
+            "unsupported",
+            "no-image",
+            "multiple",
+            "failed-image",
+            "failed-turn",
+            "wrong-turn",
+            "outside",
+            "stale",
+            "approval",
+            "malformed",
+            "exit",
+        ]) {
             process.env["RUNWIELD_CODEX_IMAGE_MODE"] = mode;
             await assertRejects(() => createImage({ cwd: f.cwd, prompt: "red", outputPath: `${mode}.png` }));
             await assertRejects(() => fsStat(join(f.cwd, `${mode}.png`)), Error, "ENOENT");
         }
         delete process.env["RUNWIELD_CODEX_IMAGE_MODE"];
-        for (
-            const settings of [{ model: "codex-cli/missing" }, {
+        for (const settings of [
+            { model: "codex-cli/missing" },
+            {
                 model: "codex-cli/fixture-model",
                 thinkingLevel: "high",
-            }, { model: "codex-cli/fixture-model", temperature: 1 }]
-        ) {
+            },
+            { model: "codex-cli/fixture-model", temperature: 1 },
+        ]) {
             await f.settings(settings);
             await assertRejects(() => createImage({ cwd: f.cwd, prompt: "red", outputPath: "invalid.png" }));
         }
     }));
 
-test("Codex adapter discovers the app-bundled CLI when codex is absent from PATH", {
-    skip: process.platform !== "darwin",
-}, () =>
-    withFixture(async (f) => {
-        const executable = join(
-            f.home,
-            "Applications",
-            "ChatGPT.app",
-            "Contents",
-            "Resources",
-            "codex-cli",
-            "CodexCLI.app",
-            "Contents",
-            "MacOS",
-            "codex",
-        );
-        await fsMkdir(dirname(executable), { recursive: true });
-        await fsRename(join(dirname(f.home), "bin", "codex"), executable);
-        // Exclude the calling app's injected PATH as well as the removed fixture command.
-        process.env["PATH"] = join(dirname(f.home), "bin");
-        await f.settings({ model: "codex-cli/fixture-model" });
-        const image = await createImage({ cwd: f.cwd, prompt: "red", outputPath: "bundled.png" });
-        assertEquals(image.width, 4);
-        assert((await fsStat(join(f.cwd, "bundled.png"))).isFile());
-        assertEquals(f.requests.length, 0);
-    }));
+test(
+    "Codex adapter discovers the app-bundled CLI when codex is absent from PATH",
+    {
+        skip: process.platform !== "darwin",
+    },
+    () =>
+        withFixture(async (f) => {
+            const executable = join(
+                f.home,
+                "Applications",
+                "ChatGPT.app",
+                "Contents",
+                "Resources",
+                "codex-cli",
+                "CodexCLI.app",
+                "Contents",
+                "MacOS",
+                "codex",
+            );
+            await fsMkdir(dirname(executable), { recursive: true });
+            await fsRename(join(dirname(f.home), "bin", "codex"), executable);
+            // Exclude the calling app's injected PATH as well as the removed fixture command.
+            process.env["PATH"] = join(dirname(f.home), "bin");
+            await f.settings({ model: "codex-cli/fixture-model" });
+            const image = await createImage({ cwd: f.cwd, prompt: "red", outputPath: "bundled.png" });
+            assertEquals(image.width, 4);
+            assert((await fsStat(join(f.cwd, "bundled.png"))).isFile());
+            assertEquals(f.requests.length, 0);
+        }),
+);
 
 test("Codex adapter interrupts and terminates an in-flight owned helper on cancellation", () =>
     withFixture(async (f) => {
@@ -758,7 +790,7 @@ test("Codex adapter interrupts and terminates an in-flight owned helper on cance
         process.env["RUNWIELD_CODEX_IMAGE_MODE"] = "wait";
         const abort = new AbortController();
         const pending = assertRejects(() =>
-            createImage({ cwd: f.cwd, prompt: "red", outputPath: "cancelled.png", signal: abort.signal })
+            createImage({ cwd: f.cwd, prompt: "red", outputPath: "cancelled.png", signal: abort.signal }),
         );
         try {
             const deadline = Date.now() + 5000;
@@ -773,7 +805,3 @@ test("Codex adapter interrupts and terminates an in-flight owned helper on cance
         assertStringIncludes(await fsReadFile(log, "utf8"), "turn/interrupt");
         await assertRejects(() => fsStat(join(f.cwd, "cancelled.png")), Error, "ENOENT");
     }));
-
-function shellQuote(value: string): string {
-    return "'" + value.replaceAll("'", "'\"'\"'") + "'";
-}

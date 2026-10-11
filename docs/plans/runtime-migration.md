@@ -874,3 +874,10 @@ Windows-valid pathspec-sensitive filenames, and explicit CRLF expectations. Both
 Deno pass all eight files; types and lint pass. Independent Spec and Standards reviews
 approved all eight paths with zero findings. These local checks do not replace the next
 native Windows source run.
+
+The next eight-file image/workflow fixture batch passes Bun and Deno (Deno: 63.6 seconds),
+with 1,303 type-checked entries and 1,437 lint-clean files. Agy/Codex image helpers now use
+native Windows executable boundaries, workflow fixtures preserve real Git/cmd behavior,
+and Bash cwd assertions request Windows spelling to avoid MSYS `/tmp` mount aliases.
+Spec and Standards reviews approved all eight files with zero findings. The native run
+at `17eb7c790` is still in progress; these subsequent corrections await a later native run.

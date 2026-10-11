@@ -1,5 +1,4 @@
 import { execPath, platform, versions } from "node:process";
-import { bashFixturePath } from "../../scripts/bash-fixture.ts";
 import {
     mkdtemp as fsMkdtemp,
     readFile as fsReadFile,
@@ -155,10 +154,10 @@ test("restricted background starts share the foreground command policy without b
             ),
             false,
         );
-        const started = await call("start", "pwd");
+        const started = await call("start", platform === "win32" ? "pwd -W" : "pwd");
         const id = started.details?.task_id ?? "";
         await session.backgroundTasks.wait(id);
-        assertStringIncludes((await call("status", undefined, id)).details?.output ?? "", bashFixturePath(cwd));
+        assertStringIncludes((await call("status", undefined, id)).details?.output ?? "", cwd.replaceAll("\\", "/"));
         const deniedAll = createBackgroundTaskTool({
             hostedSession: session,
             cwd,

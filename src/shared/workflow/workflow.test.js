@@ -1,9 +1,9 @@
 // @ts-nocheck: public workflow facade now forwards to TypeScript extraction modules; behavioral coverage remains unchanged.
+import { writeRuntimeExecutableFixture } from "../../testing/runtime-executable-fixture.ts";
 import { delimiter } from "node:path";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
-    chmod as fsChmod,
     mkdir as fsMkdir,
     mkdtemp as fsMkdtemp,
     readFile as fsReadFile,
@@ -159,11 +159,13 @@ test("HostedSession scopes active execution workflow independently", () => {
 });
 
 test("startActiveExecutionWorkflow continues an existing in-progress worktree", async () => {
-    const projectRoot = await makeWorkflowProject([{
-        name: "continued-plan",
-        status: "in_progress",
-        attrs: {},
-    }]);
+    const projectRoot = await makeWorkflowProject([
+        {
+            name: "continued-plan",
+            status: "in_progress",
+            attrs: {},
+        },
+    ]);
     const hostedSession = makeHostedSession("continued-workflow", projectRoot);
     const recorded = await settleWorktreeAttempt(
         projectRoot,
@@ -204,11 +206,15 @@ test("startActiveExecutionWorkflow indexes a newly created execution worktree", 
         const cymbalPath = `${binDir}/cymbal`;
         const previousPath = process.env["PATH"] || "";
         const previousMarker = process.env["RUNWIELD_CYMBAL_MARKER"];
+        const cymbalSource = join(binDir, "cymbal.mjs");
         await fsWriteFile(
-            cymbalPath,
-            '#!/bin/sh\nprintf "%s\\n" "$PWD" > "$RUNWIELD_CYMBAL_MARKER"\nprintf "%s\\n" "$*" >> "$RUNWIELD_CYMBAL_MARKER"\n',
+            cymbalSource,
+            `
+import { writeFileSync, realpathSync } from "node:fs";
+writeFileSync(process.env.RUNWIELD_CYMBAL_MARKER, realpathSync(process.cwd()) + "\\n" + process.argv.slice(2).join(" ") + "\\n");
+`,
         );
-        await fsChmod(cymbalPath, 0o755);
+        await writeRuntimeExecutableFixture(cymbalPath, cymbalSource);
         process.env["PATH"] = `${binDir}${delimiter}${previousPath}`;
         process.env["RUNWIELD_CYMBAL_MARKER"] = markerPath;
         try {
@@ -239,11 +245,13 @@ test("startActiveExecutionWorkflow indexes a newly created execution worktree", 
 });
 
 test("startActiveExecutionWorkflow bases the execution worktree on the requested target branch", async () => {
-    const projectRoot = await makeWorkflowProject([{
-        name: "targeted-plan",
-        status: "ready_for_work",
-        attrs: { targetBranch: " feature-base " },
-    }]);
+    const projectRoot = await makeWorkflowProject([
+        {
+            name: "targeted-plan",
+            status: "ready_for_work",
+            attrs: { targetBranch: " feature-base " },
+        },
+    ]);
     await setCustomSetting("plans", { autoMergeIntoTargetBranch: true }, "project", projectRoot);
     const hostedSession = makeHostedSession("targeted-workflow", projectRoot);
     await fsWriteFile(`${projectRoot}/current-only-marker`, "present only in the current checkout\n");
@@ -286,11 +294,13 @@ test("startActiveExecutionWorkflow bases the execution worktree on the requested
 });
 
 test("startActiveExecutionWorkflow uses the latest uncommitted Plan revision instead of the target branch copy", async () => {
-    const projectRoot = await makeWorkflowProject([{
-        name: "revised-before-execution",
-        status: "ready_for_work",
-        attrs: {},
-    }]);
+    const projectRoot = await makeWorkflowProject([
+        {
+            name: "revised-before-execution",
+            status: "ready_for_work",
+            attrs: {},
+        },
+    ]);
     await git(projectRoot, ["add", "."]);
     await git(projectRoot, ["commit", "-m", "commit old Plan revision"]);
     const committedPlan = await loadPlan(projectRoot, "revised-before-execution");
@@ -430,7 +440,10 @@ test("startActiveExecutionWorkflow rejects an unsafe canonical source before wor
     // "Before creation" is a claim about the repository and the registry, so ask them
     // rather than a fake that was told to refuse.
     assertEquals(await listWorktreeRegistryEntries(projectRoot), []);
-    assertStringIncludes(await git(projectRoot, ["worktree", "list", "--porcelain"]), projectRoot);
+    assertStringIncludes(
+        await git(projectRoot, ["worktree", "list", "--porcelain"]),
+        projectRoot.replaceAll("\\", "/"),
+    );
     assertEquals((await git(projectRoot, ["worktree", "list", "--porcelain"])).includes("refs/heads/worktree/"), false);
 });
 
@@ -476,11 +489,13 @@ test("startActiveExecutionWorkflow preserves a malformed derived Plan and blocks
 });
 
 test("startActiveExecutionWorkflow rolls back a worktree that fails before execution begins", async () => {
-    const projectRoot = await makeWorkflowProject([{
-        name: "p",
-        status: "ready_for_work",
-        attrs: { targetBranch: "docs-as-file" },
-    }]);
+    const projectRoot = await makeWorkflowProject([
+        {
+            name: "p",
+            status: "ready_for_work",
+            attrs: { targetBranch: "docs-as-file" },
+        },
+    ]);
     const hostedSession = makeHostedSession("fresh-cleanup-failure", projectRoot);
     // A branch whose tree has `docs` as a *file*, built with plumbing so the working
     // tree is untouched. A worktree checked out from it cannot hold docs/plans/p.md, so the
@@ -594,12 +609,14 @@ test("startActiveExecutionWorkflow resolves implicit current branch before reusi
         },
     });
 
-    assertEquals(reuseCalls, [{
-        projectRoot,
-        planName: "untargeted-plan",
-        planId: PLAN_UNDER_TEST,
-        worktreeId: recorded.id,
-    }]);
+    assertEquals(reuseCalls, [
+        {
+            projectRoot,
+            planName: "untargeted-plan",
+            planId: PLAN_UNDER_TEST,
+            worktreeId: recorded.id,
+        },
+    ]);
     // Reused, not recreated: same attempt, and the Plan never targeted a branch, so the
     // recorded target is the checkout's own branch resolved at reuse time.
     assertEquals(result.worktreeId, recorded.id);
@@ -683,11 +700,13 @@ test("startActiveExecutionWorkflow matches explicit remote target to recorded lo
 });
 
 test("startActiveExecutionWorkflow ignores an unregistered cached attempt and uses the saved target", async () => {
-    const projectRoot = await makeWorkflowProject([{
-        name: "targeted-plan",
-        status: "ready_for_work",
-        attrs: { targetBranch: "feature-base" },
-    }]);
+    const projectRoot = await makeWorkflowProject([
+        {
+            name: "targeted-plan",
+            status: "ready_for_work",
+            attrs: { targetBranch: "feature-base" },
+        },
+    ]);
     await setCustomSetting("plans", { autoMergeIntoTargetBranch: true }, "project", projectRoot);
     const hostedSession = makeHostedSession("unknown-active-target-workflow", projectRoot);
     hostedSession.setActiveExecutionWorkflow({
@@ -841,11 +860,13 @@ test("extractAssistantOutput falls back to task_completed message details", () =
     const messages = [
         /** @type {any} */ ({
             role: "assistant",
-            content: [{
-                type: "tool_use",
-                name: "task_completed",
-                input: { message: "Implemented isolated worktree setup." },
-            }],
+            content: [
+                {
+                    type: "tool_use",
+                    name: "task_completed",
+                    input: { message: "Implemented isolated worktree setup." },
+                },
+            ],
         }),
         /** @type {any} */ ({
             role: "toolResult",
@@ -862,9 +883,7 @@ test("extractAssistantOutput falls back to task_completed message details", () =
 
 test("extractAssistantOutput handles legacy assistant text shapes", () => {
     assertEquals(
-        extractAssistantOutput([
-            /** @type {any} */ ({ role: "assistant", content: "Plain legacy summary." }),
-        ]),
+        extractAssistantOutput([/** @type {any} */ ({ role: "assistant", content: "Plain legacy summary." })]),
         "Plain legacy summary.",
     );
     assertEquals(

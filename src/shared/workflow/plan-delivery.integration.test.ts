@@ -1,3 +1,4 @@
+import { getCwd } from "../../constants.js";
 import process from "node:process";
 import { readFile as fsReadFile, rm as fsRm, stat as fsStat, writeFile as fsWriteFile } from "node:fs/promises";
 import { test } from "node:test";
@@ -25,6 +26,7 @@ const repo = defineCommittedGitFixture();
 for (const autoMerge of [false, true]) {
     test(`standalone delivery (${autoMerge ? "on" : "off"}) uses the default branch and survives a setting toggle`, async () => {
         await withRuntimeCommandFixture("plan-delivery-", async ({ setModelMessages }) => {
+            const originalCwd = getCwd();
             const root = await repo.checkout();
             process.chdir(root);
             const hostedSession = new HostedSession({ id: crypto.randomUUID(), cwd: root });
@@ -87,14 +89,18 @@ for (const autoMerge of [false, true]) {
                     expectedRevision: plan.revision,
                 });
                 setModelMessages([
-                    fauxAssistantMessage(fauxToolCall("manual_qa_completed", {
-                        checklistMarkdown:
-                            "Manual verification steps for Full Delivery Name\n\n- [ ] Read the delivered file.",
-                    })),
-                    fauxAssistantMessage(fauxToolCall("work_record_completed", {
-                        title: "Standalone Delivery",
-                        summary: "Delivered the fixture to its recorded landing branch.",
-                    })),
+                    fauxAssistantMessage(
+                        fauxToolCall("manual_qa_completed", {
+                            checklistMarkdown:
+                                "Manual verification steps for Full Delivery Name\n\n- [ ] Read the delivered file.",
+                        }),
+                    ),
+                    fauxAssistantMessage(
+                        fauxToolCall("work_record_completed", {
+                            title: "Standalone Delivery",
+                            summary: "Delivered the fixture to its recorded landing branch.",
+                        }),
+                    ),
                 ]);
                 const validation = await runWorkflowValidationToStableBoundary({
                     hostedSession,
@@ -142,7 +148,12 @@ for (const autoMerge of [false, true]) {
                 assertEquals(await fsReadFile(`${root}/docs/plans/Full Delivery Name.md`, "utf8"), primaryPlan);
                 assertEquals(await git(root, ["show", `${landing}:implemented.txt`]), "delivered");
                 if (!autoMerge) assertEquals(await git(root, ["rev-parse", "main"]), mainBefore);
-                assertEquals(await fsStat(cwd).then(() => true).catch(() => false), false);
+                assertEquals(
+                    await fsStat(cwd)
+                        .then(() => true)
+                        .catch(() => false),
+                    false,
+                );
                 assertEquals(await listEntries(root), []);
                 const delivered = await loadPublishedWorkRecordSource(root, "Full Delivery Name");
                 assert(delivered);
@@ -159,16 +170,22 @@ for (const autoMerge of [false, true]) {
                     'status: "verified"',
                 );
                 assertEquals(
-                    (await verifyRecordedPublication(root, delivered.attrs, {
-                        planName: "Full Delivery Name",
-                        markdown: delivered.markdown,
-                    })).published,
+                    (
+                        await verifyRecordedPublication(root, delivered.attrs, {
+                            planName: "Full Delivery Name",
+                            markdown: delivered.markdown,
+                        })
+                    ).published,
                     true,
                 );
-                const evidence = await inspectControllerView(root, {
-                    planId: "standalone-delivery",
-                    planName: "Full Delivery Name",
-                }, {});
+                const evidence = await inspectControllerView(
+                    root,
+                    {
+                        planId: "standalone-delivery",
+                        planName: "Full Delivery Name",
+                    },
+                    {},
+                );
                 assertEquals(evidence.state.publicationReceipt?.targetBranch, landing);
                 const location = await resolveWorkflowPlanLocation(root, "Full Delivery Name", { readOnly: true });
                 assertEquals(location.plan?.attrs.deliveryBranch, landing);
@@ -193,6 +210,7 @@ for (const autoMerge of [false, true]) {
                 assertStringIncludes(await fsReadFile(archived.toPath, "utf8"), "Newer user notes.");
             } finally {
                 hostedSession.dispose();
+                process.chdir(originalCwd);
                 await fsRm(root, { recursive: true });
             }
         });

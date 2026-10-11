@@ -1,3 +1,4 @@
+import process from "node:process";
 import { writeFileSync as fsWriteFileSync } from "node:fs";
 import { test } from "node:test";
 import {
@@ -54,10 +55,12 @@ test("publication repair completion never creates a validation checkpoint in eit
         const port = createValidationSessionPort(hostedSession, {
             semanticReviewPort: {
                 runIsolatedAgentSession: async (options) => {
-                    await executeWorkflowTestTools(options, [{
-                        name: "task_completed",
-                        arguments: { message: "Conflicts staged." },
-                    }]);
+                    await executeWorkflowTestTools(options, [
+                        {
+                            name: "task_completed",
+                            arguments: { message: "Conflicts staged." },
+                        },
+                    ]);
                     return [];
                 },
             },
@@ -171,23 +174,29 @@ test("verified Epic-child publication leaves the removed worktree before continu
             });
             const worktreePlan = await loadPlan(worktree.path, planName);
             if (!worktreePlan) throw new Error("worktree Plan fixture disappeared");
-            await savePlan(worktree.path, planName, `# ${planName}\n\nvalidation fixture\n`, {
-                classification: "PLANNED_CHANGE",
-                status: "reviewed",
-                summary: "validation fixture",
-                affectedPaths: ["published-marker.txt"],
-                planId: "published-follow-up-plan",
-                parentPlan,
-                order: 1,
-                executionAgent: "engineer",
-                executionMode: "worktree",
-                humanReviewMode: "none",
-                executionBaselineTree: baseTree,
-                worktreeId: worktree.id,
-                worktreePath: worktree.path,
-                worktreeBranch: worktree.branch,
-                worktreeBaseBranch: "main",
-            }, { expectedRevision: worktreePlan.revision });
+            await savePlan(
+                worktree.path,
+                planName,
+                `# ${planName}\n\nvalidation fixture\n`,
+                {
+                    classification: "PLANNED_CHANGE",
+                    status: "reviewed",
+                    summary: "validation fixture",
+                    affectedPaths: ["published-marker.txt"],
+                    planId: "published-follow-up-plan",
+                    parentPlan,
+                    order: 1,
+                    executionAgent: "engineer",
+                    executionMode: "worktree",
+                    humanReviewMode: "none",
+                    executionBaselineTree: baseTree,
+                    worktreeId: worktree.id,
+                    worktreePath: worktree.path,
+                    worktreeBranch: worktree.branch,
+                    worktreeBaseBranch: "main",
+                },
+                { expectedRevision: worktreePlan.revision },
+            );
             await fsWriteFile(join(worktree.path, "published-marker.txt"), "from worktree\n");
             const hostedSession = new HostedSession({ id: crypto.randomUUID(), cwd: worktree.path });
             await switchActiveAgent(hostedSession, { agentName: "planner", cwd: worktree.path });
@@ -219,7 +228,12 @@ test("verified Epic-child publication leaves the removed worktree before continu
             });
 
             assertEquals(result.kind, "verified");
-            assertEquals(await fsStat(worktree.path).then(() => true).catch(() => false), false);
+            assertEquals(
+                await fsStat(worktree.path)
+                    .then(() => true)
+                    .catch(() => false),
+                false,
+            );
             assertEquals(hostedSession.getActiveExecutionWorkflow(), null);
             assertEquals(hostedSession.getRootAgentName(), "engineer");
             const canonicalProjectRoot = await fsRealpath(projectRoot);
@@ -231,9 +245,11 @@ test("verified Epic-child publication leaves the removed worktree before continu
             hostedSession.setEventSink((event: { type?: string; output?: string }) => events.push(event));
             setModelResponseFactories([
                 () =>
-                    fauxAssistantMessage(fauxToolCall("bash", {
-                        command: "pwd && git branch --show-current && cat published-marker.txt",
-                    })),
+                    fauxAssistantMessage(
+                        fauxToolCall("bash", {
+                            command: `${process.platform === "win32" ? "pwd -W" : "pwd"} && git branch --show-current && cat published-marker.txt`,
+                        }),
+                    ),
                 () => fauxAssistantMessage(fauxText("Tool checked.")),
             ]);
             await runActiveAgentTurn({
@@ -241,11 +257,10 @@ test("verified Epic-child publication leaves the removed worktree before continu
                 agentName: "engineer",
                 userRequest: "Check the rebuilt root tools.",
             });
-            const shellOutput = events.find((event) =>
-                event.type === "tool_end" && event.output?.includes("from worktree")
-            )
-                ?.output || "";
-            assertStringIncludes(shellOutput, canonicalProjectRoot);
+            const shellOutput =
+                events.find((event) => event.type === "tool_end" && event.output?.includes("from worktree"))?.output ||
+                "";
+            assertStringIncludes(shellOutput, canonicalProjectRoot.replaceAll("\\", "/"));
             assertStringIncludes(shellOutput, "main");
             assertStringIncludes(shellOutput, "from worktree");
             const continuation = result.epicContinuation;
@@ -309,23 +324,29 @@ test("paused validation keeps the execution Agent and worktree cwd", async () =>
             });
             const worktreePlan = await loadPlan(worktree.path, planName);
             if (!worktreePlan) throw new Error("worktree Plan fixture disappeared");
-            await savePlan(worktree.path, planName, worktreePlan.markdown || `# ${planName}\n`, {
-                ...worktreePlan.attrs,
-                classification: "PLANNED_CHANGE",
-                status: "reviewed",
-                summary: "paused fixture",
-                affectedPaths: ["paused-marker.txt"],
-                planId: "paused-context-plan",
-                executionAgent: "engineer",
-                executionMode: "worktree",
-                humanReviewMode: "ask",
-                humanReviewDecision: null,
-                executionBaselineTree: baseTree,
-                worktreeId: worktree.id,
-                worktreePath: worktree.path,
-                worktreeBranch: worktree.branch,
-                worktreeBaseBranch: "main",
-            }, { expectedRevision: worktreePlan.revision });
+            await savePlan(
+                worktree.path,
+                planName,
+                worktreePlan.markdown || `# ${planName}\n`,
+                {
+                    ...worktreePlan.attrs,
+                    classification: "PLANNED_CHANGE",
+                    status: "reviewed",
+                    summary: "paused fixture",
+                    affectedPaths: ["paused-marker.txt"],
+                    planId: "paused-context-plan",
+                    executionAgent: "engineer",
+                    executionMode: "worktree",
+                    humanReviewMode: "ask",
+                    humanReviewDecision: null,
+                    executionBaselineTree: baseTree,
+                    worktreeId: worktree.id,
+                    worktreePath: worktree.path,
+                    worktreeBranch: worktree.branch,
+                    worktreeBaseBranch: "main",
+                },
+                { expectedRevision: worktreePlan.revision },
+            );
             const hostedSession = new HostedSession({ id: crypto.randomUUID(), cwd: worktree.path });
             await switchActiveAgent(hostedSession, { agentName: "engineer", cwd: worktree.path });
             hostedSession.setInteractionAdapter({
@@ -357,7 +378,12 @@ test("paused validation keeps the execution Agent and worktree cwd", async () =>
                 workRecordMnemotecaPort: createWorkRecordMnemotecaFixture(),
             });
             assertEquals(result.kind, "paused");
-            assertEquals(await fsStat(worktree.path).then(() => true).catch(() => false), true);
+            assertEquals(
+                await fsStat(worktree.path)
+                    .then(() => true)
+                    .catch(() => false),
+                true,
+            );
             assertEquals(hostedSession.getRootAgentName(), "engineer");
             assertEquals(hostedSession.getActiveExecutionWorkflow()?.executionCwd, worktree.path);
             const rootAgentSession = hostedSession.getRootAgentSession() as AgentSession | null;
@@ -436,15 +462,21 @@ test("accepted completion stops the producer without waiting for natural turn en
                 // This backend deliberately cannot finish naturally. Acceptance must
                 // initiate its shutdown; a driver waiting for output would hang here.
                 const stopped = new Promise<void>((resolve) => {
-                    options.signal?.addEventListener("abort", () => {
-                        interrupted = true;
-                        resolve();
-                    }, { once: true });
+                    options.signal?.addEventListener(
+                        "abort",
+                        () => {
+                            interrupted = true;
+                            resolve();
+                        },
+                        { once: true },
+                    );
                 });
-                await executeWorkflowTestTools(options, [{
-                    name: "task_completed",
-                    arguments: { message: "Finished." },
-                }]);
+                await executeWorkflowTestTools(options, [
+                    {
+                        name: "task_completed",
+                        arguments: { message: "Finished." },
+                    },
+                ]);
                 await stopped;
                 return [];
             },

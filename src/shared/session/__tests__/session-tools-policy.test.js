@@ -1,4 +1,4 @@
-import { bashFixtureExecutable, bashFixturePath } from "../../../../scripts/bash-fixture.ts";
+import { bashFixtureExecutable } from "../../../../scripts/bash-fixture.ts";
 import { delimiter } from "node:path";
 import {
     writeWorkflowBinaryFixtures,
@@ -1414,9 +1414,9 @@ test("Guide bash policy reaches Pi and background tools and refreshes after root
                 );
             };
             assertEquals(
-                (await execute(findTool("bash"), { command: "pwd" })).content.some(
-                    (item) => item.type === "text" && item.text.includes(bashFixturePath(cwd)),
-                ),
+                (
+                    await execute(findTool("bash"), { command: process.platform === "win32" ? "pwd -W" : "pwd" })
+                ).content.some((item) => item.type === "text" && item.text.includes(cwd.replaceAll("\\", "/"))),
                 true,
             );
             assertEquals(await fsReadFile(join(cwd, "shell-prefix.txt"), "utf8"), "configured shell");
