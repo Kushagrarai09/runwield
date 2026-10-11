@@ -140,9 +140,11 @@ async function spawnTreeWithDescendant(options: {
         ...options,
     });
     let settled = false;
-    shell.done.finally(() => {
-        settled = true;
-    }).catch(() => {});
+    shell.done
+        .finally(() => {
+            settled = true;
+        })
+        .catch(() => {});
     const deadline = Date.now() + 10_000;
     while (Date.now() < deadline) {
         const pid = Number((await readFile(pidFile, "utf8")).trim()) || 0;
@@ -191,7 +193,13 @@ test(
             assertEquals(outcome, { exitCode: 3, terminatedBy: null });
             assertEquals(stdout.trim(), `literal; touch ${marker}`);
             assertEquals(stderr, "err\n");
-            assertEquals(await stat(marker).then(() => true, () => false), false);
+            assertEquals(
+                await stat(marker).then(
+                    () => true,
+                    () => false,
+                ),
+                false,
+            );
         } finally {
             await rm(cwd, { recursive: true });
         }
@@ -222,7 +230,13 @@ test(
         assertEquals(stdout, "");
         assertEquals(stderr, "");
         await new Promise((resolve) => setTimeout(resolve, 50));
-        assertEquals(await stat(marker).then(() => true, () => false), false);
+        assertEquals(
+            await stat(marker).then(
+                () => true,
+                () => false,
+            ),
+            false,
+        );
     },
 );
 
@@ -248,7 +262,7 @@ test("spawnForegroundProcess reports a missing executable as a spawn error", { s
             command: `runwield-missing-${crypto.randomUUID()}`,
             args: [],
             cwd: getCwd(),
-        })
+        }),
     );
     assert(error instanceof Error);
     assert(isMissingExecutableError(error));
@@ -309,11 +323,7 @@ test("spawnForegroundShell reports the real exit status and separate streams", {
     const cwd = await mkdtemp(join(tmpdir(), "runwield-fg-cwd-"));
     try {
         const shell = spawnForegroundShell({ command: "printf out; printf err >&2; exit 3", cwd });
-        const [outcome, stdout, stderr] = await Promise.all([
-            shell.done,
-            readAll(shell.stdout),
-            readAll(shell.stderr),
-        ]);
+        const [outcome, stdout, stderr] = await Promise.all([shell.done, readAll(shell.stdout), readAll(shell.stderr)]);
         assertEquals(outcome, { exitCode: 3, terminatedBy: null });
         assertEquals(stdout, "out");
         assertEquals(stderr, "err");
@@ -362,26 +372,30 @@ test("spawnForegroundShell observes an abort immediately after spawn returns", {
     }
 });
 
-test("spawnForegroundShell timeout kills the whole descendant tree and stays distinguishable from abort", {
-    skip: IS_WINDOWS,
-}, async () => {
-    // The timeout must be long enough that the pre-kill probe can observe
-    // the descendant running before it fires: a 50ms budget raced spawn +
-    // pid-file write + read under parallel CI load, flaking the assertion.
-    const { shell, descendantPid, cleanup } = await spawnTreeWithDescendant({ timeoutMs: 2000 });
-    try {
-        assert(processAlive(descendantPid), "descendant should be running before the timeout");
-        const outcome = await shell.done;
-        assertEquals(outcome, { exitCode: null, terminatedBy: "timeout" });
-        assertEquals(
-            await waitForProcessDeath(descendantPid),
-            true,
-            "timeout must kill the descendant, not only the wrapper",
-        );
-    } finally {
-        await cleanup();
-    }
-});
+test(
+    "spawnForegroundShell timeout kills the whole descendant tree and stays distinguishable from abort",
+    {
+        skip: IS_WINDOWS,
+    },
+    async () => {
+        // The timeout must be long enough that the pre-kill probe can observe
+        // the descendant running before it fires: a 50ms budget raced spawn +
+        // pid-file write + read under parallel CI load, flaking the assertion.
+        const { shell, descendantPid, cleanup } = await spawnTreeWithDescendant({ timeoutMs: 2000 });
+        try {
+            assert(processAlive(descendantPid), "descendant should be running before the timeout");
+            const outcome = await shell.done;
+            assertEquals(outcome, { exitCode: null, terminatedBy: "timeout" });
+            assertEquals(
+                await waitForProcessDeath(descendantPid),
+                true,
+                "timeout must kill the descendant, not only the wrapper",
+            );
+        } finally {
+            await cleanup();
+        }
+    },
+);
 
 test("spawnForegroundShell skips the spawn entirely for an already-aborted signal", { skip: IS_WINDOWS }, async () => {
     const marker = await makeTempFile("runwield-fg-preabort-");
@@ -393,17 +407,16 @@ test("spawnForegroundShell skips the spawn entirely for an already-aborted signa
         cwd: getCwd(),
         signal: abortController.signal,
     });
-    const [outcome, stdout, stderr] = await Promise.all([
-        shell.done,
-        readAll(shell.stdout),
-        readAll(shell.stderr),
-    ]);
+    const [outcome, stdout, stderr] = await Promise.all([shell.done, readAll(shell.stdout), readAll(shell.stderr)]);
     assertEquals(shell.pid, null);
     assertEquals(outcome, { exitCode: null, terminatedBy: "abort" });
     assertEquals(stdout, "");
     assertEquals(stderr, "");
     await new Promise((resolve) => setTimeout(resolve, 50));
-    const markerExists = await stat(marker).then(() => true, () => false);
+    const markerExists = await stat(marker).then(
+        () => true,
+        () => false,
+    );
     assertEquals(markerExists, false, "a pre-aborted signal must prevent the command from starting");
 });
 
@@ -421,13 +434,29 @@ test("spawnForegroundShell tolerates an abort that arrives after natural exit", 
 });
 
 test("spawnForegroundShell on Windows abort kills a real descendant tree", { skip: !IS_WINDOWS }, async () => {
-    const pidFile = await makeTempFile("runwield-fg-windows-descendant-");
+    const root = await mkdtemp(join(tmpdir(), "runwield-fg-windows-descendant-"));
+    const pidFile = join(root, "descendant.pid");
+    const wrapper = join(root, "spawn descendant.js");
+    await writeFile(pidFile, "");
+    await writeFile(
+        wrapper,
+        `import { spawn } from "node:child_process";
+import { writeFileSync } from "node:fs";
+const child = spawn(process.execPath, [process.versions.deno ? "eval" : "--eval", "setInterval(() => {}, 1000)"], { stdio: "inherit" });
+writeFileSync(${JSON.stringify(pidFile)}, String(child.pid));
+child.on("error", (error) => { console.error(error); process.exitCode = 1; });
+child.on("exit", (code) => { process.exitCode = code || 0; });
+`,
+    );
     const abortController = new AbortController();
-    const script = `Write-Output "starting descendant"; $p = Start-Process powershell -ArgumentList '-NoProfile','-Command','Start-Sleep -Seconds 30' -PassThru; Set-Content -Encoding ascii -LiteralPath '${
-        pidFile.replaceAll("'", "''")
-    }' -Value $p.Id; Write-Output $p.Id; Wait-Process -Id $p.Id`;
-    const command = `powershell -NoProfile -EncodedCommand ${Buffer.from(script, "utf16le").toString("base64")}`;
-    const shell = spawnForegroundShell({ command, cwd: getCwd(), signal: abortController.signal });
+    const command = `"${execPath}" ${versions.deno ? "run -A" : "run"} "${wrapper}"`;
+    const shell = spawnForegroundShell({
+        command,
+        cwd: getCwd(),
+        signal: abortController.signal,
+        // This test must prove RunWield cleanup without Bun's orphan guardian.
+        env: { BUN_FEATURE_FLAG_NO_ORPHANS: "0" },
+    });
     const stderr = readAll(shell.stderr);
     const stdout = readAll(shell.stdout);
     let descendantPid = 0;
@@ -441,8 +470,12 @@ test("spawnForegroundShell on Windows abort kills a real descendant tree", { ski
         if (!descendantPid || !processAlive(descendantPid)) {
             abortController.abort();
             await shell.done;
-            const probe = spawnSync("tasklist", ["/FI", `PID eq ${descendantPid}`, "/FO", "CSV", "/NH"], { encoding: "utf8" });
-            throw new Error(`Descendant did not start: pid=${descendantPid}; file=${await readFile(pidFile, "utf8")}; stderr=${await stderr}; stdout=${await stdout}; probe=${JSON.stringify({ status: probe.status, stdout: probe.stdout, stderr: probe.stderr, error: probe.error?.message })}`);
+            const probe = spawnSync("tasklist", ["/FI", `PID eq ${descendantPid}`, "/FO", "CSV", "/NH"], {
+                encoding: "utf8",
+            });
+            throw new Error(
+                `Descendant did not start: pid=${descendantPid}; file=${await readFile(pidFile, "utf8")}; stderr=${await stderr}; stdout=${await stdout}; probe=${JSON.stringify({ status: probe.status, stdout: probe.stdout, stderr: probe.stderr, error: probe.error?.message })}`,
+            );
         }
         abortController.abort();
         const outcome = await shell.done;
@@ -451,21 +484,17 @@ test("spawnForegroundShell on Windows abort kills a real descendant tree", { ski
     } finally {
         abortController.abort();
         await shell.done;
-        await Promise.all([stdout, stderr]);
         if (descendantPid && processAlive(descendantPid)) {
             spawnSync("taskkill", ["/F", "/T", "/PID", String(descendantPid)]);
         }
-        await rm(pidFile).catch(() => {});
+        await Promise.all([stdout, stderr]);
+        await rm(root, { recursive: true, force: true });
     }
 });
 
 test("spawnForegroundShell on Windows uses cmd and reports real shell status", { skip: !IS_WINDOWS }, async () => {
     const shell = spawnForegroundShell({ command: "echo out && echo err 1>&2 && exit /b 3", cwd: getCwd() });
-    const [outcome, stdout, stderr] = await Promise.all([
-        shell.done,
-        readAll(shell.stdout),
-        readAll(shell.stderr),
-    ]);
+    const [outcome, stdout, stderr] = await Promise.all([shell.done, readAll(shell.stdout), readAll(shell.stderr)]);
     assertEquals(outcome, { exitCode: 3, terminatedBy: null });
     assertStringIncludes(stdout, "out");
     assertStringIncludes(stderr, "err");

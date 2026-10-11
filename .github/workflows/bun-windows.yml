@@ -110,7 +110,7 @@ jobs:
             - name: Qualify native locking, process trees and compiled identity
               if: ${{ matrix.phase == 'package' && !cancelled() && steps.install.outcome == 'success' }}
               timeout-minutes: 5
-              run: bun scripts/run-bun-tests.ts src/shared/native-file-lock.test.ts src/shared/foreground-process.test.ts src/shared/runtime-identity.test.ts
+              run: bun scripts/run-bun-tests.ts src/shared/native-file-lock.test.ts src/shared/foreground-process.test.ts src/shared/runtime-identity.test.ts src/shared/sqlite.test.ts src/shared/owner-coordination/database.test.js src/shared/session/live-session-connection.test.ts src/shared/session/live-session-events.test.ts src/testing/workflow-binary-fixtures.test.ts src/shared/remote/entry-isolation.test.ts
             - name: Compile native executable and embedded Workspace
               id: compile
               if: ${{ matrix.phase == 'package' && !cancelled() && steps.install.outcome == 'success' }}

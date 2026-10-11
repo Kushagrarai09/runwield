@@ -1,3 +1,4 @@
+import type { TerminalRuntime } from "../../../scripts/terminal-fixture.ts";
 import process from "node:process";
 import { readdir } from "node:fs/promises";
 import { captureForegroundProcess } from "../captured-process.ts";
@@ -51,6 +52,66 @@ finally:
     os.close(master)
 print(json.dumps({'code': child.returncode, 'screen': output.decode(errors='replace')}))`;
 
+/** Exercise the native PTY (ConPTY on Windows), never piped stand-in input. */
+async function nativeTerminalSession(project: string, home: string): Promise<{ code: number; screen: string }> {
+    const bun: TerminalRuntime = Reflect.get(globalThis, String("Bun"));
+    const decoder = new TextDecoder();
+    let screen = "";
+    let exited = false;
+    const child = bun.spawn([process.execPath, "run", cli, "--remote-view"], {
+        cwd: project,
+        env: { ...process.env, HOME: home, WLD_TEST_SANDBOX_HOME: home, MNEMOTECA_DB_PATH: join(home, "mnemoteca.db") },
+        timeout: 30_000,
+        terminal: {
+            cols: 100,
+            rows: 30,
+            data(_terminal, data) {
+                screen += decoder.decode(data, { stream: true });
+            },
+        },
+    });
+    const finished = child.exited.then((code) => {
+        exited = true;
+        return code;
+    });
+    try {
+        child.terminal.setRawMode(true);
+        child.terminal.write(
+            JSON.stringify({
+                host: "isolated-host",
+                cwd: project,
+                status: "Connected",
+                trust: "SSH verified",
+                readiness: "No user turns",
+            }) + "\n",
+        );
+        const deadline = Date.now() + 20_000;
+        while (!screen.includes("Press q") && !exited && Date.now() < deadline) {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        if (!screen.includes("Press q")) throw new Error(`Remote view did not become ready: ${screen}`);
+        for (const input of [
+            "hello\r",
+            "\x1b[200~pasted text\x1b[201~",
+            "/settings\r",
+            "! touch BAD\r",
+            "@secret.txt\r",
+        ]) {
+            child.terminal.write(input);
+            await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        child.terminal.write("q");
+        const code = await finished;
+        screen += decoder.decode();
+        return { code, screen };
+    } finally {
+        if (!exited) child.kill("SIGKILL");
+        await finished;
+        child.terminal.close();
+    }
+}
+
 async function files(root: string): Promise<string[]> {
     const found: string[] = [];
     async function visit(path: string, relative: string) {
@@ -85,20 +146,24 @@ for (const populated of [false, true]) {
             }
             const before = await files(home);
             const projectBefore = await files(project);
-            const result = await captureForegroundProcess("python3", {
-                args: [
-                    "-c",
-                    pty,
-                    cli,
-                    project,
-                    home,
-                    process.execPath,
-                    JSON.stringify(["run", ...(process.versions.deno ? ["-A", "--quiet"] : [])]),
-                ],
-                cwd: projectRoot,
-            });
-            assertEquals(result.code, 0, new TextDecoder().decode(result.stderr));
-            const { code, screen } = JSON.parse(new TextDecoder().decode(result.stdout));
+            const { code, screen } = process.versions.bun
+                ? await nativeTerminalSession(project, home)
+                : await (async () => {
+                      const result = await captureForegroundProcess("python3", {
+                          args: [
+                              "-c",
+                              pty,
+                              cli,
+                              project,
+                              home,
+                              process.execPath,
+                              JSON.stringify(["run", ...(process.versions.deno ? ["-A", "--quiet"] : [])]),
+                          ],
+                          cwd: projectRoot,
+                      });
+                      assertEquals(result.code, 0, new TextDecoder().decode(result.stderr));
+                      return JSON.parse(new TextDecoder().decode(result.stdout));
+                  })();
             assertEquals([0, -9].includes(code), true, screen);
             assertStringIncludes(screen, "isolated-host");
             // The terminal wraps long absolute directories across rows.
@@ -112,7 +177,13 @@ for (const populated of [false, true]) {
             assertEquals(await files(project), projectBefore);
             assertEquals(await fsReadFile(join(project, "secret.txt"), "utf8"), "project sentinel");
             assertEquals(await fsReadFile(join(project, ".wld/settings.json"), "utf8"), "project settings sentinel");
-            assertEquals(await fsStat(join(project, "BAD")).then(() => true, () => false), false);
+            assertEquals(
+                await fsStat(join(project, "BAD")).then(
+                    () => true,
+                    () => false,
+                ),
+                false,
+            );
             if (populated) {
                 assertEquals(await fsReadFile(join(home, ".wld/settings.json"), "utf8"), "settings sentinel");
                 assertEquals(await fsReadFile(join(home, ".wld/skills/skill.md"), "utf8"), "skill sentinel");

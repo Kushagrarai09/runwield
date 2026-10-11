@@ -1,3 +1,4 @@
+import { captureScriptProcess } from "./script-process.ts";
 import { delimiter } from "node:path";
 import { runtimeSourceArgs } from "../src/testing/runtime-source-args.ts";
 import { makeTempFile } from "../src/testing/temp-file.ts";
@@ -15,15 +16,42 @@ import { assertEquals, assertStringIncludes } from "@std/assert";
 import { join } from "@std/path";
 import { runBoundedTest, runWithSnip } from "./run-with-snip.ts";
 
+async function writeSnipFixture(root: string, stdout: string, stderr: string, code = 0): Promise<void> {
+    if (process.platform === "win32") {
+        const source = join(root, "snip-fixture.ts");
+        const binary = join(root, "snip.exe");
+        await fsWriteFile(
+            source,
+            `import process from "node:process"; process.stdout.write(${JSON.stringify(stdout)}); process.stderr.write(${JSON.stringify(stderr)}); process.exitCode = ${code};`,
+        );
+        const args = process.versions.bun
+            ? [
+                  "build",
+                  "--compile",
+                  "--no-compile-autoload-dotenv",
+                  "--no-compile-autoload-bunfig",
+                  source,
+                  "--outfile",
+                  binary,
+              ]
+            : ["compile", "-A", "--no-check", "--output", binary, source];
+        const result = await captureScriptProcess(process.execPath, { args, cwd: root });
+        assertEquals(result.code, 0, new TextDecoder().decode(result.stderr));
+        return;
+    }
+    const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
+    const path = join(root, "snip");
+    await fsWriteFile(
+        path,
+        `#!/bin/sh\nprintf '%s' ${quote(stdout)}\nprintf '%s' ${quote(stderr)} >&2\nexit ${code}\n`,
+    );
+    await fsChmod(path, 0o755);
+}
+
 test("runWithSnip preserves compact success output", async () => {
     const root = await fsMkdtemp(join(tmpdir(), "runwield-snip-command-success-"));
     try {
-        const snipPath = join(root, "snip");
-        await fsWriteFile(
-            snipPath,
-            "#!/bin/sh\nprintf 'all tests passed\\n'\nprintf 'snip: tracking error: ignored\\n' >&2\n",
-        );
-        await fsChmod(snipPath, 0o755);
+        await writeSnipFixture(root, "all tests passed\n", "snip: tracking error: ignored\n");
 
         const result = await runWithSnip("deno", ["test"], {
             env: { PATH: `${root}${delimiter}${process.env["PATH"] || ""}` },
@@ -40,16 +68,12 @@ test("runWithSnip stores only Deno failure diagnostics", async () => {
     const root = await fsMkdtemp(join(tmpdir(), "runwield-snip-command-failure-"));
     let failureLogPath = "";
     try {
-        const snipPath = join(root, "snip");
-        await fsWriteFile(
-            snipPath,
-            `#!/bin/sh
-printf '%s\n' 'Check src/pass.ts' 'running 2 tests from ./sample.test.ts' 'passing ... ok (1ms)' 'failure ... FAILED (2ms)' 'AssertionError: expected true' 'FAILED | 1 passed | 1 failed (3ms)'
-printf 'snip: tracking error: test database is read-only\n' >&2
-exit 1
-`,
+        await writeSnipFixture(
+            root,
+            "Check src/pass.ts\nrunning 2 tests from ./sample.test.ts\npassing ... ok (1ms)\nfailure ... FAILED (2ms)\nAssertionError: expected true\nFAILED | 1 passed | 1 failed (3ms)\n",
+            "snip: tracking error: test database is read-only\n",
+            1,
         );
-        await fsChmod(snipPath, 0o755);
 
         const result = await runWithSnip("deno", ["test", "sample.test.ts"], {
             env: { PATH: `${root}${delimiter}${process.env["PATH"] || ""}` },
@@ -80,9 +104,9 @@ test("a timed-out test stops its process and reports the timeout", async () => {
         const result = await runBoundedTest(
             runtimeSourceArgs([
                 "eval",
-                `import { writeFileSync } from "node:fs"; writeFileSync(${
-                    JSON.stringify(pidPath)
-                }, String(process.pid)); setInterval(() => {}, 1000);`,
+                `import { writeFileSync } from "node:fs"; writeFileSync(${JSON.stringify(
+                    pidPath,
+                )}, String(process.pid)); setInterval(() => {}, 1000);`,
             ]),
             { failureLabel: "tests", timeoutMs: 500, command: process.execPath },
         );
