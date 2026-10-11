@@ -67,6 +67,10 @@ export interface ReviewConversationEvent {
 }
 
 export interface ReviewConversation {
+    onExit?(): void;
+    completed?: boolean;
+    resultMessage?: string;
+    completionDelivered?: boolean;
     id: string;
     agentLabel: string;
     revision: number;
@@ -102,7 +106,28 @@ interface ArtifactReadSurfaceOptions {
     onOutput?(output: ReviewServerOutput): void;
 }
 
+export interface StandaloneForgeState {
+    platform: "github" | "gitlab";
+    label: string;
+    available: boolean;
+    unavailableReason?: string;
+    postEnabled: boolean;
+    postDisabledReason?: string;
+}
+export interface StandaloneCommitState {
+    enabled: boolean;
+    disabledReason?: string;
+}
+export interface StandaloneReviewPayload {
+    mode: "pr" | "branch" | "uncommitted";
+    forge?: StandaloneForgeState;
+    commit?: StandaloneCommitState;
+    reviewContext?: string;
+    resultMessage?: string;
+}
+
 interface CodeReviewSurfaceOptions {
+    standaloneReview?: StandaloneReviewPayload;
     rawPatch: string;
     gitRef: string;
     agentCwd: string;
@@ -120,6 +145,7 @@ interface CodeReviewSurfaceOptions {
 }
 
 interface CodeReviewPayload extends Record<string, unknown> {
+    standaloneReview?: StandaloneReviewPayload;
     rawPatch: string;
     gitRef: string;
     agentCwd: string;
@@ -221,8 +247,9 @@ function uninstallProcessExitCleanup(): void {
 
 function registerReviewSurface<TDecision>(
     server: ReviewSurfaceServer<TDecision>,
+    handlesSignals = false,
 ): ReviewSurfaceServer<TDecision> {
-    installProcessExitCleanup();
+    if (!handlesSignals) installProcessExitCleanup();
     activeReviewSurfaces.add(server);
     const stop = server.stop.bind(server);
     return {
@@ -295,7 +322,7 @@ function workspaceServer<TDecision>(
         url: server.url,
         waitForDecision: () => server.waitForDecision() as Promise<TDecision>,
         stop: () => server.stop(),
-    });
+    }, Boolean(options.reviewPayload.standaloneReview));
 }
 
 export async function startPlanReviewSurface<TDecision = ReviewDecisionValue>({
@@ -411,6 +438,7 @@ export async function startArtifactReadSurface<TDecision = ReviewDecisionValue>(
 }
 
 export async function startCodeReviewSurface<TDecision = ReviewDecisionValue>({
+    standaloneReview,
     rawPatch,
     gitRef,
     agentCwd,
@@ -430,6 +458,7 @@ export async function startCodeReviewSurface<TDecision = ReviewDecisionValue>({
     const reviewStatus = await loadCodeReviewStatus(agentCwd);
     const resolvedAgentLabel = agentLabel || reviewConversation?.agentLabel || "Reviewer Feedback Engineer";
     const reviewPayload: CodeReviewPayload = {
+        standaloneReview,
         rawPatch,
         gitRef,
         agentCwd,

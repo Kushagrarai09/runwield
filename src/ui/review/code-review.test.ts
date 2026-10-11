@@ -121,3 +121,12 @@ Deno.test("runCodeReview cancellation stops the real review server", async () =>
         await Deno.remove(projectRoot, { recursive: true });
     }
 });
+
+Deno.test("standalone actions survive normalization even without feedback or approval", () => {
+    for (const reviewAction of ["post_comments", "approve_pr", "approve_commit"]) {
+        const decision = normalizeCodeReviewDecision({ reviewAction });
+        assertEquals(decision.reviewAction, reviewAction);
+        assertEquals(decision.exit, false);
+    }
+    assertEquals(normalizeCodeReviewDecision({ reviewAction: "request_changes" }).reviewAction, undefined);
+});

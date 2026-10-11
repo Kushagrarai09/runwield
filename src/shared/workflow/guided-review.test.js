@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertStringIncludes } from "@std/assert";
 import {
     buildFallbackGuidedReviewExplainer,
     buildGuidedReviewPolicy,
@@ -134,4 +134,26 @@ Deno.test("buildGuidedReviewPrompt asks for strict JSON and Plan-grounded change
         true,
     );
     assertEquals(prompt.includes("src/a.js"), true);
+});
+
+Deno.test("planless Guided Review grounds in PR context and reads the real head ref", () => {
+    const prompt = buildGuidedReviewPrompt({
+        diffText: "diff",
+        gitRef: "abc123",
+        changedFiles: ["a.ts"],
+        reviewContext: "PR title and body",
+    });
+    assertStringIncludes(prompt, "PR title and body");
+    assertStringIncludes(prompt, "git show abc123:<path>");
+    assertEquals(prompt.includes("Plan content unavailable"), false);
+    assertEquals(prompt.includes("Ground the explainer in both the Plan"), false);
+});
+Deno.test("working-tree Guided Review reads current files rather than a nonexistent ref", () => {
+    const prompt = buildGuidedReviewPrompt({
+        diffText: "diff",
+        gitRef: "Working tree (topic)",
+        changedFiles: ["a.ts"],
+    });
+    assertStringIncludes(prompt, "Read the current checkout files directly");
+    assertEquals(prompt.includes("git show Working tree"), false);
 });
