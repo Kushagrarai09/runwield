@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { argv, env, execPath } from "node:process";
+import { argv, env, execPath, platform } from "node:process";
 import { fileURLToPath } from "node:url";
 import { requirePinnedBun } from "./check-bun-runtime.ts";
 
@@ -125,7 +125,9 @@ export async function main(args: string[] = argv.slice(2)): Promise<number> {
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1) {
         throw new Error("WLD_TEST_FILE_TIMEOUT_MS must be a positive integer.");
     }
-    const root = await realpath(await mkdtemp(join(tmpdir(), "runwield-bun-tests-")));
+    // Nested Git worktrees repeat the sandbox path in their directory names.
+    // Keep Windows roots short without changing per-file isolation or cleanup.
+    const root = await realpath(await mkdtemp(join(tmpdir(), platform === "win32" ? "rw-" : "runwield-bun-tests-")));
     const reportsRoot = join(REPO_ROOT, ".ci-cache");
     await mkdir(reportsRoot, { recursive: true });
     const reportDir = await mkdtemp(join(reportsRoot, "bun-report-"));

@@ -38,7 +38,7 @@ test("load-plan reads the execution Plan without recreating a missing primary Pl
 
         const result = await resolvePlanWithPrimaryRecovery(projectRoot, planName);
 
-        assertEquals(result.plan.path, `${worktree.path}/docs/plans/${planName}.md`);
+        assertEquals(result.plan.path, join(worktree.path, "docs", "plans", `${planName}.md`));
         assertEquals(result.plan.attrs.planId, planId);
         assertStringIncludes(result.plan.markdown, "Execution copy wins.");
         assertEquals(await loadPlan(projectRoot, planName), null);
