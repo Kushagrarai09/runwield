@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
@@ -78,7 +79,7 @@ test("unsupported Agy CLI selection is rejected before approval, agy launch, or 
                 `#!/bin/sh\necho launched >> ${JSON.stringify(agyLaunchLog)}\nexit 2\n`,
             );
             await fsChmod(join(binDir, "agy"), 0o755);
-            process.env["PATH"] = `${binDir}:${previousPath}`;
+            process.env["PATH"] = `${binDir}${delimiter}${previousPath}`;
             const { sessionId } = await runtime.createInteractiveSession({ cwd: projectRoot, mode: "new" });
 
             await runModelsCommand(["agy-cli/fixture-model"], {
@@ -115,7 +116,7 @@ test("declined Agy MCP setup keeps the approved selected model without launching
                 `#!/bin/sh\necho launched >> ${JSON.stringify(agyLaunchLog)}\nexit 2\n`,
             );
             await fsChmod(join(binDir, "agy"), 0o755);
-            process.env["PATH"] = `${binDir}:${previousPath}`;
+            process.env["PATH"] = `${binDir}${delimiter}${previousPath}`;
             assertEquals(await resolveInstalledWldExecutable(), await fsRealpath(join(binDir, "wld")));
 
             const sessionHost = new SessionHost();
@@ -163,7 +164,7 @@ test("fresh Agy CLI model selection offers first-time MCP setup before the first
         const previousPath = process.env["PATH"] || "";
         try {
             const binDir = await installAgyModelSelectionFixture(homeDir);
-            process.env["PATH"] = `${binDir}:${previousPath}`;
+            process.env["PATH"] = `${binDir}${delimiter}${previousPath}`;
             const { sessionId } = await runtime.createInteractiveSession({
                 cwd: projectRoot,
                 mode: "new",
@@ -208,7 +209,7 @@ test("explicit approved Agy CLI selection updates the active runtime Session mod
         const previousPath = process.env["PATH"] || "";
         try {
             const binDir = await installAgyModelSelectionFixture(homeDir);
-            process.env["PATH"] = `${binDir}:${previousPath}`;
+            process.env["PATH"] = `${binDir}${delimiter}${previousPath}`;
             assertEquals(await resolveInstalledWldExecutable(), await fsRealpath(join(binDir, "wld")));
             await installAgyCliMcpSetup();
             const { sessionId } = await runtime.createInteractiveSession({ cwd: projectRoot, mode: "new" });

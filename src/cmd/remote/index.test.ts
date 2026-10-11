@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
 import { captureForegroundProcess } from "../../shared/captured-process.ts";
 import { test } from "node:test";
@@ -134,7 +135,7 @@ plugin({ name: "fixture-build-boundary", setup(build) {
                         HOME: local,
                         WLD_TEST_SANDBOX_HOME: local,
                         MNEMOTECA_DB_PATH: join(local, "mnemoteca.db"),
-                        PATH: `${bin}:${process.env["PATH"] ?? ""}`,
+                        PATH: `${bin}${delimiter}${process.env["PATH"] ?? ""}`,
                         SSH_LOG: sshLog,
                         REMOTE_HOME: remote,
                         REMOTE_PYTHONPATH: root,

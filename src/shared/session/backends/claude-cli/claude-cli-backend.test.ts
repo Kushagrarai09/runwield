@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
 import {
@@ -67,7 +68,7 @@ async function withClaudeFixture(callback: (root: string, logPath: string) => Pr
             const binDir = join(root, "bin");
             const logPath = join(root, "fixture.jsonl");
             await installClaudeFixture(binDir, logPath);
-            process.env["PATH"] = `${binDir}:${previousPath || ""}`;
+            process.env["PATH"] = `${binDir}${delimiter}${previousPath || ""}`;
             process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"] = logPath;
             try {
                 await callback(root, logPath);

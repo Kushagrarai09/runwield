@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import { captureForegroundProcess } from "../shared/captured-process.ts";
 import { getCwd } from "../constants.js";
 import { makeTempFile } from "./temp-file.ts";
@@ -70,6 +71,14 @@ test("unsupported binary calls fail even when the caller swallows the exit code"
             assertEquals(output.code, 64);
             assertStringIncludes(new TextDecoder().decode(output.stderr), `Unsupported ${name}`);
         }
+        for (const name of ["cymbal", "ketch"]) {
+            const output = await captureForegroundProcess(join(bin, name), {
+                args: ["--help", "unexpected-operation"],
+                cwd: getCwd(),
+            });
+            assertEquals(output.code, 64);
+            assertStringIncludes(new TextDecoder().decode(output.stderr), `Unsupported ${name}`);
+        }
         const error = await assertRejects(() => assertWorkflowBinaryCallsSupported(root), Error);
         for (const name of ["mnemoteca", "cymbal", "ketch", "osascript"]) {
             assertStringIncludes(error.message, `Unsupported ${name}`);
@@ -97,7 +106,7 @@ test("shared executable contents keep command logs and failures isolated", async
         const run = (bin: string, name: string, args: string[]) =>
             captureForegroundProcess(name, {
                 args,
-                env: { PATH: `${bin}:${process.env["PATH"] || ""}` },
+                env: { PATH: `${bin}${delimiter}${process.env["PATH"] || ""}` },
                 cwd: getCwd(),
             });
         const results = await Promise.all([

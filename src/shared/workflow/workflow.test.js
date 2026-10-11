@@ -1,4 +1,5 @@
 // @ts-nocheck: public workflow facade now forwards to TypeScript extraction modules; behavioral coverage remains unchanged.
+import { delimiter } from "node:path";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -208,7 +209,7 @@ test("startActiveExecutionWorkflow indexes a newly created execution worktree", 
             '#!/bin/sh\nprintf "%s\\n" "$PWD" > "$RUNWIELD_CYMBAL_MARKER"\nprintf "%s\\n" "$*" >> "$RUNWIELD_CYMBAL_MARKER"\n',
         );
         await fsChmod(cymbalPath, 0o755);
-        process.env["PATH"] = `${binDir}:${previousPath}`;
+        process.env["PATH"] = `${binDir}${delimiter}${previousPath}`;
         process.env["RUNWIELD_CYMBAL_MARKER"] = markerPath;
         try {
             const result = await startActiveExecutionWorkflow({

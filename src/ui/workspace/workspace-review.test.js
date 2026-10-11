@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
 import { captureForegroundProcess } from "../../shared/captured-process.ts";
 import {
@@ -372,7 +373,7 @@ test("review guide jobs prefer WLD over external agent host CLIs", async () => {
                 await fsWriteFile(commandPath, "#!/bin/sh\necho '{}'\n");
                 await fsChmod(commandPath, 0o755);
             }
-            process.env["PATH"] = previousPath ? `${binDir}:${previousPath}` : binDir;
+            process.env["PATH"] = previousPath ? `${binDir}${delimiter}${previousPath}` : binDir;
             delete process.env["RUNWIELD_GUIDED_REVIEW_COMMAND"];
             delete process.env["RUNWIELD_GUIDED_REVIEW_MODEL"];
 
@@ -485,7 +486,7 @@ test("default review guide usage frames update a running job and remain after co
                 ].join("\n"),
             );
             await fsChmod(commandPath, 0o755);
-            process.env["PATH"] = previousPath ? `${binDir}:${previousPath}` : binDir;
+            process.env["PATH"] = previousPath ? `${binDir}${delimiter}${previousPath}` : binDir;
             delete process.env["RUNWIELD_GUIDED_REVIEW_COMMAND"];
             delete process.env["RUNWIELD_GUIDED_REVIEW_MODEL"];
 
@@ -672,7 +673,7 @@ test("failed default review guide commands report subprocess stderr and keep par
                 ].join("\n"),
             );
             await fsChmod(commandPath, 0o755);
-            process.env["PATH"] = previousPath ? `${binDir}:${previousPath}` : binDir;
+            process.env["PATH"] = previousPath ? `${binDir}${delimiter}${previousPath}` : binDir;
             delete process.env["RUNWIELD_GUIDED_REVIEW_COMMAND"];
             delete process.env["RUNWIELD_GUIDED_REVIEW_MODEL"];
 
@@ -730,7 +731,7 @@ test("default review guide commands fail clearly on malformed usage frames", asy
                 ].join("\n"),
             );
             await fsChmod(commandPath, 0o755);
-            process.env["PATH"] = previousPath ? `${binDir}:${previousPath}` : binDir;
+            process.env["PATH"] = previousPath ? `${binDir}${delimiter}${previousPath}` : binDir;
             delete process.env["RUNWIELD_GUIDED_REVIEW_COMMAND"];
             delete process.env["RUNWIELD_GUIDED_REVIEW_MODEL"];
 

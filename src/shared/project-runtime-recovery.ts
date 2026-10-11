@@ -1,3 +1,4 @@
+import { platform } from "node:process";
 import fsPromises from "node:fs/promises";
 import { open as fsOpen } from "node:fs/promises";
 import { type NativeFileLock, openNativeFileLock } from "./native-file-lock.ts";
@@ -61,6 +62,8 @@ export async function hasRecoverableRuntimeFiles(path: string): Promise<boolean>
 }
 
 async function syncDirectory(path: string): Promise<void> {
+    // Match runtime layout publication: Windows does not support directory fsync.
+    if (platform === "win32") return;
     const directory = await fsOpen(path, "r");
     try {
         await directory.sync();

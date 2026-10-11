@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import process from "node:process";
 import {
     chmod as fsChmod,
@@ -163,7 +164,7 @@ async function withAgyFixture(callback: (home: string, logPath: string) => Promi
             await installAgyFixture(binDir, logPath);
             try {
                 process.env["HOME"] = home;
-                process.env["PATH"] = `${binDir}:${previousPath || ""}`;
+                process.env["PATH"] = `${binDir}${delimiter}${previousPath || ""}`;
                 process.env["RUNWIELD_AGY_FIXTURE_LOG"] = logPath;
                 delete process.env["RUNWIELD_AGY_FIXTURE_AGENTS_JSON"];
                 delete process.env["RUNWIELD_AGY_FIXTURE_RESULT_PREFIX"];

@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import { runtimeSourceArgs } from "../testing/runtime-source-args.ts";
 import { serveHttp } from "../shared/http-server.ts";
 import { writeFileSync as fsWriteFileSync } from "node:fs";
@@ -177,7 +178,7 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>) {
                 } "$@"\n`,
                 { mode: 0o700 },
             );
-            process.env["PATH"] = `${bin}:${path || ""}`;
+            process.env["PATH"] = `${bin}${delimiter}${path || ""}`;
             await run(fixture);
         } finally {
             await server.shutdown();

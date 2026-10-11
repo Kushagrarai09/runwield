@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import { test } from "node:test";
 import {
     chmod as fsChmod,
@@ -206,7 +207,7 @@ async function installFakeClipboardCommands(projectRoot: string): Promise<Clipbo
         ].join("\n"),
     );
     await fsChmod(base64Path, 0o755);
-    process.env["PATH"] = `${binDir}:${previousPath}`;
+    process.env["PATH"] = `${binDir}${delimiter}${previousPath}`;
     return { previousPath, imageReadMarkerPath };
 }
 

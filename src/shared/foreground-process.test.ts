@@ -423,9 +423,9 @@ test("spawnForegroundShell tolerates an abort that arrives after natural exit", 
 test("spawnForegroundShell on Windows abort kills a real descendant tree", { skip: !IS_WINDOWS }, async () => {
     const pidFile = await makeTempFile("runwield-fg-windows-descendant-");
     const abortController = new AbortController();
-    const script = `$p = Start-Process powershell -ArgumentList '-NoProfile','-Command','Start-Sleep -Seconds 30' -PassThru; Set-Content -Encoding ascii -LiteralPath '${
+    const script = `Write-Output "starting descendant"; $p = Start-Process powershell -ArgumentList '-NoProfile','-Command','Start-Sleep -Seconds 30' -PassThru; Set-Content -Encoding ascii -LiteralPath '${
         pidFile.replaceAll("'", "''")
-    }' -Value $p.Id; Wait-Process -Id $p.Id`;
+    }' -Value $p.Id; Write-Output $p.Id; Wait-Process -Id $p.Id`;
     const command = `powershell -NoProfile -EncodedCommand ${Buffer.from(script, "utf16le").toString("base64")}`;
     const shell = spawnForegroundShell({ command, cwd: getCwd(), signal: abortController.signal });
     const stderr = readAll(shell.stderr);
@@ -441,7 +441,8 @@ test("spawnForegroundShell on Windows abort kills a real descendant tree", { ski
         if (!descendantPid || !processAlive(descendantPid)) {
             abortController.abort();
             await shell.done;
-            throw new Error(`Descendant did not start: ${await stderr} ${await stdout}`);
+            const probe = spawnSync("tasklist", ["/FI", `PID eq ${descendantPid}`, "/FO", "CSV", "/NH"], { encoding: "utf8" });
+            throw new Error(`Descendant did not start: pid=${descendantPid}; file=${await readFile(pidFile, "utf8")}; stderr=${await stderr}; stdout=${await stdout}; probe=${JSON.stringify({ status: probe.status, stdout: probe.stdout, stderr: probe.stderr, error: probe.error?.message })}`);
         }
         abortController.abort();
         const outcome = await shell.done;

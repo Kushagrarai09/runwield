@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import process from "node:process";
 import {
     chmod as fsChmod,
@@ -38,7 +39,7 @@ async function withSetupHome(callback: (home: string, binDir: string) => Promise
             await fsWriteFile(wldPath, new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 0x00]));
             await fsChmod(wldPath, 0o755);
             process.env["HOME"] = home;
-            process.env["PATH"] = `${binDir}:${priorPath || ""}`;
+            process.env["PATH"] = `${binDir}${delimiter}${priorPath || ""}`;
             await callback(home, binDir);
         } finally {
             if (priorHome === undefined) delete process.env["HOME"];

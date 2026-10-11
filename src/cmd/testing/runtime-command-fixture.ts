@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import process from "node:process";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -279,7 +280,7 @@ export async function withRuntimeCommandFixture<T>(
             env.HOME = homeDir;
             env.WLD_TEST_SANDBOX_HOME = homeDir;
             env.MNEMOTECA_DB_PATH = join(fixtureRoot, "mnemoteca.db");
-            env.PATH = `${fixtureBinDir}:${previousPath || ""}`;
+            env.PATH = `${fixtureBinDir}${delimiter}${previousPath || ""}`;
             process.chdir(canonicalAlternateRoot);
             process.exitCode = 0;
             __resetSettingsForTests();

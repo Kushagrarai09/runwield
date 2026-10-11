@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import { getCwd } from "../../../../constants.js";
 import process from "node:process";
 import { chmod as fsChmod, mkdtemp as fsMkdtemp, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
@@ -50,7 +51,7 @@ test("Claude CLI capability tools execute PATH helper binaries", () =>
                 join(tempDir, "ketch"),
                 '#!/bin/sh\necho \'[{"title":"Web","url":"https://example.test"}]\'\n',
             );
-            process.env["PATH"] = `${tempDir}:${oldPath}`;
+            process.env["PATH"] = `${tempDir}${delimiter}${oldPath}`;
             const tools = createClaudeCliCapabilityTools({ cwd: tempDir });
 
             const memoryText = await executeText(getTool(tools, "memory"), { action: "recall", query: "test" });

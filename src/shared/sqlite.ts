@@ -45,7 +45,14 @@ export class DatabaseSync {
                 strict: true,
             })
             : new NodeDatabaseSync(path, options);
-        this.#changes = bunSqlite ? this.#database.prepare("SELECT changes() AS changes") : null;
+        try {
+            this.#changes = bunSqlite ? this.#database.prepare("SELECT changes() AS changes") : null;
+        } catch (error) {
+            // A corrupt database can fail during statement preparation after opening
+            // its file. Release that handle before construction reports the failure.
+            this.close();
+            throw error;
+        }
     }
     exec(sql: string): void {
         this.#database.exec(sql);

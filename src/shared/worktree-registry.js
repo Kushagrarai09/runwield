@@ -10,7 +10,7 @@ import {
     stat as fsStat,
     writeFile as fsWriteFile,
 } from "node:fs/promises";
-import { pid } from "node:process";
+import { pid, platform } from "node:process";
 /**
  * @module shared/worktree-registry
  * Durable registry for RunWield execution worktrees.
@@ -386,11 +386,14 @@ async function writeRegistry(projectRoot, entries) {
             await file.close();
         }
         await fsRename(tmp, path);
-        const dir = await fsOpen(dirname(path), "r");
-        try {
-            await dir.sync();
-        } finally {
-            await dir.close();
+        // Windows cannot fsync a directory; the file was flushed before atomic rename.
+        if (platform !== "win32") {
+            const dir = await fsOpen(dirname(path), "r");
+            try {
+                await dir.sync();
+            } finally {
+                await dir.close();
+            }
         }
     } catch (error) {
         await fsRm(tmp).catch(() => {});

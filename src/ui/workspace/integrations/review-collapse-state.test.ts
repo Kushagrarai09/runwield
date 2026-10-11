@@ -18,6 +18,13 @@ test("review build adapts the pinned component without changing its source", asy
     assertEquals(await fsReadFile(component, "utf8"), source);
 });
 
+test("review build accepts a CRLF checkout of the pinned component", async () => {
+    const source = (await fsReadFile(component, "utf8")).replaceAll("\r\n", "\n");
+    const plugin = reviewCollapseStatePlugin();
+    assertEquals(plugin.transform(source.replaceAll("\n", "\r\n"), component.pathname),
+        plugin.transform(source, component.pathname));
+});
+
 test("review build leaves other components unchanged", () => {
     assertEquals(reviewCollapseStatePlugin().transform("export const other = 1;", "/other.tsx"), null);
 });

@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import { tmpdir } from "node:os";
 import {
     copyFile as fsCopyFile,
@@ -230,7 +231,7 @@ export async function createGoldenIsolatedEnvironment(options = {}) {
     const env = {
         HOME: home,
         RUNWIELD_HOME: runwieldDir,
-        PATH: `${fixtureBinDir}:${process.env["PATH"] || ""}`,
+        PATH: `${fixtureBinDir}${delimiter}${process.env["PATH"] || ""}`,
         NO_COLOR: "1",
         TERM: "screen",
         WLD_GOLDEN_TUI: "1",

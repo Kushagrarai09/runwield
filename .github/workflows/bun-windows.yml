@@ -39,6 +39,10 @@ jobs:
                       asset: aarch64
                       phase: package
         env:
+            # Keep disposable Git worktree paths below Windows' legacy path limit.
+            TEMP: ${{ runner.temp }}
+            TMP: ${{ runner.temp }}
+            TMPDIR: ${{ runner.temp }}
             WLD_TEST_CONCURRENCY: "4"
             WLD_TEST_FILE_TIMEOUT_MS: "120000"
         defaults:
@@ -69,6 +73,25 @@ jobs:
               uses: denoland/setup-deno@v2
               with:
                   deno-version: v2.9.7
+            - name: Install archive tools for package tests
+              if: matrix.phase == 'source'
+              run: |
+                  choco install zip unzip --yes --no-progress
+                  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            - name: Setup Go for the real Snip subprocess tests
+              if: matrix.phase == 'source'
+              uses: actions/setup-go@v6
+              with:
+                  go-version: "1.25.x"
+                  cache: false
+            - name: Install pinned Snip
+              if: matrix.phase == 'source'
+              run: |
+                  $env:GOBIN = Join-Path $env:RUNNER_TEMP 'runwield-ci-bin'
+                  New-Item -ItemType Directory -Force $env:GOBIN | Out-Null
+                  go install github.com/edouard-claude/snip/cmd/snip@v0.24.1
+                  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+                  $env:GOBIN >> $env:GITHUB_PATH
             - name: Install separate frozen root and docs graphs
               id: install
               run: bun run install:locked

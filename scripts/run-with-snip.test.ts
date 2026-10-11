@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import { runtimeSourceArgs } from "../src/testing/runtime-source-args.ts";
 import { makeTempFile } from "../src/testing/temp-file.ts";
 import { test } from "node:test";
@@ -25,7 +26,7 @@ test("runWithSnip preserves compact success output", async () => {
         await fsChmod(snipPath, 0o755);
 
         const result = await runWithSnip("deno", ["test"], {
-            env: { PATH: `${root}:${process.env["PATH"] || ""}` },
+            env: { PATH: `${root}${delimiter}${process.env["PATH"] || ""}` },
             failureLabel: "tests",
         });
 
@@ -51,7 +52,7 @@ exit 1
         await fsChmod(snipPath, 0o755);
 
         const result = await runWithSnip("deno", ["test", "sample.test.ts"], {
-            env: { PATH: `${root}:${process.env["PATH"] || ""}` },
+            env: { PATH: `${root}${delimiter}${process.env["PATH"] || ""}` },
             failureLabel: "tests",
         });
         failureLogPath = result.failureLogPath || "";

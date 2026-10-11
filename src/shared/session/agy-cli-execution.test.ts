@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
@@ -199,7 +200,7 @@ async function withAgyExecutionFixture(
             await fsMkdir(cwd, { recursive: true });
             await installAgyExecutionFixture(binDir, logPath);
             process.env["HOME"] = home;
-            process.env["PATH"] = `${binDir}:${previousPath || ""}`;
+            process.env["PATH"] = `${binDir}${delimiter}${previousPath || ""}`;
             process.env["RUNWIELD_AGY_EXECUTION_LOG"] = logPath;
             process.env["RUNWIELD_AGY_EXPECTED_MODEL"] = "gemini-3.8-flash";
             process.env["RUNWIELD_AGY_EXPECTED_EFFORT"] = "low";

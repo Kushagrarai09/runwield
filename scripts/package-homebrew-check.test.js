@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import { spawn } from "node:child_process";
 import { waitForScriptExit } from "./script-process.ts";
 import { runtimeSourceArgs } from "../src/testing/runtime-source-args.ts";
@@ -61,7 +62,7 @@ exit 42
                 cwd: getCwd(),
                 env: {
                     ...process.env,
-                    PATH: `${bin}:${process.env["PATH"] || ""}`,
+                    PATH: `${bin}${delimiter}${process.env["PATH"] || ""}`,
                     BREW_LOG: log,
                     MISSING_TAP: missingTap,
                     BREW_RELEASE: join(root, "release"),

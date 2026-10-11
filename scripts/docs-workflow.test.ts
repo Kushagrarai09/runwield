@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import { captureScriptProcess } from "./script-process.ts";
 import { tmpdir } from "node:os";
 import { test } from "node:test";
@@ -194,7 +195,7 @@ if [[ "$1 $2" == "release view" && "$*" == *"tagName"* ]]; then echo "\${LATEST_
         await executable(join(bin, "git"), "#!/usr/bin/env bash\nexit 0\n");
         const output = join(root, "output");
         const base = {
-            PATH: `${bin}:${process.env["PATH"] ?? ""}`,
+            PATH: `${bin}${delimiter}${process.env["PATH"] ?? ""}`,
             GITHUB_OUTPUT: output,
             GITHUB_REPOSITORY: "owner/repository",
             LATEST_TAG: "v2.0.0",
@@ -235,7 +236,7 @@ exit 1
 `,
         );
         const base = {
-            PATH: `${bin}:${process.env["PATH"] ?? ""}`,
+            PATH: `${bin}${delimiter}${process.env["PATH"] ?? ""}`,
             GITHUB_REPOSITORY: "owner/repository",
             RELEASE_TAG: "v2.0.0",
             RUNNER_TEMP: root,

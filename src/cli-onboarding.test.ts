@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import { doesNotMatch, equal, ok } from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
@@ -30,7 +31,7 @@ test(
                     WLD_TEST_SANDBOX_HOME: home,
                     MNEMOTECA_DB_PATH: join(home, "mnemoteca.db"),
                     TMPDIR: root,
-                    PATH: `${bin}:${env.PATH || ""}`,
+                    PATH: `${bin}${delimiter}${env.PATH || ""}`,
                     DENO_DIR: env.DENO_DIR,
                     NO_COLOR: "1",
                 },

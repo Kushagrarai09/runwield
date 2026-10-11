@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import { prepareDocsFixtureDependencies } from "./docs-fixture-dependencies.ts";
 
 import { captureScriptProcess } from "./script-process.ts";
@@ -255,7 +256,7 @@ exec "$REAL_GIT" "$@"
                 runWithEnv(
                     work,
                     {
-                        PATH: `${bin}:${process.env["PATH"] ?? ""}`,
+                        PATH: `${bin}${delimiter}${process.env["PATH"] ?? ""}`,
                         RACE_MARKER: marker,
                         REAL_GIT: realGit,
                         CORRECTION_WORK: correction,

@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { chmod as fsChmod, mkdir as fsMkdir, readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promises";
@@ -299,7 +300,7 @@ test("Prompt Template invocation sends active Segment history plus the exact exp
             await installClaudeCliFixture(binDir, logPath);
             const previousPath = process.env["PATH"];
             const previousLog = process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"];
-            process.env["PATH"] = `${binDir}:${previousPath || ""}`;
+            process.env["PATH"] = `${binDir}${delimiter}${previousPath || ""}`;
             process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"] = logPath;
 
             const modelRequests: string[] = [];
@@ -434,7 +435,7 @@ test("Prompt Template invocation rejects unsupported Claude CLI thinking before 
             await installClaudeCliFixture(binDir, logPath);
             const previousPath = process.env["PATH"];
             const previousLog = process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"];
-            process.env["PATH"] = `${binDir}:${previousPath || ""}`;
+            process.env["PATH"] = `${binDir}${delimiter}${previousPath || ""}`;
             process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"] = logPath;
 
             const store = openFileSessionStore();
@@ -495,7 +496,7 @@ test("Prompt Template invocation uses ordinary Claude CLI handling for large req
             await installClaudeCliFixture(binDir, logPath);
             const previousPath = process.env["PATH"];
             const previousLog = process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"];
-            process.env["PATH"] = `${binDir}:${previousPath || ""}`;
+            process.env["PATH"] = `${binDir}${delimiter}${previousPath || ""}`;
             process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"] = logPath;
             const runtime = makeRuntime();
             try {

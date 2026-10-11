@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import fsPromises from "node:fs/promises";
 import { type NativeProcess } from "./foreground-process.ts";
 import { runtimeSourceArgs } from "../testing/runtime-source-args.ts";
@@ -140,7 +141,7 @@ test("runtime migration retries one transient Git worktree listing failure", asy
                 ].join("\n"),
             );
             await fsChmod(gitWrapper, 0o700);
-            process.env["PATH"] = `${binDir}:${originalPath}`;
+            process.env["PATH"] = `${binDir}${delimiter}${originalPath}`;
 
             const layout = await enterProjectRuntime(primaryCheckout);
 
@@ -395,7 +396,7 @@ test("runtime entry reuses Git answers only while repository evidence is unchang
         const originalPath = process.env["PATH"] || "";
         try {
             await writeGitLoggingWrapper(binDir, log, originalPath);
-            process.env["PATH"] = `${binDir}:${originalPath}`;
+            process.env["PATH"] = `${binDir}${delimiter}${originalPath}`;
             await settleGitEvidence();
 
             assertEquals((await migrateLegacyProjectRuntimeState(project.selectedRoot)).kind, "ready");

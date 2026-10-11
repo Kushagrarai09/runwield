@@ -1,3 +1,4 @@
+import { platform } from "node:process";
 import { open as fsOpen } from "node:fs/promises";
 import { openNativeFileLock } from "../native-file-lock.ts";
 import { realpathSync as fsRealpathSync } from "node:fs";
@@ -192,11 +193,14 @@ async function atomicWrite(path: string, record: ControllerRecord): Promise<void
             await file.close();
         }
         await fsRename(temporary, path);
-        const directory = await fsOpen(dirname(path), "r");
-        try {
-            await directory.sync();
-        } finally {
-            await directory.close();
+        // Windows cannot fsync a directory; the file was flushed before atomic rename.
+        if (platform !== "win32") {
+            const directory = await fsOpen(dirname(path), "r");
+            try {
+                await directory.sync();
+            } finally {
+                await directory.close();
+            }
         }
     } finally {
         await fsRm(temporary).catch((error) => {

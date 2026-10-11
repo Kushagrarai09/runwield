@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import {
@@ -123,7 +124,7 @@ async function withClaudeExecutionFixture(
             await fsMkdir(cwd, { recursive: true });
             await installClaudeFixture(binDir, logPath);
             process.env["HOME"] = home;
-            process.env["PATH"] = `${binDir}:${previousPath || ""}`;
+            process.env["PATH"] = `${binDir}${delimiter}${previousPath || ""}`;
             process.env["RUNWIELD_CLAUDE_FIXTURE_LOG"] = logPath;
             await callback(home, cwd, logPath);
         } finally {
