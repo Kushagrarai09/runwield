@@ -1,3 +1,4 @@
+import { writeRuntimeExecutableFixture } from "../../testing/runtime-executable-fixture.ts";
 import { delimiter } from "node:path";
 import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
 import { captureForegroundProcess } from "../../shared/captured-process.ts";
@@ -36,7 +37,7 @@ interface RemoteFixture {
     run: (args: string[], proof?: string) => Promise<CliResult>;
 }
 
-/** Run the real CLI with a disposable home and an SSH executable that runs the remote command in a shell. */
+/** Real CLI with disposable homes: POSIX runs remote Python; Windows uses a native SSH protocol boundary. */
 async function withRemoteFixture(test: (fixture: RemoteFixture) => Promise<void>): Promise<void> {
     const root = await fsRealpath(await fsMkdtemp(join(tmpdir(), "runwield-fixture-")));
     try {
@@ -45,22 +46,45 @@ async function withRemoteFixture(test: (fixture: RemoteFixture) => Promise<void>
         const bin = join(root, "bin");
         const sshLog = join(root, "ssh-args");
         await Promise.all([fsMkdir(local), fsMkdir(remote), fsMkdir(bin)]);
-        // Only this SSH subprocess sees a Linux host. The resolver itself still
-        // runs unchanged through the actual shell and Python interpreter.
-        await fsWriteFile(
-            join(root, "sitecustomize.py"),
-            'import platform\nplatform.system = lambda: "Linux"\nplatform.machine = lambda: "x86_64"\n',
-        );
-        await fsWriteFile(
-            join(bin, "ssh"),
-            `#!/bin/sh
+        if (process.platform === "win32") {
+            const source = join(root, "ssh.mjs");
+            await fsWriteFile(
+                source,
+                `
+import { writeFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+const args = process.argv.slice(2);
+writeFileSync(process.env.SSH_LOG, args.join("\\n") + "\\n");
+if (args.length !== 4 || args[0] !== "-T" || args[1] !== "--") process.exit(42);
+let input = "";
+for await (const chunk of process.stdin) input += chunk.toString();
+writeFileSync(process.env.SSH_LOG + ".json", input);
+const request = JSON.parse(input);
+let exists = false;
+try { exists = statSync(join(process.env.REMOTE_HOME, request.path || "")).isDirectory(); } catch {}
+if (!exists) { console.log(JSON.stringify({ ok: false, error: "Remote target is not an existing directory" })); process.exit(1); }
+console.log(JSON.stringify({ ok: true, cwd: "/remote/home/" + (request.path || ""), home: "/remote/home", os: "Linux", arch: "x86_64", gitRoot: null, gitDir: null, gitCommonDir: null, primaryRoot: null, isWorktree: false }));
+`,
+            );
+            await writeRuntimeExecutableFixture(join(bin, "ssh"), source);
+        } else {
+            // Only this SSH subprocess sees a Linux host. The resolver itself still
+            // runs unchanged through the actual shell and Python interpreter.
+            await fsWriteFile(
+                join(root, "sitecustomize.py"),
+                'import platform\nplatform.system = lambda: "Linux"\nplatform.machine = lambda: "x86_64"\n',
+            );
+            await fsWriteFile(
+                join(bin, "ssh"),
+                `#!/bin/sh
 printf '%s\\n' "$@" > "$SSH_LOG"
 [ "$1" = -T ] && [ "$2" = -- ] && [ "$#" = 4 ] || exit 42
 HOME="$REMOTE_HOME" PYTHONPATH="$REMOTE_PYTHONPATH" export HOME PYTHONPATH
-exec /bin/sh -c "$4"
+tee "$SSH_LOG.json" | /bin/sh -c "$4"
 `,
-        );
-        await fsChmod(join(bin, "ssh"), 0o700);
+            );
+            await fsChmod(join(bin, "ssh"), 0o700);
+        }
         // The source checkout has no compiled launcher identity. Supply only that
         // build boundary to the CLI subprocess, without writing into the checkout.
         const identity = join(root, "build-identity.js");
@@ -125,11 +149,11 @@ plugin({ name: "fixture-build-boundary", setup(build) {
                     args: process.versions.deno
                         ? runtimeSourceArgs(["run", "-A", "--quiet", "--config", config, cli, "remote", ...args])
                         : [
-                            "run",
-                            "--preload",
-                            preload,
-                            ...runtimeSourceArgs(["run", "-A", cli, "remote", ...args]).slice(1),
-                        ],
+                              "run",
+                              "--preload",
+                              preload,
+                              ...runtimeSourceArgs(["run", "-A", cli, "remote", ...args]).slice(1),
+                          ],
                     cwd: local,
                     env: {
                         HOME: local,
@@ -187,25 +211,24 @@ test("source remote help works without a generated identity and connection expla
         for (const path of ["src/cmd/remote", "src/shared/remote", "scripts"]) {
             await fsMkdir(join(root, path), { recursive: true });
         }
-        for (
-            const path of [
-                "src/cmd/remote/index.ts",
-                "src/shared/foreground-process.ts",
-                "src/shared/linux-process-group.ts",
-                "src/shared/captured-process.ts",
-                "src/shared/socket-listener.ts",
-                "src/shared/remote/runtime.js",
-                "src/shared/remote/target.ts",
-                "src/shared/remote/control.ts",
-                "src/shared/remote/release-artifact.ts",
-                "src/shared/remote/sftp-mount.ts",
-                "src/shared/remote/model-proof-config.ts",
-                "src/constants.js",
-                "runtime-root.js",
-                "scripts/build-metadata.js",
-                "src/shared/version.js",
-            ]
-        ) await fsCopyFile(path, join(root, path));
+        for (const path of [
+            "src/cmd/remote/index.ts",
+            "src/shared/foreground-process.ts",
+            "src/shared/linux-process-group.ts",
+            "src/shared/captured-process.ts",
+            "src/shared/socket-listener.ts",
+            "src/shared/remote/runtime.js",
+            "src/shared/remote/target.ts",
+            "src/shared/remote/control.ts",
+            "src/shared/remote/release-artifact.ts",
+            "src/shared/remote/sftp-mount.ts",
+            "src/shared/remote/model-proof-config.ts",
+            "src/constants.js",
+            "runtime-root.js",
+            "scripts/build-metadata.js",
+            "src/shared/version.js",
+        ])
+            await fsCopyFile(path, join(root, path));
         if (!process.versions.deno) {
             await fsSymlink(
                 fromFileUrl(new URL("../../../node_modules", import.meta.url)),
@@ -233,15 +256,13 @@ test("source remote help works without a generated identity and connection expla
 
 test("remote CLI refuses malformed LIVE proof before contacting SSH", async () => {
     await withRemoteFixture(async ({ run, sshLog }) => {
-        for (
-            const proof of [
-                "",
-                "{}",
-                "not-json",
-                '{"provider":"p","modelId":"m","sentinelFile":"../secret"}',
-                '{"provider":"p","modelId":"m","sentinelFile":"/tmp/secret"}',
-            ]
-        ) {
+        for (const proof of [
+            "",
+            "{}",
+            "not-json",
+            '{"provider":"p","modelId":"m","sentinelFile":"../secret"}',
+            '{"provider":"p","modelId":"m","sentinelFile":"/tmp/secret"}',
+        ]) {
             const result = await run(["alias"], proof);
             assertEquals(result.code, 1);
             assertStringIncludes(result.stderr, "Invalid WLD_REMOTE_MODEL_PROOF");
@@ -277,11 +298,12 @@ test("remote CLI keeps shell metacharacters in the target path literal", async (
         const name = "space ' $(touch BAD); folder";
         await fsMkdir(join(remote, name));
         const result = await run([`remote-alias:${name}`]);
-        // Reaching artifact verification proves the existing directory was found.
+        // POSIX executes the real resolver; Windows checks the laptop dispatch/protocol boundary.
         assertStringIncludes(result.stderr, "Missing x86_64-unknown-linux-gnu artifact");
         assertEquals(await exists(join(remote, "BAD")), false);
         const sshArgs = await fsReadFile(sshLog, "utf8");
         assertEquals(sshArgs.includes(name), false);
+        assertEquals(JSON.parse(await fsReadFile(sshLog + ".json", "utf8")), { path: name });
     });
 });
 
@@ -295,5 +317,8 @@ test("remote CLI reports an absent remote directory before artifact setup", asyn
 });
 
 async function exists(path: string): Promise<boolean> {
-    return await fsStat(path).then(() => true, () => false);
+    return await fsStat(path).then(
+        () => true,
+        () => false,
+    );
 }

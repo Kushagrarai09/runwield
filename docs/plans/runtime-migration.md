@@ -898,3 +898,17 @@ its unchanged-file and no-content-disclosure checks. All three affected files pa
 Deno (13.4 seconds), types pass across 1,304 entries, and lint passes across 1,438 files.
 Independent Spec/Standards reviews approved the four changed paths. Actual native ACL
 behavior is pending the next Windows run.
+
+Remote fixture coverage now separates Linux/POSIX host integration from native laptop
+transport. The original resolver/cache Python tests retain their assertions on POSIX;
+Windows runs native SSH boundary tests for literal operands and JSON paths, local artifact
+identity/checksum checks, exact binary transfer, reuse, errors and cancellation. The real CLI
+also checks literal stdin paths without initializing a local project. All three files pass
+Bun and Deno (25.3 seconds); incorrect operands and truncated-byte mutations fail the new
+cases. Types/lint pass and both independent reviewers approve. This does not claim a
+Windows-to-Linux end-to-end connection or Windows remote-host support.
+
+The first complete x64 source shard at `17eb7c790` improved from 134/162 to 156/162
+passing files. Its remaining failures are remote-target fixtures, two SessionRuntime cleanup
+cases, a Bash cwd assertion, and three Golden workflow files. Full eight-shard results are
+still pending.
