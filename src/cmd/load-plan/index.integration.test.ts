@@ -1,3 +1,4 @@
+import { bashFixtureExecutable } from "../../../scripts/bash-fixture.ts";
 import { captureForegroundProcess } from "../../shared/captured-process.ts";
 import { test } from "node:test";
 import {
@@ -203,20 +204,26 @@ async function prepareValidatedPublicationPlan(
     });
     const worktreePlan = await loadPlan(worktree.path, planName);
     if (!worktreePlan) throw new Error("worktree Plan fixture disappeared");
-    await savePlan(worktree.path, planName, worktreePlan.markdown || worktreePlan.body || `# ${planName}`, {
-        ...worktreePlan.attrs,
-        status: "reviewed",
-        executionAgent: "engineer",
-        executionMode: "worktree",
-        humanReviewMode: "none",
-        planId: `${planName}-plan`,
-        executionBaselineTree: baselineTree,
-        worktreeId: worktree.id,
-        worktreePath: worktree.path,
-        worktreeBranch: worktree.branch,
-        worktreeBaseBranch: "main",
-        ...attrs,
-    }, { expectedRevision: worktreePlan.revision });
+    await savePlan(
+        worktree.path,
+        planName,
+        worktreePlan.markdown || worktreePlan.body || `# ${planName}`,
+        {
+            ...worktreePlan.attrs,
+            status: "reviewed",
+            executionAgent: "engineer",
+            executionMode: "worktree",
+            humanReviewMode: "none",
+            planId: `${planName}-plan`,
+            executionBaselineTree: baselineTree,
+            worktreeId: worktree.id,
+            worktreePath: worktree.path,
+            worktreeBranch: worktree.branch,
+            worktreeBaseBranch: "main",
+            ...attrs,
+        },
+        { expectedRevision: worktreePlan.revision },
+    );
     await fsWriteFile(`${worktree.path}/published-marker.txt`, "from worktree\n");
     return { planName, worktreePath: worktree.path, worktreeBranch: worktree.branch, worktreeId: worktree.id };
 }
@@ -238,7 +245,7 @@ async function pathExists(path: string): Promise<boolean> {
         await fsStat(path);
         return true;
     } catch (error) {
-        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return false;
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
         throw error;
     }
 }
@@ -472,7 +479,10 @@ for (const runtimeState of ["absent", "legacy", "mixed"] as const) {
             try {
                 // Completion is also browsing, before any Plan is selected.
                 process.chdir(projectRoot);
-                assertEquals((await getLoadPlanCompletions("ext")).map((item) => item.value), ["external"]);
+                assertEquals(
+                    (await getLoadPlanCompletions("ext")).map((item) => item.value),
+                    ["external"],
+                );
                 await runLoadPlanCommand([], {
                     sessionRuntime: runtime,
                     sessionId,
@@ -528,7 +538,10 @@ test("load-plan picker leaves a registered Git worktree and recreated legacy rec
                     editor: ui.editor,
                 });
                 assertEquals(ui.prompts, ["Load plan:"]);
-                assertEquals(ui.promptOptions[0].map((option) => option.value), ["unfinished"]);
+                assertEquals(
+                    ui.promptOptions[0].map((option) => option.value),
+                    ["unfinished"],
+                );
                 assertEquals(ui.messages, []);
                 assertEquals(await snapshotPickerFiles(projectRoot), beforeProject);
                 assertEquals(await snapshotPickerFiles(worktreePath), beforeWorktree);
@@ -627,7 +640,10 @@ test("load-plan offers completed actions for a validated non-Git Plan without co
                 uiAPI: ui.uiAPI,
                 editor: ui.editor,
             });
-            assertEquals(ui.prompts.some((prompt) => prompt.startsWith("Plan recovery")), false);
+            assertEquals(
+                ui.prompts.some((prompt) => prompt.startsWith("Plan recovery")),
+                false,
+            );
             assertEquals((await loadArchivedPlan(projectRoot, "finished"))?.attrs.archivedFromStatus, "verified");
         } finally {
             runtime.closeAllSessions();
@@ -646,9 +662,11 @@ test("load-plan resumes publication, removes the worktree, and leaves Engineer i
             setModelResponseFactories([
                 () => fauxAssistantMessage(fauxText("Warm turn reply.")),
                 () =>
-                    fauxAssistantMessage(fauxToolCall("bash", {
-                        command: "pwd && git branch --show-current && cat published-marker.txt",
-                    })),
+                    fauxAssistantMessage(
+                        fauxToolCall("bash", {
+                            command: `${process.platform === "win32" ? "pwd -W" : "pwd"} && git branch --show-current && cat published-marker.txt`,
+                        }),
+                    ),
                 () => fauxAssistantMessage(fauxText("Shell checked.")),
             ]);
             const ui = makeUi(["validate"]);
@@ -668,13 +686,16 @@ test("load-plan resumes publication, removes the worktree, and leaves Engineer i
                 assertEquals(snapshot?.cwd, canonicalProjectRoot);
                 assertEquals(snapshot?.activeExecutionWorkflow, null);
 
-                const shell = await captureForegroundProcess("sh", {
+                const shell = await captureForegroundProcess(bashFixtureExecutable(), {
                     cwd: canonicalProjectRoot,
-                    args: ["-c", "pwd && git branch --show-current && cat published-marker.txt"],
+                    args: [
+                        "-c",
+                        `${process.platform === "win32" ? "pwd -W" : "pwd"} && git branch --show-current && cat published-marker.txt`,
+                    ],
                 });
                 assertEquals(shell.success, true, new TextDecoder().decode(shell.stderr));
                 const shellOutput = new TextDecoder().decode(shell.stdout);
-                assertStringIncludes(shellOutput, canonicalProjectRoot);
+                assertStringIncludes(shellOutput.replaceAll("\\", "/"), canonicalProjectRoot.replaceAll("\\", "/"));
                 assertStringIncludes(shellOutput, "main");
                 assertStringIncludes(shellOutput, "from worktree");
             } finally {
@@ -706,9 +727,10 @@ for (const confirmRemoval of [true, false]) {
                 executionCwd: fixture.worktreePath,
             });
             try {
-                const verify = makeUi(["user_verify", confirmRemoval ? "confirm" : "cancel"], [
-                    "Shipped through the release PR.",
-                ]);
+                const verify = makeUi(
+                    ["user_verify", confirmRemoval ? "confirm" : "cancel"],
+                    ["Shipped through the release PR."],
+                );
                 await runLoadPlanCommand([fixture.planName], {
                     sessionRuntime: runtime,
                     sessionId,
@@ -737,13 +759,14 @@ for (const confirmRemoval of [true, false]) {
                     uiAPI: reload.uiAPI,
                     editor: reload.editor,
                 });
-                assertEquals(reload.promptOptions[0].map((option) => option.value), [
-                    "archive",
-                    "review",
-                    "view",
-                    "cancel",
-                ]);
-                assertEquals(reload.prompts.some((prompt) => prompt.startsWith("Plan recovery")), false);
+                assertEquals(
+                    reload.promptOptions[0].map((option) => option.value),
+                    ["archive", "review", "view", "cancel"],
+                );
+                assertEquals(
+                    reload.prompts.some((prompt) => prompt.startsWith("Plan recovery")),
+                    false,
+                );
                 assertEquals(
                     (await loadArchivedPlan(projectRoot, fixture.planName))?.attrs.archivedFromStatus,
                     "user_verified",
@@ -978,8 +1001,14 @@ test("load-plan marks an Epic done enough only after the real lifecycle write", 
                 uiAPI: reloaded.uiAPI,
                 editor: reloaded.editor,
             });
-            assertEquals(reloaded.promptOptions.flat().some((option) => option.label.includes("Pick a child")), true);
-            assertEquals(ui.messages.some((message) => message.includes("status to verified")), false);
+            assertEquals(
+                reloaded.promptOptions.flat().some((option) => option.label.includes("Pick a child")),
+                true,
+            );
+            assertEquals(
+                ui.messages.some((message) => message.includes("status to verified")),
+                false,
+            );
         } finally {
             runtime.closeAllSessions();
         }
@@ -988,18 +1017,23 @@ test("load-plan marks an Epic done enough only after the real lifecycle write", 
 
 test("load-plan distinguishes validated Epic children from pending publication", async () => {
     await withRuntimeCommandFixture("runwield-epic-publication-", async ({ projectRoot }) => {
-        await prepareValidatedPublicationPlan(projectRoot, "epic/child", {
-            status: "validated",
-            parentPlan: "epic",
-            order: 1,
-        }, async () => {
-            await writePlan(projectRoot, "epic", {
-                classification: "PROJECT",
+        await prepareValidatedPublicationPlan(
+            projectRoot,
+            "epic/child",
+            {
                 status: "validated",
-                epicCompletionMode: "done_enough",
-                epicDoneEnoughSummary: "All child plans are completed.",
-            });
-        });
+                parentPlan: "epic",
+                order: 1,
+            },
+            async () => {
+                await writePlan(projectRoot, "epic", {
+                    classification: "PROJECT",
+                    status: "validated",
+                    epicCompletionMode: "done_enough",
+                    epicDoneEnoughSummary: "All child plans are completed.",
+                });
+            },
+        );
         const { runtime, sessionId } = await createRuntime(projectRoot);
         const ui = makeUi(["publish:epic/child", "cancel"]);
         try {
@@ -1010,8 +1044,14 @@ test("load-plan distinguishes validated Epic children from pending publication",
                 editor: ui.editor,
             });
             assertStringIncludes(ui.messages.join("\n"), "Publication is still pending for epic/child");
-            assertEquals(ui.messages.some((message) => message.includes("All child plans are completed")), false);
-            assertEquals(ui.promptOptions.flat().some((option) => option.value === "publish:epic/child"), true);
+            assertEquals(
+                ui.messages.some((message) => message.includes("All child plans are completed")),
+                false,
+            );
+            assertEquals(
+                ui.promptOptions.flat().some((option) => option.value === "publish:epic/child"),
+                true,
+            );
             assertStringIncludes(ui.messages.join("\n"), "Plan loaded: epic/child");
         } finally {
             runtime.closeAllSessions();
@@ -1152,9 +1192,15 @@ for (const status of ["draft", "feedback", "approved", "ready_for_work"] as cons
                     editor: ui.editor,
                 });
 
-                assertEquals(ui.promptOptions[0].some((option) => option.value === "review"), true);
+                assertEquals(
+                    ui.promptOptions[0].some((option) => option.value === "review"),
+                    true,
+                );
                 const continuation = status === "draft" || status === "feedback" ? "resume" : "proceed";
-                assertEquals(ui.promptOptions[0].some((option) => option.value === continuation), true);
+                assertEquals(
+                    ui.promptOptions[0].some((option) => option.value === continuation),
+                    true,
+                );
                 assertEquals((await loadPlan(projectRoot, "review-without-checks"))?.attrs.status, status);
             } finally {
                 runtime.closeAllSessions();
@@ -1185,7 +1231,8 @@ test("direct review from draft can approve and start execution", async () => {
         runtime.setInteractionAdapter(sessionId, {
             requestInteraction: async (request) => {
                 if (
-                    request.type === "select" && request.options?.some((option) => option.value === "proceed") === true
+                    request.type === "select" &&
+                    request.options?.some((option) => option.value === "proceed") === true
                 ) {
                     return { outcome: "selected", value: "proceed" };
                 }
@@ -1250,9 +1297,11 @@ test("direct review from feedback can send feedback back through Planner", async
             ].join("\n"),
         );
         setModelMessages([
-            fauxAssistantMessage(fauxToolCall("plan_written", {
-                planName: "direct-feedback",
-            })),
+            fauxAssistantMessage(
+                fauxToolCall("plan_written", {
+                    planName: "direct-feedback",
+                }),
+            ),
         ]);
         const { runtime, sessionId } = await createRuntime(projectRoot);
         let reviewCount = 0;
@@ -1425,8 +1474,14 @@ test("direct review menu is omitted when a draft has an invalid execution policy
                 editor: ui.editor,
             });
 
-            assertEquals(ui.promptOptions[0].some((option) => option.value === "review"), false);
-            assertEquals(ui.promptOptions[0].some((option) => option.value === "resume"), true);
+            assertEquals(
+                ui.promptOptions[0].some((option) => option.value === "review"),
+                false,
+            );
+            assertEquals(
+                ui.promptOptions[0].some((option) => option.value === "resume"),
+                true,
+            );
         } finally {
             runtime.closeAllSessions();
         }
@@ -1473,14 +1528,14 @@ test("direct review on a PROJECT Epic approves and slices", async () => {
 
             assertEquals((await loadPlan(projectRoot, "direct-epic"))?.attrs.status, "ready_for_decomposition");
             assertEquals(
-                ui.promptOptions[0].some((option) =>
-                    option.value === "direct_review" && option.label === "Review plan"
+                ui.promptOptions[0].some(
+                    (option) => option.value === "direct_review" && option.label === "Review plan",
                 ),
                 true,
             );
             assertEquals(
-                ui.promptOptions[0].some((option) =>
-                    option.value === "review" && option.label === "Review with Architect"
+                ui.promptOptions[0].some(
+                    (option) => option.value === "review" && option.label === "Review with Architect",
                 ),
                 true,
             );
@@ -1491,59 +1546,58 @@ test("direct review on a PROJECT Epic approves and slices", async () => {
 });
 
 test("load-plan runs the real Planner and plan_written machinery against the faux model boundary", async () => {
-    await withRuntimeCommandFixture(
-        "runwield-load-plan-command-",
-        async ({ projectRoot, setModelMessages }) => {
-            await writePlan(projectRoot, "planned", { status: "draft" });
-            setModelMessages([
-                fauxAssistantMessage(fauxToolCall("plan_written", {
+    await withRuntimeCommandFixture("runwield-load-plan-command-", async ({ projectRoot, setModelMessages }) => {
+        await writePlan(projectRoot, "planned", { status: "draft" });
+        setModelMessages([
+            fauxAssistantMessage(
+                fauxToolCall("plan_written", {
                     planName: "planned",
-                })),
-            ]);
-            const { runtime, sessionId } = await createRuntime(projectRoot);
-            runtime.setInteractionAdapter(sessionId, {
-                requestInteraction: async () => {
-                    const beforeReview = await loadPlan(projectRoot, "planned");
-                    if (!beforeReview) throw new Error("Fixture Plan disappeared before review");
-                    await recordPlanEvent({
-                        cwd: projectRoot,
-                        planName: "planned",
-                        event: "review_approved",
-                        currentStatus: beforeReview.attrs.status,
-                        expectedRevision: beforeReview.revision,
-                        details: { triageMeta: beforeReview.attrs },
-                    });
-                    const approved = await loadPlan(projectRoot, "planned");
-                    return {
-                        outcome: "accepted",
-                        _meta: {
-                            approved: true,
-                            approvalAction: "later",
-                            revision: approved?.revision,
-                            planAttrs: approved?.attrs,
-                        },
-                    };
-                },
-            });
-            const ui = makeUi(["resume"]);
-            try {
-                await runLoadPlanCommand(["planned"], {
-                    sessionRuntime: runtime,
-                    sessionId,
-                    uiAPI: ui.uiAPI,
-                    editor: ui.editor,
+                }),
+            ),
+        ]);
+        const { runtime, sessionId } = await createRuntime(projectRoot);
+        runtime.setInteractionAdapter(sessionId, {
+            requestInteraction: async () => {
+                const beforeReview = await loadPlan(projectRoot, "planned");
+                if (!beforeReview) throw new Error("Fixture Plan disappeared before review");
+                await recordPlanEvent({
+                    cwd: projectRoot,
+                    planName: "planned",
+                    event: "review_approved",
+                    currentStatus: beforeReview.attrs.status,
+                    expectedRevision: beforeReview.revision,
+                    details: { triageMeta: beforeReview.attrs },
                 });
+                const approved = await loadPlan(projectRoot, "planned");
+                return {
+                    outcome: "accepted",
+                    _meta: {
+                        approved: true,
+                        approvalAction: "later",
+                        revision: approved?.revision,
+                        planAttrs: approved?.attrs,
+                    },
+                };
+            },
+        });
+        const ui = makeUi(["resume"]);
+        try {
+            await runLoadPlanCommand(["planned"], {
+                sessionRuntime: runtime,
+                sessionId,
+                uiAPI: ui.uiAPI,
+                editor: ui.editor,
+            });
 
-                assertEquals((await loadPlan(projectRoot, "planned"))?.attrs.status, "ready_for_work");
-                assertEquals(runtime.getSessionSnapshot(sessionId)?.activeAgent, "planner");
-                // The resumed Planner turn records the Plan it was opened on, so a
-                // compaction mid-draft still has a pointer back to the file.
-                assertEquals(runtime.getSessionSnapshot(sessionId)?.workflowContext?.planName, "planned");
-            } finally {
-                runtime.closeAllSessions();
-            }
-        },
-    );
+            assertEquals((await loadPlan(projectRoot, "planned"))?.attrs.status, "ready_for_work");
+            assertEquals(runtime.getSessionSnapshot(sessionId)?.activeAgent, "planner");
+            // The resumed Planner turn records the Plan it was opened on, so a
+            // compaction mid-draft still has a pointer back to the file.
+            assertEquals(runtime.getSessionSnapshot(sessionId)?.workflowContext?.planName, "planned");
+        } finally {
+            runtime.closeAllSessions();
+        }
+    });
 });
 
 test("load-plan uses real Git history and cancels stale affected-path execution", async () => {
@@ -1838,9 +1892,8 @@ test("load-plan selecting and canceling a draft Plan leaves the Session durable 
         const { runtime, sessionId } = await createRuntime(projectRoot);
         await warmSessionTurn(runtime, sessionId, setModelResponseFactory);
         const before = captureSessionDurableEvidence(runtime, sessionId);
-        const ui = makeUiCapturingActionMenu(
-            ["untouched-draft", "cancel"],
-            () => captureSessionDurableEvidence(runtime, sessionId),
+        const ui = makeUiCapturingActionMenu(["untouched-draft", "cancel"], () =>
+            captureSessionDurableEvidence(runtime, sessionId),
         );
         try {
             await runLoadPlanCommand([], {
@@ -1869,9 +1922,8 @@ test("load-plan viewing then canceling a draft Plan leaves the Session durable e
         const { runtime, sessionId } = await createRuntime(projectRoot);
         await warmSessionTurn(runtime, sessionId, setModelResponseFactory);
         const before = captureSessionDurableEvidence(runtime, sessionId);
-        const ui = makeUiCapturingActionMenu(
-            ["viewed-draft", "view", "cancel"],
-            () => captureSessionDurableEvidence(runtime, sessionId),
+        const ui = makeUiCapturingActionMenu(["viewed-draft", "view", "cancel"], () =>
+            captureSessionDurableEvidence(runtime, sessionId),
         );
         try {
             await runLoadPlanCommand([], {
@@ -1898,64 +1950,61 @@ test("load-plan viewing then canceling a draft Plan leaves the Session durable e
 });
 
 test("load-plan resuming a draft Plan publishes exactly one Plan-named generation before Agent work", async () => {
-    await withRuntimeCommandFixture(
-        "runwield-load-plan-command-",
-        async ({ projectRoot, setModelResponseFactory }) => {
-            await writePlan(projectRoot, "resumed-draft", { status: "draft" });
-            const { runtime, sessionId } = await createRuntime(projectRoot);
-            await warmSessionTurn(runtime, sessionId, setModelResponseFactory);
-            setModelResponseFactory(() =>
-                fauxAssistantMessage(fauxToolCall("plan_written", { planName: "resumed-draft" }))
-            );
-            runtime.setInteractionAdapter(sessionId, {
-                requestInteraction: async () => {
-                    const current = await loadPlan(projectRoot, "resumed-draft");
-                    if (!current) throw new Error("Fixture Plan disappeared before review");
-                    return {
-                        outcome: "accepted",
-                        _meta: {
-                            approved: true,
-                            approvalAction: "later",
-                            revision: current.revision,
-                            planAttrs: current.attrs,
-                        },
-                    };
-                },
-            });
-            // Capture the committed evidence at every Agent-switch boundary. The
-            // continuation must claim the Session before the switch that opens the
-            // Planner: at that boundary exactly one new generation may exist, and
-            // it must carry the Plan name.
-            const switchEvidence: SessionDurableEvidence[] = [];
-            const originalSwitchAgent = runtime.switchAgent.bind(runtime);
-            runtime.switchAgent = (switchSessionId, options) => {
-                if (switchSessionId === sessionId) {
-                    switchEvidence.push(captureSessionDurableEvidence(runtime, sessionId));
-                }
-                return originalSwitchAgent(switchSessionId, options);
-            };
-            const ui = makeUi(["resumed-draft", "resume"]);
-            try {
-                const before = captureSessionDurableEvidence(runtime, sessionId);
-                await runLoadPlanCommand([], {
-                    sessionRuntime: runtime,
-                    sessionId,
-                    uiAPI: ui.uiAPI,
-                    editor: ui.editor,
-                });
-                assertEquals(ui.prompts[0], "Load plan:");
-                assertEquals(ui.prompts[1], "What would you like to do?");
-                assertEquals(switchEvidence.length >= 1, true, "the Planner switch never ran");
-                assertEquals(switchEvidence[0].name, "resumed-draft");
-                assertEquals(switchEvidence[0].generation, (before.generation ?? 0) + 1);
-                const after = captureSessionDurableEvidence(runtime, sessionId);
-                assertEquals(after.name, "resumed-draft");
-            } finally {
-                runtime.switchAgent = originalSwitchAgent;
-                runtime.closeAllSessions();
+    await withRuntimeCommandFixture("runwield-load-plan-command-", async ({ projectRoot, setModelResponseFactory }) => {
+        await writePlan(projectRoot, "resumed-draft", { status: "draft" });
+        const { runtime, sessionId } = await createRuntime(projectRoot);
+        await warmSessionTurn(runtime, sessionId, setModelResponseFactory);
+        setModelResponseFactory(() =>
+            fauxAssistantMessage(fauxToolCall("plan_written", { planName: "resumed-draft" })),
+        );
+        runtime.setInteractionAdapter(sessionId, {
+            requestInteraction: async () => {
+                const current = await loadPlan(projectRoot, "resumed-draft");
+                if (!current) throw new Error("Fixture Plan disappeared before review");
+                return {
+                    outcome: "accepted",
+                    _meta: {
+                        approved: true,
+                        approvalAction: "later",
+                        revision: current.revision,
+                        planAttrs: current.attrs,
+                    },
+                };
+            },
+        });
+        // Capture the committed evidence at every Agent-switch boundary. The
+        // continuation must claim the Session before the switch that opens the
+        // Planner: at that boundary exactly one new generation may exist, and
+        // it must carry the Plan name.
+        const switchEvidence: SessionDurableEvidence[] = [];
+        const originalSwitchAgent = runtime.switchAgent.bind(runtime);
+        runtime.switchAgent = (switchSessionId, options) => {
+            if (switchSessionId === sessionId) {
+                switchEvidence.push(captureSessionDurableEvidence(runtime, sessionId));
             }
-        },
-    );
+            return originalSwitchAgent(switchSessionId, options);
+        };
+        const ui = makeUi(["resumed-draft", "resume"]);
+        try {
+            const before = captureSessionDurableEvidence(runtime, sessionId);
+            await runLoadPlanCommand([], {
+                sessionRuntime: runtime,
+                sessionId,
+                uiAPI: ui.uiAPI,
+                editor: ui.editor,
+            });
+            assertEquals(ui.prompts[0], "Load plan:");
+            assertEquals(ui.prompts[1], "What would you like to do?");
+            assertEquals(switchEvidence.length >= 1, true, "the Planner switch never ran");
+            assertEquals(switchEvidence[0].name, "resumed-draft");
+            assertEquals(switchEvidence[0].generation, (before.generation ?? 0) + 1);
+            const after = captureSessionDurableEvidence(runtime, sessionId);
+            assertEquals(after.name, "resumed-draft");
+        } finally {
+            runtime.switchAgent = originalSwitchAgent;
+            runtime.closeAllSessions();
+        }
+    });
 });
 
 test("activateForPlan renames the Session exactly once across repeated continuation calls", async () => {

@@ -1,3 +1,4 @@
+import process from "node:process";
 import { bashFixtureExecutable } from "../../../scripts/bash-fixture.ts";
 import { captureForegroundProcess } from "../../shared/captured-process.ts";
 import { getCwd } from "../../constants.js";
@@ -162,7 +163,15 @@ test("snip extension stores only filtered Deno failure diagnostics", async () =>
         cwd: getCwd(),
     });
     const stderr = new TextDecoder().decode(result.stderr);
-    const logPath = stderr.match(/read the failure log here: (.+)\n/)?.[1] || "";
+    let logPath = stderr.match(/read the failure log here: (.+)\n/)?.[1] || "";
+    if (process.platform === "win32" && logPath) {
+        const converted = await captureForegroundProcess(bashFixtureExecutable(), {
+            args: ["-c", 'cygpath -w "$1"', "snip-log-path", logPath],
+            cwd: getCwd(),
+        });
+        assertEquals(converted.code, 0);
+        logPath = new TextDecoder().decode(converted.stdout).trim();
+    }
     try {
         assertEquals(result.code, 1);
         assertEquals(new TextDecoder().decode(result.stdout), "");

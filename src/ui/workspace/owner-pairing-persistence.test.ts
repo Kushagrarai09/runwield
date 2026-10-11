@@ -11,8 +11,9 @@ test("paired app leaves a restored pairing page, survives server restart, and re
     const dbPath = `${dir}/owner.sqlite3`;
     const publicOrigin = "https://workspace.example.test";
     let store = openOwnerCoordinationStore({ dbPath });
+    let workspace = createOwnerWorkspaceApp({ mode: "owner", store, publicOrigin });
     try {
-        let app = createOwnerWorkspaceApp({ mode: "owner", store, publicOrigin }).handler();
+        let app = workspace.handler();
         const pairing = store.createPairingRequest({ deviceLabel: "Installed phone app" });
         store.approvePairingRequest(pairing.code);
         const claim: Response = await app(
@@ -33,9 +34,11 @@ test("paired app leaves a restored pairing page, survives server restart, and re
         const cookie = [credentialCookie, csrfCookie].map((value) => value.split(";")[0]).join("; ");
         const claimed = await claim.json();
 
+        await workspace.close();
         store.close();
         store = openOwnerCoordinationStore({ dbPath });
-        app = createOwnerWorkspaceApp({ mode: "owner", store, publicOrigin }).handler();
+        workspace = createOwnerWorkspaceApp({ mode: "owner", store, publicOrigin });
+        app = workspace.handler();
         const revisit = await app(new Request(`${publicOrigin}/pair`, { headers: { cookie } }));
         assertEquals(revisit.status, 302);
         assertEquals(revisit.headers.get("location"), "/");
@@ -78,6 +81,7 @@ test("paired app leaves a restored pairing page, survives server restart, and re
         assertEquals(protectedPage.headers.get("location"), "/pair");
         assertEquals(protectedPage.headers.getSetCookie(), []);
     } finally {
+        await workspace.close();
         store.close();
         await fsRm(dir, { recursive: true });
     }

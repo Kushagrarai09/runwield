@@ -206,6 +206,7 @@ test("Owner rejects a real Session linked to another registered Project", async 
         );
         assertEquals(response.status, 400);
     } finally {
+        await app.close();
         store.close();
         await second.cleanup();
         await first.cleanup();

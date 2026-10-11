@@ -13,7 +13,6 @@ import { test } from "node:test";
 import { tmpdir } from "node:os";
 import { assertEquals, assertMatch, assertRejects, assertStringIncludes } from "@std/assert";
 import { basename, dirname, join } from "@std/path";
-import { getHomeDir } from "../constants.js";
 
 import { resolveProjectRuntimeLayout } from "./project-runtime-layout.ts";
 import { addEntry, findByPlanId } from "./worktree-registry.js";
@@ -31,7 +30,8 @@ import { withProcessGlobalTestLock } from "../testing/process-global-lock.ts";
 
 test("resolveWorktreeParent keeps overrides and home placement while no-home fallback uses primary internal storage", async () => {
     await withProcessGlobalTestLock(async () => {
-        const previousHome = getHomeDir();
+        const homeKeys = ["HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA"];
+        const previousHome = new Map(homeKeys.map((key) => [key, process.env[key]]));
         const projectRoot = await makeRepo();
         const linkedParent = await fsMkdtemp(join(tmpdir(), "runwield-worktree-parent-linked-"));
         const linkedRoot = join(linkedParent, "linked");
@@ -44,14 +44,16 @@ test("resolveWorktreeParent keeps overrides and home placement while no-home fal
             assertEquals(resolveWorktreeParent(projectRoot, "/tmp/worktrees"), "/tmp/worktrees");
 
             await git(projectRoot, ["worktree", "add", "-b", "linked-parent", linkedRoot]);
-            delete process.env.HOME;
+            for (const key of homeKeys) delete process.env[key];
             const expected = resolveProjectRuntimeLayout(await fsRealpath(projectRoot)).primary.fallbackWorktreesRoot;
             assertEquals(resolveWorktreeParent(projectRoot, undefined), expected);
             assertEquals(resolveWorktreeParent(linkedRoot, undefined), expected);
             assertEquals(expected.endsWith(join(".wld", "internal", "worktrees")), true);
         } finally {
-            if (previousHome === undefined) delete process.env.HOME;
-            else process.env.HOME = previousHome;
+            for (const [key, value] of previousHome) {
+                if (value === undefined) delete process.env[key];
+                else process.env[key] = value;
+            }
             await captureForegroundProcess("git", {
                 cwd: projectRoot,
                 args: ["worktree", "remove", "--force", linkedRoot],

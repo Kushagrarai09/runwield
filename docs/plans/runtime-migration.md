@@ -921,3 +921,8 @@ Caller-owned Session stores now close before sandbox removal, and native cmd fix
 preserve validation failures and retries. The next Windows run retains bounded Golden
 failure and timeout state for diagnosis. Types/lint pass; independent Spec/Standards
 review approved the three changed paths after correcting the timeout diagnostic filename.
+
+Five additional native fixture corrections pass Bun and Deno (80.9 seconds), plus
+types/lint and independent Spec/Standards review. Workspace tests close both search and
+Session services before removing databases, the no-home case clears all Windows fallback
+variables, and real Git Bash assertions convert MSYS paths at the process boundary.
