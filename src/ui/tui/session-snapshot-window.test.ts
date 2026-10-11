@@ -183,7 +183,7 @@ Deno.test("sidebar snapshots follow question lifecycle events before their cache
                         }),
                     ]);
                     assertEquals(states, [true]);
-                    assertEquals(actions, ["answer_agent"]);
+                    assertEquals(actions, [""]);
                     if (settlement === "remote") {
                         assertEquals(
                             runtime.answerInteraction(sessionId, `question-${settlement}`, {

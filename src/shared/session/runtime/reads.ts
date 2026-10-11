@@ -173,13 +173,12 @@ export class RuntimeReads {
         const liveReview = activeInteractions.find((record) =>
             record.request?.type === "plan_review" || record.request?.type === "code_review"
         );
-        const workflowProgressFacts = Array.isArray(baseWorkflowContext?.progressFacts)
+        const workflowProgressFacts = activeExecutionWorkflow
+            ? workflowProgressFactsFromActiveMeta(activeExecutionWorkflow.triageMeta || {})
+            : Array.isArray(baseWorkflowContext?.progressFacts)
             ? baseWorkflowContext.progressFacts.map((fact) => ({ ...fact }))
             : [];
         const activeWorkflowMeta = activeExecutionWorkflow?.triageMeta || {};
-        workflowProgressFacts.push(
-            ...workflowProgressFactsFromActiveMeta(activeWorkflowMeta),
-        );
         const hasValidationCheckpoint = workflowProgressFacts.some((fact) => fact.kind === "validation_checkpoint");
         const hasRepairCheckpoint = workflowProgressFacts.some((fact) =>
             fact.kind === "validation_checkpoint" && (fact.state === "awaiting_repair" || Boolean(fact.repairKind))
@@ -192,6 +191,12 @@ export class RuntimeReads {
                 ...(typeof activeWorkflowMeta.planId === "string" ? { planId: activeWorkflowMeta.planId } : {}),
                 ...(typeof activeWorkflowMeta.status === "string" ? { status: activeWorkflowMeta.status } : {}),
                 ...(workflowProgressFacts.length ? { progressFacts: workflowProgressFacts } : {}),
+                canReopenPlanReview: Boolean(
+                    managed && this.services.sessionStore?.getLastPlanReview(
+                        managed.runwieldSessionId,
+                        managed.projectId,
+                    ),
+                ),
                 liveQuestion,
                 livePlanReview,
                 liveCodeReview,
