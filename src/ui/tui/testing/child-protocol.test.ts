@@ -1,7 +1,7 @@
 import { test } from "node:test";
-import { mkdtemp as fsMkdtemp, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
+import { mkdtemp as fsMkdtemp, rm as fsRm, readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { assertRejects } from "@std/assert";
+import { assert, assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { join, toFileUrl } from "@std/path";
 import { runGoldenScenarioChildProcess } from "./child-protocol.js";
 import { GOLDEN_CHILD_READY_MARKER } from "./subprocess-runner.js";
@@ -62,6 +62,57 @@ test("expected-clean-exit scenarios reject a nonzero child exit after the pre-ex
             Error,
             "Golden child failed",
         );
+    } finally {
+        await fsRm(fixtureRoot, { recursive: true });
+    }
+});
+
+interface DiagnosticChildFailure extends Error {
+    childPayload?: { artifactDir?: string };
+}
+interface NativeFailureDiagnostics {
+    nativeFailureEvidence: {
+        projectRoot: string;
+        status: { code: number; stdout: string };
+        planDiff: { code: number };
+    };
+}
+
+test("composed Golden child failures retain read-only native evidence for their initialized project", async () => {
+    const fixtureRoot = await fsMkdtemp(join(tmpdir(), "golden-native-evidence-"));
+    const scenarioPath = join(fixtureRoot, "diagnostic-scenario.ts");
+    try {
+        await fsWriteFile(
+            scenarioPath,
+            `export const diagnosticScenario = {
+            name: "native-evidence",
+            composedTui: true,
+            initialProjectFiles: [{ path: "diagnostic-dirty.txt", text: "retained evidence" }],
+            actions: [],
+            assertions: [() => { throw new Error("intentional native evidence failure"); }],
+        };
+`,
+        );
+        const error = (await assertRejects(
+            () =>
+                runGoldenScenarioChildProcess({
+                    scenarioModule: toFileUrl(scenarioPath).href,
+                    exportName: "diagnosticScenario",
+                    timeoutMs: 30_000,
+                }),
+            Error,
+            "intentional native evidence failure",
+        )) as DiagnosticChildFailure;
+        const artifact = error.childPayload?.artifactDir;
+        assert(artifact, "Expected the composed child's retained diagnostic directory");
+        const diagnostic: NativeFailureDiagnostics = JSON.parse(
+            await fsReadFile(join(artifact, "diagnostics.json"), "utf8"),
+        );
+        assert(diagnostic.nativeFailureEvidence, "Child mode must capture its existing isolated environment");
+        assertEquals(diagnostic.nativeFailureEvidence.status.code, 0);
+        assertEquals(diagnostic.nativeFailureEvidence.planDiff.code, 0);
+        assertStringIncludes(diagnostic.nativeFailureEvidence.status.stdout, "diagnostic-dirty.txt");
+        assertStringIncludes(diagnostic.nativeFailureEvidence.projectRoot, "runwield-golden-tui-");
     } finally {
         await fsRm(fixtureRoot, { recursive: true });
     }

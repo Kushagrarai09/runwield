@@ -263,7 +263,11 @@ test("verified Epic-child publication leaves the removed worktree before continu
             const shellOutput =
                 events.find((event) => event.type === "tool_end" && event.output?.includes("from worktree"))?.output ||
                 "";
-            assertStringIncludes(shellOutput.replaceAll("\\", "/"), canonicalProjectRoot.replaceAll("\\", "/"));
+            assertStringIncludes(
+                shellOutput.replaceAll("\\", "/"),
+                canonicalProjectRoot.replaceAll("\\", "/"),
+                `Root tool events: ${JSON.stringify(events.filter((event) => event.type === "tool_end"))}`,
+            );
             assertStringIncludes(shellOutput, "main");
             assertStringIncludes(shellOutput, "from worktree");
             const continuation = result.epicContinuation;

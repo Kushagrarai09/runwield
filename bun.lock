@@ -19,7 +19,7 @@
         "@codemirror/language": "6.12.4",
         "@codemirror/legacy-modes": "6.5.3",
         "@codemirror/state": "6.7.5",
-        "@codemirror/view": "6.43.11",
+        "@codemirror/view": "6.43.14",
         "@deno/astro-adapter": "0.6.0",
         "@earendil-works/pi-agent-core": "1.0.0",
         "@earendil-works/pi-ai": "1.0.0",
@@ -306,7 +306,7 @@
 
     "@codemirror/state": ["@codemirror/state@6.7.5", "", { "dependencies": { "@marijn/find-cluster-break": "^1.0.0" } }, "sha512-QjLbZmY1Au3JiRrDVYFLRD0BZ3SOKS9pR3yjIkd7u27YY8TFD9/Q9fhPnLV5l1mHFSo3hHU/N31vpwEJOx4owQ=="],
 
-    "@codemirror/view": ["@codemirror/view@6.43.11", "", { "dependencies": { "@codemirror/state": "^6.7.0", "crelt": "^1.0.6", "style-mod": "^4.1.0", "w3c-keyname": "^2.2.4" } }, "sha512-2+esucbQX6wB2JYi1eDvdCPFTA31BN8oSy6xCmk3G6CloV11yOvEjYk+gH7kLrP0MuHG94E8WDhjs5oMiu3+Wg=="],
+    "@codemirror/view": ["@codemirror/view@6.43.14", "", { "dependencies": { "@codemirror/state": "^6.7.0", "crelt": "^1.0.6", "style-mod": "^4.1.0", "w3c-keyname": "^2.2.4" } }, "sha512-hC45YnmJNR1rz42OF57BLoQNFMV12/13drnvibDsR2quNDmldcb4WvYVV81hFQg56i9lcqQMEDqilhX2QDcGQQ=="],
 
     "@deno/astro-adapter": ["@deno/astro-adapter@0.6.0", "", { "peerDependencies": { "@opentelemetry/api": "^1", "astro": "^7.0.0" }, "optionalPeers": ["@opentelemetry/api"] }, "sha512-zltNm5I7MME7Udb5TtAGIfLrfOHiuDG1FrKWDqYbFQ+AurmwxHvfwVCca4f+jfGQY3DnwYLDvb0tnmeI8aUWfg=="],
 

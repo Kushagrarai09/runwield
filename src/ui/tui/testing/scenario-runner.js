@@ -2964,9 +2964,10 @@ async function runComposedTuiScenario(scenario, options) {
                         {
                             scenario: scenario.name,
                             error: error instanceof Error ? error.message : String(error),
-                            nativeFailureEvidence: env
-                                ? await captureNativeFailureEvidence(env.projectRoot, getHomeDir())
-                                : null,
+                            nativeFailureEvidence: await captureNativeFailureEvidence(
+                                env?.projectRoot || previousCwd,
+                                getHomeDir(),
+                            ),
                             screenText: terminal.getScreenText(),
                             scrollback: terminal.getScrollbackText?.(),
                             events,
