@@ -144,7 +144,7 @@ test("Workspace rejects an approval if the reviewed Plan body changes while the 
 });
 
 test("Workspace sends review feedback images to the resumed planning Agent", async () => {
-    await withOpenReview(async ({ fixture, answer }) => {
+    await withOpenReview(async ({ fixture, answer, app, operationId }) => {
         const imagePath = join(fixture.projectRoot, "review.png");
         const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
         await fsWriteFile(imagePath, Uint8Array.from(atob(png), (char) => char.charCodeAt(0)));
@@ -154,10 +154,16 @@ test("Workspace sends review feedback images to the resumed planning Agent", asy
             images: [{ path: imagePath, name: "review.png" }],
         });
         assertEquals(response.status, 202, await response.clone().text());
-        for (let index = 0; index < 300 && !fixture.modelRequests.length; index++) {
-            await new Promise((resolve) => setTimeout(resolve, 10));
+        const deadline = performance.now() + 15_000;
+        while (!fixture.modelRequests.length && performance.now() < deadline) {
+            const operation = app.sessionContinuation.getOperation(operationId);
+            if (operation.status !== "running") break;
+            await new Promise((resolve) => setTimeout(resolve, 25));
         }
-        assert(fixture.modelRequests.length > 0, "Planning Agent did not receive the feedback");
+        assert(
+            fixture.modelRequests.length > 0,
+            `Planning Agent did not receive the feedback: ${JSON.stringify(app.sessionContinuation.getOperation(operationId))}`,
+        );
         assertStringIncludes(fixture.modelRequests[0].messages, "Please use this screenshot.");
         assertStringIncludes(fixture.modelRequests[0].messages, "image/png");
     });
