@@ -417,10 +417,17 @@ export async function runRemoteSupervisor(): Promise<void> {
             let misses = 0;
             let nextCheck = Date.now() + PERIOD_MS;
             while (!stopped) {
-                await Promise.race([
-                    new Promise<void>((resolve) => setTimeout(resolve, Math.max(0, nextCheck - Date.now()))),
-                    ending,
-                ]);
+                let checkTimer: ReturnType<typeof setTimeout> | undefined;
+                try {
+                    await Promise.race([
+                        new Promise<void>((resolve) => {
+                            checkTimer = setTimeout(resolve, Math.max(0, nextCheck - Date.now()));
+                        }),
+                        ending,
+                    ]);
+                } finally {
+                    if (checkTimer !== undefined) clearTimeout(checkTimer);
+                }
                 if (stopped) break;
                 nextCheck += PERIOD_MS;
                 try {

@@ -186,6 +186,10 @@ for (
         });
         const driver = spawnNativeProcess("python3", {
             cwd: getCwd(),
+            // The supervisor must survive launcher death to perform its own cleanup.
+            // Bun's test-runner guardian would otherwise kill it before its handlers run.
+            // This fixture retains explicit PID cleanup and asserts all descendants exit.
+            env: { BUN_FEATURE_FLAG_NO_ORPHANS: "0" },
             args: [
                 "-u",
                 "-c",

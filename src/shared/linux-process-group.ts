@@ -70,6 +70,16 @@ export async function terminateOwnedLinuxGroup(child: OwnedLinuxGroupLeader, gra
     // A process stuck in uninterruptible sleep can outlive either deadline.
     // Return uncertainty and let the caller stop dependent work immediately.
     if (remaining.length) return false;
-    await Promise.race([status, new Promise((resolve) => setTimeout(resolve, 1_000))]);
+    let exitTimer: ReturnType<typeof setTimeout> | undefined;
+    try {
+        await Promise.race([
+            status,
+            new Promise<void>((resolve) => {
+                exitTimer = setTimeout(resolve, 1_000);
+            }),
+        ]);
+    } finally {
+        if (exitTimer !== undefined) clearTimeout(exitTimer);
+    }
     return leaderExited;
 }

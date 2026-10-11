@@ -79,7 +79,20 @@ export interface SftpService {
     close(): Promise<void>;
 }
 
-const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+/** Clear the deadline when a child settles so completed cleanup cannot keep the runtime alive. */
+async function settleWithin<T>(operation: Promise<T>, ms: number): Promise<T | undefined> {
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    try {
+        return await Promise.race([
+            operation,
+            new Promise<undefined>((resolve) => {
+                deadline = setTimeout(() => resolve(undefined), ms);
+            }),
+        ]);
+    } finally {
+        if (deadline !== undefined) clearTimeout(deadline);
+    }
+}
 
 /** Start one SFTP server per authenticated connection. The SSH reverse forward is the only intended client. */
 export async function startLaptopSftp(): Promise<SftpService> {
@@ -115,7 +128,7 @@ export async function startLaptopSftp(): Promise<SftpService> {
         try {
             child.kill("SIGKILL");
         } catch { /* Already exited. */ }
-        if (!await Promise.race([child.status.then(() => true), wait(5_000).then(() => false)])) {
+        if (!await settleWithin(child.status, 5_000)) {
             throw new Error(`SFTP serving process termination unconfirmed: ${child.pid}`);
         }
     };
@@ -375,14 +388,14 @@ export async function mountLaptopHome(home: string, config: MountHeader): Promis
                 stdout: "null",
                 stderr: "null",
             });
-            const result = await Promise.race([unmount.status, wait(5_000).then(() => null)]);
+            const result = await settleWithin(unmount.status, 5_000);
             if (!result) {
                 uncertain = true;
                 try {
                     unmount.kill("SIGKILL");
                 } catch { /* Already exited. */ }
                 // A stuck helper can remain in the kernel even after SIGKILL.
-                if (!await Promise.race([unmount.status.then(() => true), wait(1_000).then(() => false)])) {
+                if (!await settleWithin(unmount.status, 1_000)) {
                     throw new Error(`SSHFS unmount helper termination unconfirmed: ${path}`);
                 }
             }
@@ -401,7 +414,7 @@ export async function mountLaptopHome(home: string, config: MountHeader): Promis
                 try {
                     child.kill("SIGKILL");
                 } catch { /* Already exited. */ }
-                if (!await Promise.race([child.status.then(() => true), wait(5_000).then(() => false)])) {
+                if (!await settleWithin(child.status, 5_000)) {
                     uncertain = true;
                     throw new Error(`SSHFS process termination unconfirmed: ${path}`);
                 }
@@ -517,7 +530,7 @@ export async function mountLaptopHome(home: string, config: MountHeader): Promis
                         break;
                     }
                     if (current) throw new Error(`Unexpected filesystem at mountpoint: ${path}`);
-                    if (await Promise.race([child.status.then(() => true), wait(100).then(() => false)])) {
+                    if (await settleWithin(child.status, 100)) {
                         const detail = (await new Response(child.stderr).text()).trim()
                             .replaceAll(config.sftpSecret, "[redacted]");
                         throw new Error(`SSHFS stopped before mounting ${entry.name}: ${detail}`);

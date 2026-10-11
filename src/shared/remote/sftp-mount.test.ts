@@ -18,6 +18,7 @@ import { tmpdir } from "node:os";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { join } from "@std/path";
 import { withProcessGlobalTestLock } from "../../testing/process-global-lock.ts";
+import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
 import { installedLaptopPackageRoots, mountLaptopHome, startLaptopSftp, validateMountHeader } from "./sftp-mount.ts";
 
 async function connectPeer(port: number): Promise<Socket> {
@@ -157,6 +158,32 @@ test("remote mount rejects bad transport without modifying existing account file
             assertEquals(await fsReadFile(join(home, name, "sentinel"), "utf8"), name);
         }
     });
+});
+
+test("closing an authenticated SFTP child releases its process deadline timer", async () => {
+    const source = `import { Buffer } from "node:buffer";
+import { once } from "node:events";
+import { connect } from "node:net";
+import { startLaptopSftp } from ${JSON.stringify(new URL("./sftp-mount.ts", import.meta.url).href)};
+const service = await startLaptopSftp();
+const peer = connect({ host: "127.0.0.1", port: service.header.sftpPort });
+try {
+    await once(peer, "connect");
+    const version = once(peer, "data");
+    peer.write(Buffer.concat([Buffer.from(service.header.sftpSecret + "\\n"), Buffer.from([0,0,0,5,1,0,0,0,3])]));
+    await version;
+} finally {
+    peer.destroy();
+    await service.close();
+}
+console.log("SFTP child closed");`;
+    const result = await captureForegroundProcess(process.execPath, {
+        cwd: getCwd(),
+        args: runtimeSourceArgs(["eval", source]),
+        timeoutMs: 4_000,
+    });
+    assertEquals(result.code, 0, new TextDecoder().decode(result.stderr));
+    assertEquals(new TextDecoder().decode(result.stdout).trim(), "SFTP child closed");
 });
 
 // Opt in on a Linux host with working SSHFS and /dev/fuse. This exercises real kernel mounts.
