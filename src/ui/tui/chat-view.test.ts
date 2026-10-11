@@ -447,7 +447,7 @@ test("chat view tracks quick fix validation in the workflow sidebar", async () =
             tui.renderNow(true);
             await terminal.flush();
             const screen = terminal.getScreenText();
-            assertStringIncludes(screen, "● Tests and CI");
+            assertStringIncludes(screen, "● Verification Command");
             assertEquals(screen.includes("● Planning"), false);
             assertEquals(screen.includes("Answer agent"), false);
         } finally {

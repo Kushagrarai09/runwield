@@ -1,6 +1,13 @@
 import { readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promises";
 import { test } from "node:test";
-import { assertEquals, assertExists, assertNotEquals, assertRejects, assertStringIncludes } from "@std/assert";
+import {
+    assertEquals,
+    assertExists,
+    assertNotEquals,
+    assertObjectMatch,
+    assertRejects,
+    assertStringIncludes,
+} from "@std/assert";
 
 import { loadPlan } from "../../plan-store.js";
 import { getHomeDir } from "../../constants.js";
@@ -72,52 +79,60 @@ async function makeValidatedCiRun(attrs = {}) {
  */
 function reviewerMessages(result = {}) {
     const approved = result.approved !== false;
-    return /** @type {any} */ ([{
-        role: "toolResult",
-        toolName: "review_diff",
-        details: { command: "list", scope: "full", fileCount: 1 },
-    }, {
-        role: "toolResult",
-        toolName: "review_complete",
-        details: {
-            outcome: approved ? "approved" : "feedback",
-            approved,
-            feedback: result.feedback || "",
-            findings: result.findings || [],
-            advisories: result.advisories || [],
+    return /** @type {any} */ ([
+        {
+            role: "toolResult",
+            toolName: "review_diff",
+            details: { command: "list", scope: "full", fileCount: 1 },
         },
-    }]);
+        {
+            role: "toolResult",
+            toolName: "review_complete",
+            details: {
+                outcome: approved ? "approved" : "feedback",
+                approved,
+                feedback: result.feedback || "",
+                findings: result.findings || [],
+                advisories: result.advisories || [],
+            },
+        },
+    ]);
 }
 
 function repairMessages(message = "R1-1 — fixed: added the missing guard.") {
-    return /** @type {any} */ ([{
-        role: "toolResult",
-        toolName: "task_completed",
-        details: { outcome: "task_completed", message },
-    }]);
+    return /** @type {any} */ ([
+        {
+            role: "toolResult",
+            toolName: "task_completed",
+            details: { outcome: "task_completed", message },
+        },
+    ]);
 }
 
 function providerErrorMessages(errorMessage = "404 Not Found") {
-    return /** @type {any} */ ([{
-        role: "assistant",
-        content: [],
-        api: "openai-responses",
-        provider: "openai-codex",
-        model: "gpt-5.5",
-        usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: {} },
-        stopReason: "error",
-        errorMessage,
-        timestamp: Date.now(),
-    }]);
+    return /** @type {any} */ ([
+        {
+            role: "assistant",
+            content: [],
+            api: "openai-responses",
+            provider: "openai-codex",
+            model: "gpt-5.5",
+            usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: {} },
+            stopReason: "error",
+            errorMessage,
+            timestamp: Date.now(),
+        },
+    ]);
 }
 
 /**
  * @param {Record<string, unknown>} [overrides]
  */
 function reviewPort(overrides = {}) {
-    const overrideRun = typeof overrides.runIsolatedAgentSession === "function"
-        ? overrides.runIsolatedAgentSession
-        : () => Promise.reject(new Error("Unexpected isolated Agent session"));
+    const overrideRun =
+        typeof overrides.runIsolatedAgentSession === "function"
+            ? overrides.runIsolatedAgentSession
+            : () => Promise.reject(new Error("Unexpected isolated Agent session"));
     return /** @type {any} */ ({
         ...overrides,
         runIsolatedAgentSession: async (/** @type {any} */ opts) => {
@@ -147,8 +162,8 @@ function reviewPort(overrides = {}) {
                                             path: file.path,
                                             offsetBytes: index * 65536,
                                         },
-                                    }))
-                                )
+                                    })),
+                                ),
                             ),
                         ];
                     }),
@@ -170,19 +185,21 @@ function roundLimitPort(reviewer = {}) {
         runIsolatedAgentSession: (/** @type {any} */ options) =>
             Promise.resolve(
                 options?.agentName === "reviewer-feedback-engineer"
-                    ? /** @type {any[]} */ ([{
-                        role: "toolResult",
-                        toolName: "task_completed",
-                        toolCallId: "repair-1",
-                        content: [],
-                        isError: false,
-                        timestamp: new Date().toISOString(),
-                        details: { outcome: "task_completed", message: "- Addressed the finding." },
-                    }])
+                    ? /** @type {any[]} */ ([
+                          {
+                              role: "toolResult",
+                              toolName: "task_completed",
+                              toolCallId: "repair-1",
+                              content: [],
+                              isError: false,
+                              timestamp: new Date().toISOString(),
+                              details: { outcome: "task_completed", message: "- Addressed the finding." },
+                          },
+                      ])
                     : reviewerMessages({
-                        approved: reviewer.approved === true,
-                        findings: [{ title: "Repair introduced a regression", origin: "repair_regression" }],
-                    }),
+                          approved: reviewer.approved === true,
+                          findings: [{ title: "Repair introduced a regression", origin: "repair_regression" }],
+                      }),
             ),
     });
 }
@@ -233,7 +250,7 @@ test("runValidationPhase reviews the proposed branch patch from validated_ci", a
     };
     const { projectRoot, hostedSession } = await makeValidatedCiRun({ complexity: "MEDIUM" });
     const reviewPrompts = /** @type {string[]} */ ([]);
-    assertEquals(hostedSession.getWorkflowContext(), expectedWorkflowContext);
+    assertObjectMatch(hostedSession.getWorkflowContext() || {}, expectedWorkflowContext);
 
     await runValidationPhase({
         hostedSession,
@@ -252,7 +269,7 @@ test("runValidationPhase reviews the proposed branch patch from validated_ci", a
     assertEquals(reviewPrompts.length, 1);
     assertStringIncludes(reviewPrompts[0], "workflow.js");
     assertEquals(reviewPrompts[0].includes("+scoped workflow change"), false);
-    assertEquals(hostedSession.getWorkflowContext(), expectedWorkflowContext);
+    assertObjectMatch(hostedSession.getWorkflowContext() || {}, expectedWorkflowContext);
     assertEquals(plan?.attrs.status, "reviewed");
 });
 
@@ -273,10 +290,8 @@ test("AI review and repair receive the same proposed branch patch", async () => 
     await git(projectRoot, ["add", "inherited.js"]);
     await git(projectRoot, ["commit", "-m", "target behavior"]);
     await git(projectRoot, ["switch", "-c", "execution"]);
-    const implementation = Array.from(
-        { length: 40 },
-        (_, index) => `export const planned${index} = true;`,
-    ).join("\n") + "\n";
+    const implementation =
+        Array.from({ length: 40 }, (_, index) => `export const planned${index} = true;`).join("\n") + "\n";
     await fsWriteFile(`${projectRoot}/plan-change.js`, implementation);
     hostedSession.setActiveExecutionWorkflow({
         planName: "p",
@@ -399,11 +414,13 @@ test("runValidationPhase rejects an approved verdict reached without inspecting 
                 reviewCalls += 1;
                 if (reviewCalls === 1) {
                     return Promise.resolve(
-                        /** @type {any} */ ([{
-                            role: "toolResult",
-                            toolName: "review_complete",
-                            details: { outcome: "approved", approved: true, feedback: "", findings: [] },
-                        }]),
+                        /** @type {any} */ ([
+                            {
+                                role: "toolResult",
+                                toolName: "review_complete",
+                                details: { outcome: "approved", approved: true, feedback: "", findings: [] },
+                            },
+                        ]),
                     );
                 }
                 return Promise.resolve(reviewerMessages());
@@ -433,16 +450,19 @@ test("runValidationPhase does not count a failed review_diff call as inspecting 
                 reviewCalls += 1;
                 if (reviewCalls === 1) {
                     return Promise.resolve(
-                        /** @type {any} */ ([{
-                            role: "toolResult",
-                            toolName: "review_diff",
-                            isError: true,
-                            details: { command: "show", scope: "full", found: false },
-                        }, {
-                            role: "toolResult",
-                            toolName: "review_complete",
-                            details: { outcome: "approved", approved: true, feedback: "", findings: [] },
-                        }]),
+                        /** @type {any} */ ([
+                            {
+                                role: "toolResult",
+                                toolName: "review_diff",
+                                isError: true,
+                                details: { command: "show", scope: "full", found: false },
+                            },
+                            {
+                                role: "toolResult",
+                                toolName: "review_complete",
+                                details: { outcome: "approved", approved: true, feedback: "", findings: [] },
+                            },
+                        ]),
                     );
                 }
                 return Promise.resolve(reviewerMessages());
@@ -470,14 +490,17 @@ test("runValidationPhase nudges the same reviewer session when review_complete i
                 reviewCalls += 1;
                 if (reviewCalls === 1) {
                     return Promise.resolve(
-                        /** @type {any} */ ([{
-                            role: "toolResult",
-                            toolName: "review_diff",
-                            details: { command: "list", scope: "full", fileCount: 1 },
-                        }, {
-                            role: "assistant",
-                            content: [{ type: "text", text: "The implementation matches the plan." }],
-                        }]),
+                        /** @type {any} */ ([
+                            {
+                                role: "toolResult",
+                                toolName: "review_diff",
+                                details: { command: "list", scope: "full", fileCount: 1 },
+                            },
+                            {
+                                role: "assistant",
+                                content: [{ type: "text", text: "The implementation matches the plan." }],
+                            },
+                        ]),
                     );
                 }
                 return Promise.resolve(reviewerMessages());
@@ -507,10 +530,12 @@ test("runValidationPhase nudges the same Reviewer after real argument validation
                 if (reviewOpts.length === 1) {
                     await assertRejects(
                         () =>
-                            executeWorkflowTestTools(opts, [{
-                                name: "review_complete",
-                                arguments: { approved: true, findings: "not an array" },
-                            }]),
+                            executeWorkflowTestTools(opts, [
+                                {
+                                    name: "review_complete",
+                                    arguments: { approved: true, findings: "not an array" },
+                                },
+                            ]),
                         Error,
                     );
                     return [];
@@ -538,10 +563,12 @@ test("runValidationPhase cannot advance from a failed diff lookup without review
             runIsolatedAgentSession: async (/** @type {any} */ opts) => {
                 reviewOpts.push(opts);
                 if (reviewOpts.length === 1) {
-                    await executeWorkflowTestTools(opts, [{
-                        name: "review_diff",
-                        arguments: { command: "show", path: "missing-file.js" },
-                    }]);
+                    await executeWorkflowTestTools(opts, [
+                        {
+                            name: "review_diff",
+                            arguments: { command: "show", path: "missing-file.js" },
+                        },
+                    ]);
                     return [];
                 }
                 return Promise.resolve(reviewerMessages());
@@ -676,11 +703,13 @@ test("runValidationPhase dispatches semantic review feedback to Reviewer-Feedbac
                     return Promise.resolve(repairMessages());
                 }
                 reviewerWorkflowContexts.push(hostedSession.getWorkflowContext());
-                return Promise.resolve(reviewerMessages({
-                    approved: false,
-                    feedback: "Missing guard",
-                    findings: [{ title: "Missing guard", requirement: "Step 2", evidence: "file.js" }],
-                }));
+                return Promise.resolve(
+                    reviewerMessages({
+                        approved: false,
+                        feedback: "Missing guard",
+                        findings: [{ title: "Missing guard", requirement: "Step 2", evidence: "file.js" }],
+                    }),
+                );
             },
         }),
     });
@@ -688,17 +717,23 @@ test("runValidationPhase dispatches semantic review feedback to Reviewer-Feedbac
     const plan = await loadPlan(projectRoot, "p");
     assertEquals(result.kind, "semantic_repair_handoff");
     assertStringIncludes(result.semanticRepairHandoff?.findingsSection || "", "Missing guard");
-    assertEquals(sessions.map((opts) => opts.agentName), ["reviewer"]);
+    assertEquals(
+        sessions.map((opts) => opts.agentName),
+        ["reviewer"],
+    );
     assertStringIncludes(
         sessions[0].userRequest.replace(/\s+/g, " ").trim(),
         approvedPlanBody.replace(/\s+/g, " ").trim(),
     );
     assertEquals(sessions[0].userRequest.includes('classification: "QUICK_FIX"'), false);
-    assertEquals(reviewerWorkflowContexts, [expectedWorkflowContext]);
+    assertEquals(reviewerWorkflowContexts.length, 1);
+    assertObjectMatch(reviewerWorkflowContexts[0] || {}, expectedWorkflowContext);
+    assertEquals(reviewerWorkflowContexts[0]?.validationProgress?.stage, "semantic_review");
     assertEquals(repairWorkflowContexts, []);
     assertEquals(repairActiveOwners, []);
     assertEquals(repairActivePlanNames, []);
-    assertEquals(hostedSession.getWorkflowContext(), expectedWorkflowContext);
+    assertObjectMatch(hostedSession.getWorkflowContext() || {}, expectedWorkflowContext);
+    assertEquals(hostedSession.getWorkflowContext()?.validationProgress?.stage, "engineer_repair");
     assertEquals(hostedSession.getActiveExecutionWorkflow()?.executionAgent, "frontend-engineer");
     assertEquals(plan?.attrs.status, "implemented");
     assertEquals(plan?.attrs.validationSemanticRounds, 1);
@@ -708,14 +743,16 @@ test("runValidationPhase dispatches semantic review feedback to Reviewer-Feedbac
 test("runValidationPhase carries existing ledger identities and repair report into the next semantic round", async () => {
     const ledger = {
         sequence: 1,
-        items: [{
-            id: "R1-1",
-            openedInRound: 1,
-            resolvedInRound: null,
-            title: "Missing guard",
-            requirement: "Step 2",
-            evidence: "file.js",
-        }],
+        items: [
+            {
+                id: "R1-1",
+                openedInRound: 1,
+                resolvedInRound: null,
+                title: "Missing guard",
+                requirement: "Step 2",
+                evidence: "file.js",
+            },
+        ],
     };
     const { projectRoot, hostedSession } = await makeValidatedCiRun({ validationSemanticRounds: 1 });
     hostedSession.setActiveExecutionWorkflow(
@@ -737,9 +774,11 @@ test("runValidationPhase carries existing ledger identities and repair report in
             runIsolatedAgentSession: (/** @type {any} */ opts) => {
                 reviewPrompts.push(opts.userRequest);
                 reviewModes.push(opts.subAgentDefinition?.options?.reviewerMode);
-                return Promise.resolve(reviewerMessages({
-                    findings: [{ id: "R1-1", resolved: true, title: "Missing guard" }],
-                }));
+                return Promise.resolve(
+                    reviewerMessages({
+                        findings: [{ id: "R1-1", resolved: true, title: "Missing guard" }],
+                    }),
+                );
             },
         }),
     });
@@ -783,25 +822,28 @@ test("round-two origin metrics are recorded separately from durable repair state
         supportsSemanticRepairHandoff: true,
         semanticReviewPort: reviewPort({
             runIsolatedAgentSession: () =>
-                Promise.resolve(reviewerMessages({
-                    approved: false,
-                    findings: [
-                        {
-                            id: "R1-1",
-                            title: "Existing defect",
-                            status: "fix_rejected",
-                            rejectionReason: "The empty case still fails.",
-                        },
-                        { id: "R1-2", title: "Existing defect", status: "fix_confirmed" },
-                        { title: "Original miss", status: "new", origin: "missed_original" },
-                        { title: "Repair regression", status: "new", origin: "repair_regression" },
-                    ],
-                })),
+                Promise.resolve(
+                    reviewerMessages({
+                        approved: false,
+                        findings: [
+                            {
+                                id: "R1-1",
+                                title: "Existing defect",
+                                status: "fix_rejected",
+                                rejectionReason: "The empty case still fails.",
+                            },
+                            { id: "R1-2", title: "Existing defect", status: "fix_confirmed" },
+                            { title: "Original miss", status: "new", origin: "missed_original" },
+                            { title: "Repair regression", status: "new", origin: "repair_regression" },
+                        ],
+                    }),
+                ),
         }),
     });
-    const records = (await fsReadFile(getWorkflowMetricsFilePath(projectRoot), "utf8")).trim().split("\n").map((line) =>
-        JSON.parse(line)
-    );
+    const records = (await fsReadFile(getWorkflowMetricsFilePath(projectRoot), "utf8"))
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
     const metric = records.find((record) => record.event === "semantic_review_result");
     assertEquals(metric.details.missedOriginalCount, 1);
     assertEquals(metric.details.repairRegressionCount, 1);
@@ -809,9 +851,15 @@ test("round-two origin metrics are recorded separately from durable repair state
     assertEquals(metric.details.fixConfirmedCount, 1);
     const saved = (await loadPlan(projectRoot, "p"))?.attrs.validationCheckpoint?.reviewState?.reviewLedger;
     assertExists(saved);
-    assertEquals(saved.items.map((item) => item.status), ["fix_rejected", "fix_confirmed", "new", "new"]);
+    assertEquals(
+        saved.items.map((item) => item.status),
+        ["fix_rejected", "fix_confirmed", "new", "new"],
+    );
     assertEquals(saved.items[0].rejectionReason, "The empty case still fails.");
-    assertEquals(saved.items.some((item) => "origin" in item), false);
+    assertEquals(
+        saved.items.some((item) => "origin" in item),
+        false,
+    );
 });
 
 test("a resumed round two without persisted findings still performs a complete review", async () => {
@@ -845,11 +893,13 @@ test("an interrupted semantic repair pauses without recording validation failure
         semanticReviewPort: reviewPort({
             runIsolatedAgentSession: (/** @type {any} */ opts) =>
                 Promise.resolve(
-                    opts.agentName === "reviewer-feedback-engineer" ? [] : reviewerMessages({
-                        approved: false,
-                        feedback: "Missing guard",
-                        findings: [{ title: "Missing guard" }],
-                    }),
+                    opts.agentName === "reviewer-feedback-engineer"
+                        ? []
+                        : reviewerMessages({
+                              approved: false,
+                              feedback: "Missing guard",
+                              findings: [{ title: "Missing guard" }],
+                          }),
                 ),
         }),
     });
@@ -863,14 +913,16 @@ test("an interrupted semantic repair pauses without recording validation failure
 test("runValidationPhase gives later semantic rounds a repair-scoped review_diff", async () => {
     const ledger = {
         sequence: 1,
-        items: [{
-            id: "R1-1",
-            openedInRound: 1,
-            resolvedInRound: null,
-            title: "Missing guard",
-            requirement: "Step 2",
-            evidence: "workflow.js",
-        }],
+        items: [
+            {
+                id: "R1-1",
+                openedInRound: 1,
+                resolvedInRound: null,
+                title: "Missing guard",
+                requirement: "Step 2",
+                evidence: "workflow.js",
+            },
+        ],
     };
     const { projectRoot, hostedSession } = await makeValidatedCiRun({ validationSemanticRounds: 1 });
     const repairBaselineTree = await captureWorktreeTree(projectRoot);
@@ -920,14 +972,16 @@ test("runValidationPhase gives later semantic rounds a repair-scoped review_diff
 test("runValidationPhase refuses semantic approval while a prior finding is unmentioned", async () => {
     const ledger = {
         sequence: 1,
-        items: [{
-            id: "R1-1",
-            openedInRound: 1,
-            resolvedInRound: null,
-            title: "Missing guard",
-            requirement: "Step 2",
-            evidence: "file.js",
-        }],
+        items: [
+            {
+                id: "R1-1",
+                openedInRound: 1,
+                resolvedInRound: null,
+                title: "Missing guard",
+                requirement: "Step 2",
+                evidence: "file.js",
+            },
+        ],
     };
     const { projectRoot, hostedSession } = await makeValidatedCiRun({ validationSemanticRounds: 1 });
     hostedSession.setActiveExecutionWorkflow(
@@ -946,9 +1000,11 @@ test("runValidationPhase refuses semantic approval while a prior finding is unme
                 reviewPrompts.push(opts.userRequest);
                 reviewCalls += 1;
                 if (reviewCalls === 1) return Promise.resolve(reviewerMessages({ approved: true, findings: [] }));
-                return Promise.resolve(reviewerMessages({
-                    findings: [{ id: "R1-1", resolved: true, title: "Missing guard" }],
-                }));
+                return Promise.resolve(
+                    reviewerMessages({
+                        findings: [{ id: "R1-1", resolved: true, title: "Missing guard" }],
+                    }),
+                );
             },
         }),
     });
@@ -963,21 +1019,24 @@ test("runValidationPhase refuses semantic approval while a prior finding is unme
 test("runValidationPhase narrows semantic review to verification mode after discovery rounds", async () => {
     const ledger = {
         sequence: 2,
-        items: [{
-            id: "R1-1",
-            openedInRound: 1,
-            resolvedInRound: null,
-            title: "Issue from round 1",
-            requirement: "Step 1",
-            evidence: "file.js",
-        }, {
-            id: "R2-2",
-            openedInRound: 2,
-            resolvedInRound: null,
-            title: "Issue from round 2",
-            requirement: "Step 2",
-            evidence: "file.js",
-        }],
+        items: [
+            {
+                id: "R1-1",
+                openedInRound: 1,
+                resolvedInRound: null,
+                title: "Issue from round 1",
+                requirement: "Step 1",
+                evidence: "file.js",
+            },
+            {
+                id: "R2-2",
+                openedInRound: 2,
+                resolvedInRound: null,
+                title: "Issue from round 2",
+                requirement: "Step 2",
+                evidence: "file.js",
+            },
+        ],
     };
     const { hostedSession } = await makeValidatedCiRun({ validationSemanticRounds: 2 });
     hostedSession.setActiveExecutionWorkflow(
@@ -993,12 +1052,14 @@ test("runValidationPhase narrows semantic review to verification mode after disc
         semanticReviewPort: reviewPort({
             runIsolatedAgentSession: (/** @type {any} */ opts) => {
                 reviewPrompts.push(opts.userRequest);
-                return Promise.resolve(reviewerMessages({
-                    findings: [
-                        { id: "R1-1", resolved: true, title: "Issue from round 1" },
-                        { id: "R2-2", resolved: true, title: "Issue from round 2" },
-                    ],
-                }));
+                return Promise.resolve(
+                    reviewerMessages({
+                        findings: [
+                            { id: "R1-1", resolved: true, title: "Issue from round 1" },
+                            { id: "R2-2", resolved: true, title: "Issue from round 2" },
+                        ],
+                    }),
+                );
             },
         }),
     });
@@ -1100,13 +1161,13 @@ test("inline round-limit repair records passing CI before another Reviewer round
                 return Promise.resolve(
                     reviewerRuns === 1
                         ? reviewerMessages({
-                            approved: false,
-                            findings: [{ title: "Round-limit issue", origin: "repair_regression" }],
-                        })
+                              approved: false,
+                              findings: [{ title: "Round-limit issue", origin: "repair_regression" }],
+                          })
                         : reviewerMessages({
-                            approved: true,
-                            findings: [{ id: "R3-1", resolved: true, title: "Round-limit issue" }],
-                        }),
+                              approved: true,
+                              findings: [{ id: "R3-1", resolved: true, title: "Round-limit issue" }],
+                          }),
                 );
             },
         }),
@@ -1190,18 +1251,20 @@ test("transcript provenance cannot waive production diff inspection", async () =
                 reviewPrompts.push(opts.userRequest);
                 reviewCalls += 1;
                 return Promise.resolve(
-                    /** @type {any} */ ([{
-                        role: "toolResult",
-                        toolName: "review_complete",
-                        details: {
-                            outcome: "approved",
-                            approved: true,
-                            feedback: "",
-                            findings: [],
-                            advisories: [],
-                            provenance: "claude-cli-mcp",
+                    /** @type {any} */ ([
+                        {
+                            role: "toolResult",
+                            toolName: "review_complete",
+                            details: {
+                                outcome: "approved",
+                                approved: true,
+                                feedback: "",
+                                findings: [],
+                                advisories: [],
+                                provenance: "claude-cli-mcp",
+                            },
                         },
-                    }]),
+                    ]),
                 );
             },
         }),
@@ -1224,17 +1287,19 @@ test("transcript provenance cannot waive production diff inspection", async () =
                 untrustedCalls += 1;
                 if (untrustedCalls === 1) {
                     return Promise.resolve(
-                        /** @type {any} */ ([{
-                            role: "toolResult",
-                            toolName: "review_complete",
-                            details: {
-                                outcome: "approved",
-                                approved: true,
-                                feedback: "",
-                                findings: [],
-                                advisories: [],
+                        /** @type {any} */ ([
+                            {
+                                role: "toolResult",
+                                toolName: "review_complete",
+                                details: {
+                                    outcome: "approved",
+                                    approved: true,
+                                    feedback: "",
+                                    findings: [],
+                                    advisories: [],
+                                },
                             },
-                        }]),
+                        ]),
                     );
                 }
                 return Promise.resolve(reviewerMessages());
@@ -1248,14 +1313,16 @@ test("transcript provenance cannot waive production diff inspection", async () =
     // accepted verdict that leaves an open ledger identity unmentioned is nudged.
     const ledger = {
         sequence: 1,
-        items: [{
-            id: "R1-1",
-            openedInRound: 1,
-            resolvedInRound: null,
-            title: "Missing guard",
-            requirement: "Step 2",
-            evidence: "file.js",
-        }],
+        items: [
+            {
+                id: "R1-1",
+                openedInRound: 1,
+                resolvedInRound: null,
+                title: "Missing guard",
+                requirement: "Step 2",
+                evidence: "file.js",
+            },
+        ],
     };
     const third = await makeValidatedCiRun({ validationSemanticRounds: 1 });
     third.hostedSession.setActiveExecutionWorkflow(
@@ -1274,23 +1341,28 @@ test("transcript provenance cannot waive production diff inspection", async () =
                 ledgerCalls += 1;
                 if (ledgerCalls === 1) {
                     return Promise.resolve(
-                        /** @type {any} */ ([reviewerMessages()[0], {
-                            role: "toolResult",
-                            toolName: "review_complete",
-                            details: {
-                                outcome: "approved",
-                                approved: true,
-                                feedback: "",
-                                findings: [],
-                                advisories: [],
-                                provenance: "claude-cli-mcp",
+                        /** @type {any} */ ([
+                            reviewerMessages()[0],
+                            {
+                                role: "toolResult",
+                                toolName: "review_complete",
+                                details: {
+                                    outcome: "approved",
+                                    approved: true,
+                                    feedback: "",
+                                    findings: [],
+                                    advisories: [],
+                                    provenance: "claude-cli-mcp",
+                                },
                             },
-                        }]),
+                        ]),
                     );
                 }
-                return Promise.resolve(reviewerMessages({
-                    findings: [{ id: "R1-1", resolved: true, title: "Missing guard" }],
-                }));
+                return Promise.resolve(
+                    reviewerMessages({
+                        findings: [{ id: "R1-1", resolved: true, title: "Missing guard" }],
+                    }),
+                );
             },
         }),
     });

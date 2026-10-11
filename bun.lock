@@ -66,7 +66,7 @@
         "clsx": "2.1.1",
         "codemirror": "6.0.2",
         "diff": "9.0.0",
-        "dockview-react": "8.2.0",
+        "dockview-react": "8.4.0",
         "dompurify": "3.4.15",
         "esbuild": "0.28.2",
         "fuse.js": "7.5.0",
@@ -1228,7 +1228,7 @@
 
     "dockview-core": ["dockview-core@8.4.1", "", {}, "sha512-LcvhGwmK/Q1tFDEPkiBpkLIYctimmu8JJHgG5yhIXwyf9IvWQkJa3EG7/a1NKUS2Q8w82uoYZTL+c84/zpQUjg=="],
 
-    "dockview-react": ["dockview-react@8.2.0", "", { "dependencies": { "dockview": "^8.2.0" }, "peerDependencies": { "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react-dom": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-OHa/4uuaw3VpHVkGophdYh2U1f5tOvp/ANf5CAE3QQVh2oSMKNimaWaFXEg/R1wGBdZogQyYOKQSU+wLrE0taw=="],
+    "dockview-react": ["dockview-react@8.4.0", "", { "dependencies": { "dockview": "^8.4.0" }, "peerDependencies": { "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react-dom": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-1im8xQb5vNDRWS2iiaceIdhOxO2K/wjfvXXLl5QrbZbEMARqx2NIrfu6TG7ekLyb8i1r/Zdv/FIjMXUPHrwYfw=="],
 
     "doctrine": ["doctrine@2.1.0", "", { "dependencies": { "esutils": "^2.0.2" } }, "sha512-35mSku4ZXK0vfCuHEDAwt55dg2jNajHZ1odvF+8SSr82EsZY4QmXfuWso8oEd8zRhVObSN18aM0CjSdoBX7zIw=="],
 

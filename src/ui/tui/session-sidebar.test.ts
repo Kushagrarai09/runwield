@@ -109,11 +109,11 @@ test("TUI quick fix workflow shows its current CI step without Plan stages or an
     } as const;
     const sidebar = new TuiSessionSidebar(() => "quick-fix-session", () => snapshot);
     const projection = tuiSessionSidebarProjection(snapshot);
-    assertEquals(projection.workflow.currentStage?.label, "Tests and CI");
-    assertEquals(projection.workflow.action?.kind, "open_session");
+    assertEquals(projection.workflow.currentStage?.label, "Verification Command");
+    assertEquals(projection.workflow.action, null);
     const workflow = stripAnsi(sidebar.render(34).join("\n"));
     assertStringIncludes(workflow, "QUICK FIX");
-    assertStringIncludes(workflow, "● Tests and CI");
+    assertStringIncludes(workflow, "● Verification Command");
     assertEquals(workflow.includes("Planning"), false);
     assertEquals(workflow.includes("AI review"), false);
     assertEquals(workflow.includes("Answer agent"), false);
@@ -162,7 +162,7 @@ test("workflow sidebar follows question state independently of running CI", () =
             },
         } as const;
         const waiting = tuiSessionSidebarProjection(snapshot);
-        assertEquals(waiting.workflow.action?.kind, "answer_agent");
+        assertEquals(waiting.workflow.action, null);
         assertEquals(
             waiting.workflow.currentStage?.detail,
             "The agent needs your answer in the Session before continuing.",
@@ -172,10 +172,10 @@ test("workflow sidebar follows question state independently of running CI", () =
             workflowContext: { ...snapshot.workflowContext, liveQuestion: false },
         });
         assertEquals(answered.workflow.currentStage?.id, "mechanical");
-        assertEquals(answered.workflow.action?.kind, "open_session");
+        assertEquals(answered.workflow.action, null);
         assertEquals(
             answered.workflow.currentStage?.detail,
-            "Run the required tests, lint, type checks, and CI validation.",
+            "Run the configured verification command.",
         );
     }
 });
@@ -242,8 +242,8 @@ test("TUI Session Sidebar exposes a keyboard action without changing draft keys"
             workflowContext: { planName: "needs-answer", liveQuestion: true },
         }),
     );
-    assertEquals(sidebar.currentAction()?.kind, "answer_agent");
-    assertStringIncludes(stripAnsi(sidebar.render(42).join("\n")), "ctrl+enter runs this action");
+    assertEquals(sidebar.currentAction(), null);
+    assertEquals(stripAnsi(sidebar.render(42).join("\n")).includes("ctrl+enter"), false);
 });
 
 test("TUI Session Sidebar stays at the top of the visible transcript viewport", () => {

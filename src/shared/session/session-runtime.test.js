@@ -1674,6 +1674,7 @@ test("SessionRuntime keeps dormant managed projection separate from runtime auth
     });
     assertEquals(runtime.getSessionSnapshot(session.id)?.thinkingLevel, "medium");
     assertEquals(runtime.getSessionSnapshot(session.id)?.workflowContext, {
+        canReopenPlanReview: false,
         liveQuestion: false,
         livePlanReview: false,
         liveCodeReview: false,
@@ -2399,6 +2400,7 @@ test("SessionRuntime snapshots and events keep workflow footer context separate 
 
     const snapshot = runtime.getSessionSnapshot(sessionId);
     assertEquals(snapshot?.workflowContext, {
+        canReopenPlanReview: false,
         liveQuestion: false,
         livePlanReview: false,
         liveCodeReview: false,
@@ -4476,6 +4478,7 @@ test("SessionRuntime snapshot derives workflow context from active execution wor
     });
 
     assertEquals(runtime.getSessionSnapshot(sessionId)?.workflowContext, {
+        canReopenPlanReview: false,
         liveQuestion: false,
         livePlanReview: false,
         liveCodeReview: false,
@@ -4502,6 +4505,7 @@ test("SessionRuntime snapshot prefers explicit workflow context over active exec
     });
 
     assertEquals(runtime.getSessionSnapshot(sessionId)?.workflowContext, {
+        canReopenPlanReview: false,
         liveQuestion: false,
         livePlanReview: false,
         liveCodeReview: false,

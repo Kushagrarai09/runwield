@@ -155,8 +155,8 @@
     "npm:codemirror@^6.0.2": "6.0.2",
     "npm:diff@9": "9.0.0",
     "npm:diff@9.0.0": "9.0.0",
-    "npm:dockview-react@8.2.0": "8.2.0_react@19.3.0_react-dom@19.3.0",
-    "npm:dockview-react@^8.2.0": "8.2.0_react@19.3.0_react-dom@19.3.0",
+    "npm:dockview-react@8.4.0": "8.4.0_react@19.3.0_react-dom@19.3.0",
+    "npm:dockview-react@^8.4.0": "8.4.0_react@19.3.0_react-dom@19.3.0",
     "npm:dompurify@*": "3.4.15",
     "npm:dompurify@3.4.15": "3.4.15",
     "npm:dompurify@^3.4.11": "3.4.15",
@@ -4869,19 +4869,19 @@
     "diff@9.0.0": {
       "integrity": "sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw=="
     },
-    "dockview-core@8.2.0": {
-      "integrity": "sha512-+L+xdvmO1b4in8rVkFtQM13IkPDKqDLoHJvq5HtAIsMxsPptSVveKeViYBqquaoHF+t0xb9f6692gTeKnjCKGw=="
+    "dockview-core@8.4.0": {
+      "integrity": "sha512-aMYJZwxeV5HcXFVwDbSxEcNz+ECZmZKea90DsW/Q2cIQvoopy7C2oJun0uefWaghVeYxFlEsTqFf3c6cDyAUDQ=="
     },
-    "dockview-react@8.2.0_react@19.3.0_react-dom@19.3.0": {
-      "integrity": "sha512-OHa/4uuaw3VpHVkGophdYh2U1f5tOvp/ANf5CAE3QQVh2oSMKNimaWaFXEg/R1wGBdZogQyYOKQSU+wLrE0taw==",
+    "dockview-react@8.4.0_react@19.3.0_react-dom@19.3.0": {
+      "integrity": "sha512-1im8xQb5vNDRWS2iiaceIdhOxO2K/wjfvXXLl5QrbZbEMARqx2NIrfu6TG7ekLyb8i1r/Zdv/FIjMXUPHrwYfw==",
       "dependencies": [
         "dockview",
         "react",
         "react-dom"
       ]
     },
-    "dockview@8.2.0": {
-      "integrity": "sha512-Jj+fnFWSrdEhF+1DmpGNYjEvyqf7J0FHkDqsD98wL4WOYB2CSKavDCL49B3LHIGYvWNN7Q1O1j4p7Pts38CM5A==",
+    "dockview@8.4.0": {
+      "integrity": "sha512-MAxJZREkIdPwxMVFgLFRAni8VE3fXTbbjV2SDaLlsubmvrQNCTM89YexuTSHC5PsWAqQLV87CIF2X7yT2wrY2g==",
       "dependencies": [
         "dockview-core"
       ]
@@ -8133,7 +8133,7 @@
       "npm:clsx@^2.1.1",
       "npm:codemirror@^6.0.2",
       "npm:diff@9",
-      "npm:dockview-react@^8.2.0",
+      "npm:dockview-react@^8.4.0",
       "npm:dompurify@^3.4.11",
       "npm:esbuild@~0.28.2",
       "npm:fuse.js@^7.5.0",
@@ -8226,7 +8226,7 @@
         "npm:clsx@2.1.1",
         "npm:codemirror@6.0.2",
         "npm:diff@9.0.0",
-        "npm:dockview-react@8.2.0",
+        "npm:dockview-react@8.4.0",
         "npm:dompurify@3.4.15",
         "npm:esbuild@0.28.2",
         "npm:eslint-plugin-react@7.37.5",
