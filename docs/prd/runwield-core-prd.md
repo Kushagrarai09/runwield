@@ -582,7 +582,8 @@ before it runs and may reshape any sibling that has not started, moving scope in
 reshaped sibling that was already approved returns to draft. A started or validated child stays as it is. Each child's
 review judges that child's own correctness with the Epic as context; work a sibling owns is not a finding, and agents do
 not write general "unfinished" warnings. A reviewer can leave Integration Notes for the integration review in a managed
-subsection of the Epic's Verification Plan; when there is nothing to note, it leaves nothing.
+subsection of the Epic's Verification Plan; when there is nothing to note, it leaves nothing. The saved-note message
+names the parent Epic and states that these notes guide its later review, not fixes to the current child Plan.
 
 A separate registered planning worktree does not make an unstarted sibling unavailable for scope changes. Core
 synchronizes compatible edits into that sibling's authoritative Plan, preserves independent planning work, and resets
@@ -633,7 +634,9 @@ and siblings active. Listings keep held work distinct from active and finished w
   copies automatically, including after a preparation retry. Independent edits survive; conflicting scope remains
   preserved in both copies for a requirements decision. Metadata-only normalization does not invalidate sibling scope.
 - Given a child review that leaves Integration Notes, when the review finishes, the notes appear in the Epic's
-  `### Integration Notes` subsection and the integration review receives them as places to look.
+  `### Integration Notes` subsection and the integration review receives them as places to look. The saved-note message
+  names the parent Epic and distinguishes these later checks from child Plan fixes, including when the child review
+  approves the work.
 - Given an approved Epic, when the user saves draft children, they remain drafts; finalizing decomposition enables child
   selection without approving each child.
 - Given an independently held child, when the parent Epic is held and resumed, that child stays held and other children
