@@ -86,10 +86,7 @@ test("sealed delivery keeps child evidence and terminal parent record despite a 
         const artifact = await saveDeliveredPlanEvidence(root, publication, sources.delivered.markdown);
         assertStringIncludes(await fsReadFile(`${root}/${artifact?.path}`, "utf8"), "# Approved child");
         assertEquals(await fsReadFile(`${root}/docs/plans/epic/one.md`, "utf8"), "# Unrelated primary edit\n");
-        await fsWriteFile(
-            `${root}/docs/plans/epic.md`,
-            parent.replace("status: verified", "status: ready_for_work"),
-        );
+        await fsWriteFile(`${root}/docs/plans/epic.md`, parent.replace("status: verified", "status: ready_for_work"));
         await git(root, ["add", "docs/plans/epic.md"]);
         await git(root, ["commit", "-m", "unfinished parent"]);
         const unfinished = await readPublishedDeliverySources(root, {
@@ -107,7 +104,7 @@ test("sealed delivery keeps child evidence and terminal parent record despite a 
         assertEquals(childOnly.delivered.planId, "child-id");
         assertEquals(childOnly.workRecordOwner, undefined);
     } finally {
-        await fsRm(root, { recursive: true });
+        await fsRm(root, { recursive: true, force: true });
     }
 });
 
@@ -125,8 +122,8 @@ test("delivery receipts use the primary runtime from an execution worktree", asy
         assertEquals(evidence.entries.length, 1);
         assertEquals(evidence.artifacts.length, 1);
     } finally {
-        await fsRm(root, { recursive: true });
-        await fsRm(worktree, { recursive: true }).catch(() => {});
+        await fsRm(root, { recursive: true, force: true });
+        await fsRm(worktree, { recursive: true, force: true });
     }
 });
 
@@ -165,16 +162,19 @@ test("confirmed child delivery keeps the prepared reviewed Epic Work Record in i
             verifiedAt: "2026-10-08T10:00:00Z",
         });
         assertEquals(
-            (await readPublishedDeliverySources(root, {
-                ...publication,
-                planPaths: ["docs/plans/epic/one.md"],
-            })).workRecordOwner,
+            (
+                await readPublishedDeliverySources(root, {
+                    ...publication,
+                    planPaths: ["docs/plans/epic/one.md"],
+                })
+            ).workRecordOwner,
             undefined,
         );
         for (const phase of ["publication_verified", "cleanup_complete"] as const) {
-            const confirmed = phase === "cleanup_complete"
-                ? advancePublicationAttempt(publication, phase, { cleanedAt: "2026-10-08T10:01:00Z" })
-                : publication;
+            const confirmed =
+                phase === "cleanup_complete"
+                    ? advancePublicationAttempt(publication, phase, { cleanedAt: "2026-10-08T10:01:00Z" })
+                    : publication;
             const sources = await readPublishedDeliverySources(root, confirmed);
             assertEquals(sources.delivered.planId, "child-id");
             assertEquals(sources.workRecordOwner?.planId, "parent-id");
@@ -205,20 +205,21 @@ test("confirmed child delivery keeps the prepared reviewed Epic Work Record in i
         }
         await fsWriteFile(
             `${root}/docs/plans/epic.md`,
-            parent
-                .replace("status: verified", "status: reviewed").replace("epicCompletionMode: done_enough\n", ""),
+            parent.replace("status: verified", "status: reviewed").replace("epicCompletionMode: done_enough\n", ""),
         );
         await git(root, ["add", "docs/plans/epic.md"]);
         await git(root, ["commit", "-m", "parent remains unfinished"]);
         assertEquals(
-            (await readPublishedDeliverySources(root, {
-                ...publication,
-                artifactCommit: await git(root, ["rev-parse", "HEAD"]),
-            })).workRecordOwner,
+            (
+                await readPublishedDeliverySources(root, {
+                    ...publication,
+                    artifactCommit: await git(root, ["rev-parse", "HEAD"]),
+                })
+            ).workRecordOwner,
             undefined,
         );
     } finally {
-        await fsRm(root, { recursive: true });
+        await fsRm(root, { recursive: true, force: true });
     }
 });
 
@@ -257,6 +258,6 @@ test("record attachment uses exact confirmed publication, never pending or later
             );
         }
     } finally {
-        await fsRm(root, { recursive: true });
+        await fsRm(root, { recursive: true, force: true });
     }
 });

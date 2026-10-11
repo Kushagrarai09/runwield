@@ -1,7 +1,7 @@
 /** Qualify a relocated development executable without touching the user's home. */
 import { deepEqual, doesNotMatch, equal, match, ok } from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { installPackageHelperFixtures } from "./package-helper-fixtures.ts";
 import { verifyBuildArtifact } from "./build-metadata.js";
+import { removeExecutableFixtureDirectory } from "../src/testing/runtime-executable-fixture.ts";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -21,7 +22,7 @@ async function unusedPort(): Promise<number> {
     });
     const address = listener.address();
     if (!address || typeof address === "string") throw new Error("No TCP port allocated");
-    await new Promise<void>((resolve, reject) => listener.close((error) => error ? reject(error) : resolve()));
+    await new Promise<void>((resolve, reject) => listener.close((error) => (error ? reject(error) : resolve())));
     return address.port;
 }
 
@@ -65,8 +66,8 @@ export async function checkBunPackage(
             const commandArgs = platform === "darwin" ? ["-p", sandbox, relocated, ...args] : args;
             const child = spawn(command, commandArgs, { cwd: home, env: childEnv, stdio: ["pipe", "pipe", "pipe"] });
             let output = "";
-            child.stdout.setEncoding("utf8").on("data", (chunk: string) => output += chunk);
-            child.stderr.setEncoding("utf8").on("data", (chunk: string) => output += chunk);
+            child.stdout.setEncoding("utf8").on("data", (chunk: string) => (output += chunk));
+            child.stderr.setEncoding("utf8").on("data", (chunk: string) => (output += chunk));
             const finished = new Promise<number | null>((resolve, reject) => {
                 child.once("error", reject);
                 child.once("close", resolve);
@@ -184,7 +185,7 @@ export async function checkBunPackage(
             `Relocated Bun package passed: CLI onboarding/cancel and Plan entry, worker/WASM, image conversion, Workspace assets/auth, shutdown (${metadata.target}).`,
         );
     } finally {
-        await rm(home, { recursive: true, force: true });
+        await removeExecutableFixtureDirectory(home);
     }
 }
 

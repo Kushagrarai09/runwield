@@ -63,31 +63,38 @@ test("Codex discovery prefers PATH over a desktop app without executing either",
         assertEquals(await resolveCodexExecutable(), f.pathExecutable);
     }));
 
-test("Codex discovery uses the home app when PATH is missing, non-executable or a directory", {
-    skip: process.platform !== "darwin",
-}, () =>
-    withExecutables(async (f) => {
-        await fsChmod(f.pathExecutable, 0o600);
-        assertEquals(await resolveCodexExecutable(), f.appExecutable);
-        await fsRm(f.pathExecutable);
-        assertEquals(await resolveCodexExecutable(), f.appExecutable);
-        await fsMkdir(f.pathExecutable);
-        assertEquals(await resolveCodexExecutable(), f.appExecutable);
-        delete process.env["PATH"];
-        assertEquals(await resolveCodexExecutable(), f.appExecutable);
-    }));
+test(
+    "Codex discovery uses the home app when PATH is missing, non-executable or a directory",
+    {
+        skip: process.platform !== "darwin",
+    },
+    () =>
+        withExecutables(async (f) => {
+            await fsChmod(f.pathExecutable, 0o600);
+            assertEquals(await resolveCodexExecutable(), f.appExecutable);
+            await fsRm(f.pathExecutable);
+            assertEquals(await resolveCodexExecutable(), f.appExecutable);
+            await fsMkdir(f.pathExecutable);
+            assertEquals(await resolveCodexExecutable(), f.appExecutable);
+            delete process.env["PATH"];
+            assertEquals(await resolveCodexExecutable(), f.appExecutable);
+        }),
+);
 
 test("Codex discovery fails without launching anything when no candidate is accessible", () =>
     withExecutables(async (f) => {
         await fsRm(f.pathExecutable);
-        await fsRm(f.appExecutable);
+        // A clean macOS runner may have no system app. Deny the known home-app
+        // fixture as well so permission propagation never depends on host installs.
+        if (process.platform !== "darwin") await fsRm(f.appExecutable);
+        const homeApplications = join(f.root, "Applications");
         const probe = join(f.root, "probe.ts");
         await fsWriteFile(
             probe,
             `
-            import { resolveCodexExecutable } from ${
-                JSON.stringify(new URL("./codex-executable.ts", import.meta.url).href)
-            };
+            import { resolveCodexExecutable } from ${JSON.stringify(
+                new URL("./codex-executable.ts", import.meta.url).href,
+            )};
             try { console.log(await resolveCodexExecutable()); }
             catch (error) { console.error(error.message); (await import("node:process")).exit(1); }
         `,
@@ -100,7 +107,7 @@ test("Codex discovery fails without launching anything when no candidate is acce
             "--no-prompt",
             "--allow-env",
             "--allow-read",
-            "--deny-read=/Applications",
+            `--deny-read=/Applications,${homeApplications}`,
             probe,
         ];
         const useMacSandbox = !process.versions.deno && process.platform === "darwin";
@@ -109,11 +116,13 @@ test("Codex discovery fails without launching anything when no candidate is acce
         const result = await captureForegroundProcess(command, {
             args: useMacSandbox
                 ? [
-                    "-p",
-                    '(version 1)(allow default)(deny file-read* (subpath "/Applications"))',
-                    process.execPath,
-                    ...args,
-                ]
+                      "-p",
+                      `(version 1)(allow default)(deny file-read* (subpath "/Applications") (subpath ${JSON.stringify(
+                          homeApplications,
+                      )}))`,
+                      process.execPath,
+                      ...args,
+                  ]
                 : args,
             cwd: getCwd(),
         });
@@ -122,7 +131,9 @@ test("Codex discovery fails without launching anything when no candidate is acce
         assertStringIncludes(
             new TextDecoder().decode(result.stderr),
             process.platform === "darwin"
-                ? (process.versions.deno ? "Requires read access" : "EPERM")
+                ? process.versions.deno
+                    ? "Requires read access"
+                    : "EPERM"
                 : "Codex executable not found",
         );
     }));
