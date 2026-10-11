@@ -1,5 +1,5 @@
 import { lstatSync } from "node:fs";
-import { realpathSync as fsRealpathSync, type Stats, statSync as fsStatSync } from "node:fs";
+import { realpathSync as fsRealpathSync, type BigIntStats, statSync as fsStatSync } from "node:fs";
 import { lstat as fsLstat, realpath as fsRealpath, stat as fsStat } from "node:fs/promises";
 import { platform } from "node:process";
 import { dirname, isAbsolute, join, normalize, relative } from "@std/path";
@@ -16,25 +16,22 @@ export interface RemotePersonalResources {
 let active: Readonly<RemotePersonalResources> | undefined;
 
 interface RootIdentity {
-    dev: number;
-    ino: number;
+    dev: bigint;
+    ino: bigint;
 }
 
 let activeRootIdentities: ReadonlyMap<string, RootIdentity> | undefined;
 
-function rootIdentity(root: string, info: Stats): RootIdentity {
+function rootIdentity(root: string, info: BigIntStats): RootIdentity {
     // A device alone cannot distinguish a detached mount from its local
-    // directory. Reject platforms that cannot identify both parts safely.
-    if (
-        !info.isDirectory() || typeof info.dev !== "number" || !Number.isSafeInteger(info.dev) ||
-        typeof info.ino !== "number" || !Number.isSafeInteger(info.ino)
-    ) {
+    // directory. Keep both identifiers exact: NTFS file IDs can exceed 2^53.
+    if (!info.isDirectory() || typeof info.dev !== "bigint" || typeof info.ino !== "bigint") {
         throw new PersonalResourcePathError("Personal root", root, "directory identity is unavailable");
     }
     return { dev: info.dev, ino: info.ino };
 }
 
-function assertRootIdentity(root: string, resource: string, path: string, info: Stats): void {
+function assertRootIdentity(root: string, resource: string, path: string, info: BigIntStats): void {
     const expected = activeRootIdentities?.get(root);
     if (!expected) throw new PersonalResourcePathError(resource, path, `root "${root}" was not activated`);
     const current = rootIdentity(root, info);
@@ -46,7 +43,7 @@ function assertRootIdentity(root: string, resource: string, path: string, info: 
 function assertRootIdentitiesSync(roots: string[], resource: string, path: string): void {
     for (const root of roots) {
         try {
-            assertRootIdentity(root, resource, path, fsStatSync(root));
+            assertRootIdentity(root, resource, path, fsStatSync(root, { bigint: true }));
         } catch (error) {
             if (error instanceof PersonalResourcePathError) throw error;
             throw new PersonalResourcePathError(
@@ -61,7 +58,7 @@ function assertRootIdentitiesSync(roots: string[], resource: string, path: strin
 async function assertRootIdentities(roots: string[], resource: string, path: string): Promise<void> {
     for (const root of roots) {
         try {
-            assertRootIdentity(root, resource, path, await fsStat(root));
+            assertRootIdentity(root, resource, path, await fsStat(root, { bigint: true }));
         } catch (error) {
             if (error instanceof PersonalResourcePathError) throw error;
             throw new PersonalResourcePathError(
@@ -102,7 +99,7 @@ export function configureRemotePersonalResources(roots: RemotePersonalResources)
         ]
     ) {
         try {
-            identities.set(root, rootIdentity(root, fsStatSync(root)));
+            identities.set(root, rootIdentity(root, fsStatSync(root, { bigint: true })));
         } catch (error) {
             if (error instanceof PersonalResourcePathError) throw error;
             throw new PersonalResourcePathError("Personal root", root, String(error));

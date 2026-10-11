@@ -137,14 +137,14 @@ test("remote synchronous settings refresh after a lost acknowledgement and an un
             await fsWriteFile(mountedPath, JSON.stringify({ theme: "new-laptop-theme" }));
             assertEquals(manager.getTheme(), "project-theme");
             // A vanished mount cannot return the held manager's old personal values.
-            const mountedIdentity = await fsStat(mounted);
+            const mountedIdentity = await fsStat(mounted, { bigint: true });
             await rename(mounted, join(home, "detached-mount"));
             assertThrows(() => manager.getTheme(), PersonalResourcePathError);
             assertThrows(() => getSettingsManager(project), PersonalResourcePathError);
             // SSHFS can detach and leave its sealed local directory behind.
             await fsMkdir(mounted);
             await fsChmod(mounted, 0o500);
-            const detachedIdentity = await fsStat(mounted);
+            const detachedIdentity = await fsStat(mounted, { bigint: true });
             assertEquals(detachedIdentity.dev, mountedIdentity.dev);
             if (detachedIdentity.ino === mountedIdentity.ino) throw new Error("Replacement must have a new inode");
             assertThrows(() => getCustomSetting("theme", "global", project), PersonalResourcePathError);

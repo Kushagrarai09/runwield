@@ -13,7 +13,7 @@ import {
 import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { join } from "@std/path";
 import { defineCommittedGitFixture, git } from "../git-test-fixture.ts";
-import { assertPersonalResourcePath, configureRemotePersonalResources } from "./personal-resources.ts";
+import { assertPersonalResourcePath, assertPersonalResourcePathSync, configureRemotePersonalResources } from "./personal-resources.ts";
 import {
     getCustomSetting,
     getExactProjectCustomSetting,
@@ -317,6 +317,21 @@ test("remote personal resources select mounted files while project settings keep
         await fsChmod(packageRoot, 0o500);
         await assertRejects(
             () => assertPersonalResourcePath(packageManifest, "package manifest", { packageResource: true }),
+            Error,
+            "changed identity",
+        );
+        // Both reader variants must reject replacement of the activated root,
+        // even when the requested file is optional and missing in its replacement.
+        await fsRename(globalRoot, join(root, "detached-global"));
+        await fsMkdir(globalRoot);
+        const optionalResource = join(globalRoot, "optional.md");
+        assertThrows(
+            () => assertPersonalResourcePathSync(optionalResource, "personal resource"),
+            Error,
+            "changed identity",
+        );
+        await assertRejects(
+            () => assertPersonalResourcePath(optionalResource, "personal resource"),
             Error,
             "changed identity",
         );
