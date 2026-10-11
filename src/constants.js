@@ -3,7 +3,7 @@
  * Shared constants for RunWield CLI orchestration.
  */
 
-import { join } from "@std/path";
+import { join } from "node:path";
 import { RUNWIELD_SOURCE_ROOT } from "../runtime-root.js";
 
 /** Name of the installed CLI binary shown in user-facing docs/help. */

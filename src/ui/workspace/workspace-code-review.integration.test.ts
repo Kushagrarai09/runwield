@@ -1,6 +1,9 @@
 // @ts-nocheck: Deno test imports are checked by scripts/run-tests.js, not Astro check.
 import { assertEquals, assertFalse, assertRejects, assertStringIncludes } from "@std/assert";
 import { WorkspaceSessionContinuationService } from "./server/session-continuation.js";
+import { defineGitFixture, git } from "../../shared/git-test-fixture.ts";
+import { openOwnerCoordinationStore } from "../../shared/owner-coordination/index.js";
+import { createOwnerWorkspaceApp } from "./server.js";
 import { getWorktreeReviewDiff } from "../../shared/workflow/git-snapshot.ts";
 
 const ROUTE_PATH = new URL(
@@ -258,4 +261,142 @@ Deno.test("TUI review routes keep the same shared bodies in the standalone shell
     assertStringIncludes(codeRoute, "ReviewLayout");
     assertStringIncludes(codeRoute, "CodeReviewSurface");
     assertStringIncludes(codeRoute, "escapeReviewPayloadJson(JSON.stringify(payload))");
+});
+
+const fileCheckoutFixture = defineGitFixture(async (cwd) => {
+    await Deno.writeTextFile(`${cwd}/review.ts`, "merge base text\n");
+    await git(cwd, ["add", "."]);
+    await git(cwd, ["commit", "-m", "base"]);
+});
+
+Deno.test("Workspace live Code Review reads execution worktree files and merge-base before text", async () => {
+    const root = await fileCheckoutFixture.checkout();
+    const execution = `${root}/execution`;
+    const store = openOwnerCoordinationStore({ dbPath: `${root}/owner.sqlite3` });
+    const project = store.registerProject({ root });
+    const origin = "http://127.0.0.1:8787";
+    const app = createOwnerWorkspaceApp({ mode: "owner", publicOrigin: origin, store });
+    const service = app.sessionContinuation;
+    let interaction;
+    try {
+        await git(root, ["worktree", "add", "-b", "execution", execution, "main"]);
+        await Deno.writeTextFile(`${root}/review.ts`, "primary checkout text\n");
+        await Deno.writeTextFile(`${execution}/review.ts`, "execution worktree text\n");
+        await Deno.writeTextFile(`${execution}/added.ts`, "added execution text\n");
+        const pairing = store.createPairingRequest({ codeFactory: () => "REV123", proofFactory: () => "review-proof" });
+        store.approvePairingRequest(pairing.code);
+        const claimed = store.claimPairingRequest(pairing.proof);
+        const cookie = `rw_owner_device=${encodeURIComponent(claimed.credential)}`;
+        service.operations.set("operation-files", {
+            status: "running",
+            projectId: project.projectId,
+            runwieldSessionId: "session-files",
+            events: [],
+        });
+        interaction = service.createInteractionAdapter({ operationId: "operation-files" }).requestInteraction({
+            id: "interaction-files",
+            type: "code_review",
+            prompt: "Review code.",
+            _meta: { diffText: "stale patch", executionCwd: execution, targetBranch: "main" },
+        });
+        const referer =
+            `${origin}/projects/${project.projectId}/sessions/session-files/review/code?operation=operation-files&interaction=interaction-files`;
+        const handler = app.handler();
+        const response = await handler(
+            new Request(`${origin}/api/file-content?path=review.ts`, {
+                headers: { cookie, referer },
+            }),
+        );
+        assertEquals(response.status, 200);
+        const body = await response.json();
+        assertEquals(body.newContent, "execution worktree text\n");
+        assertEquals(body.oldContent, "merge base text\n");
+        assertFalse(JSON.stringify(body).includes(execution));
+        const added = await handler(
+            new Request(`${origin}/api/file-content?path=added.ts`, {
+                headers: { cookie, referer },
+            }),
+        );
+        assertEquals((await added.json()).oldContent, "");
+
+        for (
+            const fallbackReferer of [
+                `${origin}/projects/${project.projectId}/sessions/session-files`,
+                referer.replace("interaction-files", "stale-interaction"),
+                referer.replace("session-files", "other-session"),
+            ]
+        ) {
+            const fallback = await handler(
+                new Request(`${origin}/api/file-content?path=review.ts`, {
+                    headers: { cookie, referer: fallbackReferer },
+                }),
+            );
+            const fallbackBody = await fallback.json();
+            assertEquals(fallbackBody.newContent, "primary checkout text\n");
+            assertEquals(fallbackBody.oldContent, null);
+        }
+    } finally {
+        service.operations.get("operation-files")?.answer?.resolve({ outcome: "canceled" });
+        await interaction;
+        await app.close();
+        store.close();
+        await Deno.remove(root, { recursive: true });
+    }
+});
+
+Deno.test("live Code Review checkout shares review liveness and requires stored execution context", async () => {
+    const cwd = await fileCheckoutFixture.checkout();
+    const store = openOwnerCoordinationStore({ dbPath: `${cwd}/owner.sqlite3` });
+    const service = new WorkspaceSessionContinuationService({ store });
+    let interaction;
+    try {
+        service.operations.set("operation-checkout", {
+            status: "running",
+            projectId: "project",
+            runwieldSessionId: "session",
+            events: [],
+        });
+        interaction = service.createInteractionAdapter({ operationId: "operation-checkout" }).requestInteraction({
+            id: "interaction-checkout",
+            type: "code_review",
+            prompt: "Review code.",
+            _meta: { diffText: "patch", executionCwd: cwd, targetBranch: "main" },
+        });
+        const options = {
+            projectId: "project",
+            runwieldSessionId: "session",
+            operationId: "operation-checkout",
+            interactionId: "interaction-checkout",
+        };
+        assertEquals(await service.getLiveCodeReviewCheckout(options), { cwd, targetBranch: "main" });
+        for (
+            const invalid of [
+                { ...options, projectId: "other" },
+                { ...options, runwieldSessionId: "other" },
+                { ...options, interactionId: "other" },
+            ]
+        ) {
+            assertEquals(await service.getLiveCodeReviewCheckout(invalid), null);
+            assertEquals(await service.getLiveCodeReview(invalid), null);
+        }
+        const operation = service.operations.get(options.operationId);
+        operation.status = "completed";
+        assertEquals(await service.getLiveCodeReviewCheckout(options), null);
+        assertEquals(await service.getLiveCodeReview(options), null);
+        operation.status = "running";
+        const request = operation.liveInteraction.request;
+        request.type = "question";
+        assertEquals(await service.getLiveCodeReviewCheckout(options), null);
+        assertEquals(await service.getLiveCodeReview(options), null);
+        request.type = "code_review";
+        service.codeReviewRefreshContexts.delete("operation-checkout:interaction-checkout");
+        assertEquals(await service.getLiveCodeReviewCheckout(options), null);
+        assertEquals((await service.getLiveCodeReview(options))?.request.codeReview.rawPatch, "patch");
+    } finally {
+        service.operations.get("operation-checkout")?.answer?.resolve({ outcome: "canceled" });
+        await interaction;
+        await service.close();
+        store.close();
+        await Deno.remove(cwd, { recursive: true });
+    }
 });

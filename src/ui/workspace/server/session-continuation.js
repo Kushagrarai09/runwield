@@ -1,3 +1,10 @@
+/**
+ * @typedef {Object} LiveCodeReviewOptions
+ * @property {string} projectId
+ * @property {string} operationId
+ * @property {string} interactionId
+ * @property {string} runwieldSessionId
+ */
 import { validateSequenceReviewDecision } from "../../../shared/workflow/sequence-review.ts";
 import { resolveWorkflowPlanLocation } from "../../../shared/workflow/plan-location.ts";
 /* @module ui/workspace/server/session-continuation */
@@ -2176,9 +2183,9 @@ export class WorkspaceSessionContinuationService {
     }
 
     /**
-     * @param {{ projectId: string, operationId: string, interactionId: string, runwieldSessionId: string }} options
+     * @param {LiveCodeReviewOptions} options
      */
-    async getLiveCodeReview(options) {
+    async liveCodeReviewRequest(options) {
         if (!this.operations.has(options.operationId) || this.operations.get(options.operationId)?.remote) {
             await this.liveSession(options.projectId, options.runwieldSessionId);
         }
@@ -2194,6 +2201,25 @@ export class WorkspaceSessionContinuationService {
             ? /** @type {Record<string, unknown>} */ (request.codeReview)
             : null;
         if (!codeReview || typeof codeReview.rawPatch !== "string") return null;
+        return request;
+    }
+
+    /**
+     * @param {LiveCodeReviewOptions} options
+     */
+    async getLiveCodeReviewCheckout(options) {
+        if (!await this.liveCodeReviewRequest(options)) return null;
+        const refresh = this.codeReviewRefreshContexts.get(`${options.operationId}:${options.interactionId}`);
+        return refresh ? { ...refresh } : null;
+    }
+
+    /**
+     * @param {LiveCodeReviewOptions} options
+     */
+    async getLiveCodeReview(options) {
+        const request = await this.liveCodeReviewRequest(options);
+        if (!request) return null;
+        const codeReview = request.codeReview;
         const refresh = this.codeReviewRefreshContexts.get(`${options.operationId}:${options.interactionId}`);
         let rawPatch = String(codeReview.rawPatch);
         if (refresh) {
