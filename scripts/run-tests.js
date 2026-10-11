@@ -113,6 +113,7 @@ async function createSandboxEnv(sandboxRoot, name, denoDir) {
         fsMkdir(join(home, ".wld"), { recursive: true }),
         fsMkdir(join(home, "AppData", "Roaming"), { recursive: true }),
         fsMkdir(join(home, "AppData", "Local"), { recursive: true }),
+        fsMkdir(join(home, "ProgramData"), { recursive: true }),
         fsMkdir(temp, { recursive: true }),
         fsMkdir(snipFiltersDir, { recursive: true }),
         fsMkdir(join(home, ".cache"), { recursive: true }),
@@ -120,7 +121,7 @@ async function createSandboxEnv(sandboxRoot, name, denoDir) {
     ]);
     await Promise.all(
         DENO_SNIP_FILTER_FILES.map((fileName) =>
-            fsCopyFile(join(REPO_ROOT, "src", "snip-filters", fileName), join(snipFiltersDir, fileName))
+            fsCopyFile(join(REPO_ROOT, "src", "snip-filters", fileName), join(snipFiltersDir, fileName)),
         ),
     );
     // WLD_TEST_SANDBOX_HOME is the marker src/constants.js refuses to run without.
@@ -129,6 +130,7 @@ async function createSandboxEnv(sandboxRoot, name, denoDir) {
         USERPROFILE: home,
         APPDATA: join(home, "AppData", "Roaming"),
         LOCALAPPDATA: join(home, "AppData", "Local"),
+        ProgramData: join(home, "ProgramData"),
         WLD_TEST_SANDBOX_HOME: home,
         MNEMOTECA_DB_PATH: join(home, "mnemoteca-test.db"),
         SNIP_DB_PATH: join(home, "snip-tracking.db"),
@@ -246,8 +248,13 @@ export function selectTestShard(files, shard) {
 function isPathAtOrBelow(root, file) {
     if (file === root) return true;
     const child = relative(root, file);
-    return child !== "" && child !== "." && !child.startsWith("..") && !child.startsWith("/") &&
-        !/^[A-Za-z]:[\\/]/.test(child);
+    return (
+        child !== "" &&
+        child !== "." &&
+        !child.startsWith("..") &&
+        !child.startsWith("/") &&
+        !/^[A-Za-z]:[\\/]/.test(child)
+    );
 }
 
 /**
@@ -290,7 +297,9 @@ async function runIsolatedSuite(sandboxRoot, denoDir, roots = [REPO_ROOT], exclu
         if (isPathAtOrBelow(REPO_ROOT, path)) {
             for (const file of repositoryFiles) {
                 if (
-                    isPathAtOrBelow(path, file) && !basename(file).startsWith("__debug") && TEST_FILE_PATTERN.test(file)
+                    isPathAtOrBelow(path, file) &&
+                    !basename(file).startsWith("__debug") &&
+                    TEST_FILE_PATTERN.test(file)
                 ) {
                     discovered.add(file);
                 }
@@ -320,9 +329,10 @@ async function runIsolatedSuite(sandboxRoot, denoDir, roots = [REPO_ROOT], exclu
     // independent files in flight to use the machine, with an explicit override
     // for smaller CI runners and concurrent local workloads.
     const configured = Number(process.env["WLD_TEST_CONCURRENCY"] || "");
-    const concurrency = Number.isFinite(configured) && configured > 0
-        ? Math.max(1, Math.floor(configured))
-        : Math.max(1, Math.min(navigator.hardwareConcurrency || 4, 8));
+    const concurrency =
+        Number.isFinite(configured) && configured > 0
+            ? Math.max(1, Math.floor(configured))
+            : Math.max(1, Math.min(navigator.hardwareConcurrency || 4, 8));
     const queue = [...files];
     /** @type {Array<{ file: string, failureLogPath: string }>} */
     const failures = [];
@@ -346,9 +356,17 @@ async function runIsolatedSuite(sandboxRoot, denoDir, roots = [REPO_ROOT], exclu
                 if (process.env[key] === "1") env[key] = "1";
             }
             if (process.versions.bun) {
-                for (
-                    const key of ["PATH", "SystemRoot", "WINDIR", "COMSPEC", "PATHEXT", "LANG", "LC_ALL", "TERM", "TZ"]
-                ) {
+                for (const key of [
+                    "PATH",
+                    "SystemRoot",
+                    "WINDIR",
+                    "COMSPEC",
+                    "PATHEXT",
+                    "LANG",
+                    "LC_ALL",
+                    "TERM",
+                    "TZ",
+                ]) {
                     if (process.env[key]) env[key] = process.env[key];
                 }
             }
@@ -357,26 +375,26 @@ async function runIsolatedSuite(sandboxRoot, denoDir, roots = [REPO_ROOT], exclu
             if (goldenFixtureRoot) env.WLD_GOLDEN_FIXTURE_ROOT = goldenFixtureRoot;
             slotRuns += 1;
             const reportArgs = options.reportDir
-                ? (process.versions.bun
+                ? process.versions.bun
                     ? [
-                        "--reporter=junit",
-                        `--reporter-outfile=${join(options.reportDir, `${name.replace(/[^a-zA-Z0-9.-]/g, "_")}.xml`)}`,
-                    ]
-                    : ["--junit-path", join(options.reportDir, `${name.replace(/[^a-zA-Z0-9.-]/g, "_")}.xml`)])
+                          "--reporter=junit",
+                          `--reporter-outfile=${join(options.reportDir, `${name.replace(/[^a-zA-Z0-9.-]/g, "_")}.xml`)}`,
+                      ]
+                    : ["--junit-path", join(options.reportDir, `${name.replace(/[^a-zA-Z0-9.-]/g, "_")}.xml`)]
                 : [];
             const testArgs = process.versions.bun
                 ? [
-                    "test",
-                    "--no-env-file",
-                    "--no-install",
-                    "--no-orphans",
-                    "--preload",
-                    join(REPO_ROOT, "scripts", "bun-test-sandbox.ts"),
-                    "--timeout",
-                    String(TEST_FILE_TIMEOUT_MS),
-                    ...reportArgs,
-                    file,
-                ]
+                      "test",
+                      "--no-env-file",
+                      "--no-install",
+                      "--no-orphans",
+                      "--preload",
+                      join(REPO_ROOT, "scripts", "bun-test-sandbox.ts"),
+                      "--timeout",
+                      String(TEST_FILE_TIMEOUT_MS),
+                      ...reportArgs,
+                      file,
+                  ]
                 : ["test", "-A", "--no-check", "--node-modules-dir=manual", "--quiet", ...reportArgs, file];
             const result = await runBoundedTest(testArgs, {
                 command: process.execPath,
@@ -452,10 +470,11 @@ export async function main(args = process.argv.slice(2)) {
     // Deliberately do not call Deno.exit() inside try/finally: it terminates without
     // running finally blocks, which left ~600MB of sandboxes behind per run.
     let exitCode = 0;
-    const suite = runnerArgs.some((arg) => arg.includes("src/ui/tui/golden-scenarios")) &&
-            !excludedPaths.some((path) => path.endsWith("src/ui/tui/golden-scenarios"))
-        ? "golden"
-        : "tests";
+    const suite =
+        runnerArgs.some((arg) => arg.includes("src/ui/tui/golden-scenarios")) &&
+        !excludedPaths.some((path) => path.endsWith("src/ui/tui/golden-scenarios"))
+            ? "golden"
+            : "tests";
     const reportsRoot = process.env["WLD_TEST_SANDBOX_HOME"] ? sandboxRoot : join(REPO_ROOT, ".ci-cache");
     const suffix = shard ? `-${shard.replace("/", "-of-")}` : "";
     const reportDir = requestedReportDir || join(reportsRoot, `${suite}${suffix}-report`);
@@ -487,8 +506,8 @@ export async function main(args = process.argv.slice(2)) {
             // Grant full permissions unless the caller passed their own permission
             // flags — `-A` conflicts with explicit `--allow-*` grants, so it cannot
             // be injected unconditionally. `--deny-*` narrows allow-all safely.
-            const hasPermissionFlags = runnerArgs.some((arg) =>
-                arg === "-A" || arg === "--allow-all" || arg.startsWith("--allow-")
+            const hasPermissionFlags = runnerArgs.some(
+                (arg) => arg === "-A" || arg === "--allow-all" || arg.startsWith("--allow-"),
             );
             const testArgs = hasPermissionFlags ? runnerArgs : ["-A", ...runnerArgs];
             // Match the full-suite path (runIsolatedSuite) and every task invocation

@@ -257,10 +257,27 @@ test("Claude CLI parser preserves line breaks in plain assistant stdout", async 
     const deltas: string[] = [];
     const result = await parseClaudeCliStream(streamFromText("First line\nSecond line\nThird line"), {
         onDelta: (delta) => deltas.push(delta.text),
-        isTerminalAccepted: () => true,
     });
     assertEquals(deltas, ["First line", "\nSecond line", "\nThird line"]);
     assertEquals(result.text, "First line\nSecond line\nThird line");
+});
+
+test("Claude CLI parser ignores buffered stdout after an accepted terminal signal", async () => {
+    const deltas: string[] = [];
+    let accepted = false;
+    const result = await parseClaudeCliStream(
+        streamFromText("Visible reply\npost-terminal prose\n{malformed-after-terminal"),
+        {
+            onDelta: (delta) => {
+                deltas.push(delta.text);
+                accepted = true;
+            },
+            isTerminalAccepted: () => accepted,
+        },
+    );
+    assertEquals(deltas, ["Visible reply"]);
+    assertEquals(result.text, "Visible reply");
+    assertEquals(result.metadata.isError, false);
 });
 
 test("Claude CLI parser separates streamed assistant updates across tool calls", async () => {

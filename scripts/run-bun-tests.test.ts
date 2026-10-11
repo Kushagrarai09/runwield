@@ -22,8 +22,8 @@ function run(args: string[], extraEnv: Record<string, string> = {}): Promise<Com
             stdio: ["ignore", "pipe", "pipe"],
         });
         let output = "";
-        child.stdout.on("data", (chunk) => output += chunk.toString());
-        child.stderr.on("data", (chunk) => output += chunk.toString());
+        child.stdout.on("data", (chunk) => (output += chunk.toString()));
+        child.stderr.on("data", (chunk) => (output += chunk.toString()));
         child.on("error", reject);
         child.on("close", (code) => resolve({ code, output }));
     });
@@ -38,6 +38,8 @@ test("each file has a fresh process and private state", () => {
     const home = process.env.HOME;
     equal(process.env.WLD_TEST_SANDBOX_HOME, home);
     equal(process.env.USERPROFILE, home);
+    equal(process.env.ProgramData, join(home, "ProgramData"));
+    equal(existsSync(process.env.ProgramData), true);
     equal(process.env.MNEMOTECA_DB_PATH, join(home, "mnemoteca-test.db"));
     equal(process.env.OPENAI_API_KEY, undefined);
     equal(process.env.WLD_TEST_SSHFS, "1");
@@ -72,37 +74,44 @@ async function readReport(output: string): Promise<Report> {
 }
 
 for (const concurrency of [1, 2]) {
-    test(`Bun runner isolates every file with ${concurrency} workers and removes successful sandboxes`, {
-        skip: !versions.bun,
-    }, async () => {
-        const fixture = await mkdtemp(join(REPO_ROOT, ".ci-cache", "bun-runner-fixture-"));
-        try {
-            const files = [join(fixture, "first.test.ts"), join(fixture, "second.test.ts")];
-            await Promise.all(files.map((file) => writeFile(file, isolatedCase)));
-            const result = await run([RUNNER, ...files], {
-                WLD_TEST_CONCURRENCY: String(concurrency),
-                OPENAI_API_KEY: "fixture-secret-never-forward",
-                WLD_TEST_SSHFS: "1",
-                WLD_TEST_SSHFS_STALL: "1",
-            });
-            equal(result.code, 0, result.output);
-            const report = await readReport(result.output);
-            equal(report.results.length, 2);
-            const states: IsolatedState[] = report.results.map((entry) =>
-                JSON.parse(/ISOLATED_STATE=(.+)/.exec(entry.output)?.[1] || "null")
-            );
-            notEqual(states[0].home, states[1].home);
-            notEqual(states[0].pid, states[1].pid);
-            notEqual(states[0].tmp, states[1].tmp);
-            for (const state of states) {
-                await readFile(join(state.home, "claimed")).then(() => {
-                    throw new Error("Successful sandbox leaked");
-                }, (error) => equal(error.code, "ENOENT"));
+    test(
+        `Bun runner isolates every file with ${concurrency} workers and removes successful sandboxes`,
+        {
+            skip: !versions.bun,
+        },
+        async () => {
+            const fixture = await mkdtemp(join(REPO_ROOT, ".ci-cache", "bun-runner-fixture-"));
+            try {
+                const files = [join(fixture, "first.test.ts"), join(fixture, "second.test.ts")];
+                await Promise.all(files.map((file) => writeFile(file, isolatedCase)));
+                const result = await run([RUNNER, ...files], {
+                    WLD_TEST_CONCURRENCY: String(concurrency),
+                    OPENAI_API_KEY: "fixture-secret-never-forward",
+                    WLD_TEST_SSHFS: "1",
+                    WLD_TEST_SSHFS_STALL: "1",
+                });
+                equal(result.code, 0, result.output);
+                const report = await readReport(result.output);
+                equal(report.results.length, 2);
+                const states: IsolatedState[] = report.results.map((entry) =>
+                    JSON.parse(/ISOLATED_STATE=(.+)/.exec(entry.output)?.[1] || "null"),
+                );
+                notEqual(states[0].home, states[1].home);
+                notEqual(states[0].pid, states[1].pid);
+                notEqual(states[0].tmp, states[1].tmp);
+                for (const state of states) {
+                    await readFile(join(state.home, "claimed")).then(
+                        () => {
+                            throw new Error("Successful sandbox leaked");
+                        },
+                        (error) => equal(error.code, "ENOENT"),
+                    );
+                }
+            } finally {
+                await rm(fixture, { recursive: true, force: true });
             }
-        } finally {
-            await rm(fixture, { recursive: true, force: true });
-        }
-    });
+        },
+    );
 }
 
 test("Bun direct tests are rejected before executing the body", { skip: !versions.bun }, async () => {

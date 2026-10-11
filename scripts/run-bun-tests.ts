@@ -38,20 +38,24 @@ async function isolatedEnvironment(home: string): Promise<Record<string, string>
         XDG_DATA_HOME: join(home, ".local", "share"),
         APPDATA: join(home, "AppData", "Roaming"),
         LOCALAPPDATA: join(home, "AppData", "Local"),
+        ProgramData: join(home, "ProgramData"),
         TMPDIR: join(home, "tmp"),
         TEMP: join(home, "tmp"),
         TMP: join(home, "tmp"),
     });
-    await Promise.all([
-        home,
-        join(home, ".wld"),
-        childEnv.XDG_CONFIG_HOME,
-        childEnv.XDG_CACHE_HOME,
-        childEnv.XDG_DATA_HOME,
-        childEnv.APPDATA,
-        childEnv.LOCALAPPDATA,
-        childEnv.TMPDIR,
-    ].map((path) => mkdir(path, { recursive: true })));
+    await Promise.all(
+        [
+            home,
+            join(home, ".wld"),
+            childEnv.XDG_CONFIG_HOME,
+            childEnv.XDG_CACHE_HOME,
+            childEnv.XDG_DATA_HOME,
+            childEnv.APPDATA,
+            childEnv.LOCALAPPDATA,
+            childEnv.ProgramData,
+            childEnv.TMPDIR,
+        ].map((path) => mkdir(path, { recursive: true })),
+    );
     return childEnv;
 }
 
@@ -59,31 +63,35 @@ async function runFile(file: string, home: string, reportDir: string, timeoutMs:
     const start = performance.now();
     const childEnv = await isolatedEnvironment(home);
     return await new Promise<TestResult>((resolveResult) => {
-        const child = spawn(execPath, [
-            "test",
-            "--path-ignore-patterns=third_party/**",
-            "--no-env-file",
-            "--no-install",
-            "--no-orphans",
-            "--timeout",
-            String(timeoutMs),
-            `./${relative(REPO_ROOT, file).replaceAll("\\", "/")}`,
-        ], {
-            cwd: REPO_ROOT,
-            env: childEnv,
-            stdio: ["ignore", "pipe", "pipe"],
-        });
+        const child = spawn(
+            execPath,
+            [
+                "test",
+                "--path-ignore-patterns=third_party/**",
+                "--no-env-file",
+                "--no-install",
+                "--no-orphans",
+                "--timeout",
+                String(timeoutMs),
+                `./${relative(REPO_ROOT, file).replaceAll("\\", "/")}`,
+            ],
+            {
+                cwd: REPO_ROOT,
+                env: childEnv,
+                stdio: ["ignore", "pipe", "pipe"],
+            },
+        );
         let output = "";
         let timedOut = false;
-        child.stdout.setEncoding("utf8").on("data", (chunk: string) => output += chunk);
-        child.stderr.setEncoding("utf8").on("data", (chunk: string) => output += chunk);
+        child.stdout.setEncoding("utf8").on("data", (chunk: string) => (output += chunk));
+        child.stderr.setEncoding("utf8").on("data", (chunk: string) => (output += chunk));
         let forcedKill: ReturnType<typeof setTimeout> | undefined;
         const timer = setTimeout(() => {
             timedOut = true;
             child.kill("SIGTERM");
             forcedKill = setTimeout(() => child.kill("SIGKILL"), 2_000);
         }, timeoutMs);
-        child.on("error", (error) => output += `${error.message}\n`);
+        child.on("error", (error) => (output += `${error.message}\n`));
         child.on("close", (code) => {
             clearTimeout(timer);
             clearTimeout(forcedKill);
@@ -108,14 +116,16 @@ export async function main(args: string[] = argv.slice(2)): Promise<number> {
         : JSON.parse(await readFile(new URL("./bun-test-files.json", import.meta.url), "utf8"));
     if (!selected.length) throw new Error("No Bun tests selected.");
     const files = [
-        ...new Set(selected.map((file) => {
-            const path = resolve(REPO_ROOT, file);
-            const child = relative(REPO_ROOT, path);
-            if (child.startsWith("..") || isAbsolute(child) || !/[._]test\.(?:[cm]?[jt]sx?)$/.test(file)) {
-                throw new Error(`Expected an in-repository test file, got ${file}`);
-            }
-            return path;
-        })),
+        ...new Set(
+            selected.map((file) => {
+                const path = resolve(REPO_ROOT, file);
+                const child = relative(REPO_ROOT, path);
+                if (child.startsWith("..") || isAbsolute(child) || !/[._]test\.(?:[cm]?[jt]sx?)$/.test(file)) {
+                    throw new Error(`Expected an in-repository test file, got ${file}`);
+                }
+                return path;
+            }),
+        ),
     ];
     const requested = Number(env.WLD_TEST_CONCURRENCY || 8);
     if (!Number.isSafeInteger(requested) || requested < 1) {
@@ -135,17 +145,19 @@ export async function main(args: string[] = argv.slice(2)): Promise<number> {
     let next = 0;
     let failed = false;
     try {
-        const workers = await Promise.allSettled(Array.from({ length: Math.min(requested, files.length) }, async () => {
-            while (next < files.length) {
-                const index = next++;
-                const result = await runFile(files[index], join(root, String(index)), reportDir, timeoutMs);
-                results.push(result);
-                if (result.code !== 0) {
-                    failed = true;
-                    console.error(result.output);
+        const workers = await Promise.allSettled(
+            Array.from({ length: Math.min(requested, files.length) }, async () => {
+                while (next < files.length) {
+                    const index = next++;
+                    const result = await runFile(files[index], join(root, String(index)), reportDir, timeoutMs);
+                    results.push(result);
+                    if (result.code !== 0) {
+                        failed = true;
+                        console.error(result.output);
+                    }
                 }
-            }
-        }));
+            }),
+        );
         const rejected = workers.filter((worker) => worker.status === "rejected");
         if (rejected.length) {
             failed = true;

@@ -926,3 +926,15 @@ Five additional native fixture corrections pass Bun and Deno (80.9 seconds), plu
 types/lint and independent Spec/Standards review. Workspace tests close both search and
 Session services before removing databases, the no-home case clears all Windows fallback
 variables, and real Git Bash assertions convert MSYS paths at the process boundary.
+
+The completed ARM64 source run at `17eb7c790` passes 603/649 files (150/163,
+149/162, 149/162, 155/162), compared with 538/649 previously. Both native package
+lanes pass. Full source qualification remains blocked; retained failures guide the next run.
+
+The next five-file protocol correction creates private ProgramData directories in both
+isolated runners: Windows OpenSSH requires that variable before initializing stdio.
+Claude stream parsing now ignores buffered output after a lifecycle signal is accepted,
+independent of platform process-kill latency. Five affected files pass Bun and Deno
+(5.9 seconds), types/lint pass, and both independent review axes approve. Removing the
+terminal gate makes the new deterministic buffered-output regression fail; restoring it
+passes. Native SFTP startup and buffered-output behavior await the next Windows run.
