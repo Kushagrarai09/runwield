@@ -11,11 +11,7 @@ import { persistThinkingLevel } from "./chat-session.ts";
 
 const LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 
-async function waitFor(
-    predicate: () => boolean,
-    description: string,
-    timeoutMs = 8_000,
-): Promise<void> {
+async function waitFor(predicate: () => boolean, description: string, timeoutMs = 8_000): Promise<void> {
     const startedAt = Date.now();
     while (Date.now() - startedAt < timeoutMs) {
         if (predicate()) return;
@@ -44,9 +40,7 @@ test("measure shift+tab thinking-level latency before and after activation", asy
             if (!projectRoot) throw new Error("missing cwd");
 
             const levelIndex = () =>
-                LEVELS.indexOf(
-                    runtime.getSessionSnapshot(sessionId)?.thinkingLevel as typeof LEVELS[number],
-                );
+                LEVELS.indexOf(runtime.getSessionSnapshot(sessionId)?.thinkingLevel as (typeof LEVELS)[number]);
 
             const pressShiftTabAndTime = async (label: string): Promise<number> => {
                 const expected = LEVELS[(levelIndex() + 1) % LEVELS.length];
@@ -96,7 +90,8 @@ test("measure shift+tab thinking-level latency before and after activation", asy
                 () => typeof runtime.getSessionSnapshot(sessionId)?.sessionManagerId === "string",
                 "session activation (sessionManagerId present)",
             );
-            await composition.waitForIdle();
+            // Cold session activation includes storage and provider setup, outside the latency measurement.
+            await composition.waitForIdle(15_000);
             console.log("[TIMING] session is now active:", runtime.getSessionSnapshot(sessionId)?.sessionManagerId);
 
             // --- after activation ---

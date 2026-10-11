@@ -191,7 +191,7 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>) {
                 prior[index] === undefined ? delete process.env[key] : (process.env[key] = prior[index]!),
             );
             __resetSettingsForTests();
-            await fsRm(temp, { recursive: true });
+            await fsRm(temp, { recursive: true, maxRetries: 10, retryDelay: 50 });
         }
     });
 }

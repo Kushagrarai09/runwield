@@ -193,6 +193,7 @@ test("TUI caught export write error settles the built-in as failed", async () =>
         await setCustomSetting("workflowMetrics", true, "project", projectRoot);
         await fsWriteFile(join(projectRoot, "not-a-directory"), "Preserve this file");
         await handleSlashCommand(context("/export not-a-directory/session.jsonl"));
+        await drainWorkflowMetrics();
         const rows = (await fsReadFile(getWorkflowMetricsFilePath(projectRoot), "utf8"))
             .trim()
             .split("\n")
