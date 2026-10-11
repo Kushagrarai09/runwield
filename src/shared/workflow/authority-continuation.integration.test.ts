@@ -1,6 +1,6 @@
+import { makeReadOnlyDirectoryFixture } from "../../testing/read-only-directory-fixture.ts";
 import { test } from "node:test";
 import {
-    chmod as fsChmod,
     mkdtemp as fsMkdtemp,
     readdir as fsReaddir,
     readFile as fsReadFile,
@@ -98,7 +98,7 @@ test("missing execution document cannot redirect a lifecycle write into primary"
         await assertRejects(() =>
             savePlanBodyById(root, "demo", "# Must not overwrite primary\n", body.bodyHash, {
                 expectedRevision: body.revision,
-            })
+            }),
         );
         await assertRejects(() =>
             recordPlanEvent({
@@ -106,7 +106,7 @@ test("missing execution document cannot redirect a lifecycle write into primary"
                 planName: "demo",
                 event: "plan_held",
                 currentStatus: "ready_for_work",
-            })
+            }),
         );
         await assertRejects(() => resolvePlanWithPrimaryRecovery(root, "demo"));
         assertEquals(await fsReadFile(primary.path, "utf8"), primary.markdown);
@@ -183,16 +183,25 @@ for (const retired of [false, true]) {
                 await updateEntry(root, "current", { status: "abandoned" });
                 const plan = await loadPlan(tree, "demo");
                 assert(plan);
-                await updatePlanFrontMatter(tree, "demo", { documentWorktreeId: "current" }, {}, {
-                    expectedRevision: plan.revision,
-                });
+                await updatePlanFrontMatter(
+                    tree,
+                    "demo",
+                    { documentWorktreeId: "current" },
+                    {},
+                    {
+                        expectedRevision: plan.revision,
+                    },
+                );
             }
             const primary = await loadPlan(root, "demo");
             assert(primary);
             await setStatus(tree, "verified");
             await archivePlan(root, "demo");
             await restoreArchivedPlan(root, "demo", { to: "renamed" });
-            assertEquals((await listPlans(root)).map((plan) => plan.name), ["renamed"]);
+            assertEquals(
+                (await listPlans(root)).map((plan) => plan.name),
+                ["renamed"],
+            );
             const selected = await resolveWorkflowPlanLocation(root, "renamed");
             assertEquals(selected.plan?.attrs.planId, "demo");
             assertEquals(selected.documentRoot, tree);
@@ -201,7 +210,10 @@ for (const retired of [false, true]) {
             await archivePlan(root, "renamed");
             assertEquals((await listPlans(root)).length, 0);
             await restoreArchivedPlan(root, "demo");
-            assertEquals((await listPlans(root)).map((plan) => plan.name), ["renamed"]);
+            assertEquals(
+                (await listPlans(root)).map((plan) => plan.name),
+                ["renamed"],
+            );
             assertEquals(await fsReadFile(primary.path, "utf8"), primary.markdown);
         });
     });
@@ -216,6 +228,7 @@ for (const failure of ["name_collision", "archive_unlink", "publication_started"
             await archivePlan(root, "demo");
             const archivedPath = join(tree, "docs/plans/archived/demo.md");
             const before = await fsReadFile(archivedPath, "utf8");
+            let restorePermissions: (() => Promise<void>) | undefined;
             if (failure === "name_collision") {
                 await savePlan(root, "renamed", "# Different Plan\n", { planId: "other", status: "draft" });
             } else if (failure === "publication_started") {
@@ -234,7 +247,7 @@ for (const failure of ["name_collision", "archive_unlink", "publication_started"
                     }),
                 });
             } else {
-                await fsChmod(join(tree, "docs/plans/archived"), 0o555);
+                restorePermissions = await makeReadOnlyDirectoryFixture(join(tree, "docs/plans/archived"));
             }
             try {
                 await assertRejects(() => restoreArchivedPlan(root, "demo", { to: "renamed" }));
@@ -242,7 +255,7 @@ for (const failure of ["name_collision", "archive_unlink", "publication_started"
                 assertEquals(await loadPlan(tree, "renamed"), null);
                 assertEquals((await findById(root, "current"))?.planName, "demo");
             } finally {
-                await fsChmod(join(tree, "docs/plans/archived"), 0o755);
+                await restorePermissions?.();
             }
         });
     });

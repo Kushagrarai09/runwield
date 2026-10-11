@@ -21,8 +21,9 @@ import { createSingleEditToolDefinition } from "../edit.js";
  */
 async function executeEdit(tool, params) {
     const execute =
-        /** @type {(id: string, params: unknown, signal: AbortSignal, onUpdate: () => void, ctx: object) => Promise<any>} */ (tool
-            .execute);
+        /** @type {(id: string, params: unknown, signal: AbortSignal, onUpdate: () => void, ctx: object) => Promise<any>} */ (
+            tool.execute
+        );
     return await execute("edit-call-1", params, new AbortController().signal, () => {}, {});
 }
 
@@ -76,13 +77,16 @@ test("edit: propagates permission errors without file contents", async () => {
 
     try {
         const tool = createSingleEditToolDefinition(dir);
-        const error = await assertRejects(() =>
-            executeEdit(tool, {
-                path: filePath,
-                oldText: "Line 2: beta",
-                newText: "Line 2: replaced",
-            }), Error);
-        assertMatch(error.message, /permission denied|EACCES/i);
+        const error = await assertRejects(
+            () =>
+                executeEdit(tool, {
+                    path: filePath,
+                    oldText: "Line 2: beta",
+                    newText: "Line 2: replaced",
+                }),
+            Error,
+        );
+        assertMatch(error.message, /permission denied|EACCES|EPERM/i);
         assertNotMatch(error.message, /Line 1: alpha|Line 4: delta|File exists on disk/);
         assertEquals(await fsReadFile(filePath, "utf8"), originalContent);
     } finally {
@@ -105,12 +109,15 @@ test("edit: failed match in a large file does not dump source", async () => {
 
     try {
         const tool = createSingleEditToolDefinition(dir);
-        const error = await assertRejects(() =>
-            executeEdit(tool, {
-                path: filePath,
-                oldText: "This text is absent from the file",
-                newText: "replacement",
-            }), Error);
+        const error = await assertRejects(
+            () =>
+                executeEdit(tool, {
+                    path: filePath,
+                    oldText: "This text is absent from the file",
+                    newText: "replacement",
+                }),
+            Error,
+        );
         assertMatch(error.message, /not find|not found|match/i);
         assertNotMatch(error.message, /content data here|Showing first|File exists on disk/);
         assertEquals(await fsReadFile(filePath, "utf8"), originalContent);
@@ -132,7 +139,8 @@ test("edit: propagates error when file does not exist", async () => {
         fail("Expected an error but edit succeeded");
     } catch (err) {
         const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
-        const ok = msg.includes("could not edit file") ||
+        const ok =
+            msg.includes("could not edit file") ||
             msg.includes("cannot") ||
             msg.includes("not found") ||
             msg.includes("no such file");

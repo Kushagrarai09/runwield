@@ -1,8 +1,9 @@
+import { makeReadOnlyDirectoryFixture } from "../../testing/read-only-directory-fixture.ts";
 import { collectProcessOutput } from "../../testing/subprocess-output.ts";
 import { spawnNativeProcess } from "../foreground-process.ts";
 import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
 import { test } from "node:test";
-import { chmod as fsChmod, mkdtemp as fsMkdtemp, rm as fsRm } from "node:fs/promises";
+import { mkdtemp as fsMkdtemp, rm as fsRm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import nodeProcess from "node:process";
 import { assert, assertEquals, assertRejects } from "@std/assert";
@@ -124,7 +125,10 @@ for (const target of ["demo", "document-plan"]) {
             assertEquals(archived.attrs.status, "verified");
             assertEquals(archived.fromPath, join(tree, "docs/plans/demo.md"));
             assertEquals(archived.toPath, join(tree, "docs/plans/archived/demo.md"));
-            assertEquals((await listPlans(root)).some((plan) => plan.name === "demo"), false);
+            assertEquals(
+                (await listPlans(root)).some((plan) => plan.name === "demo"),
+                false,
+            );
             assertEquals((await resolveWorkflowPlanLocation(root, "demo")).plan, null);
             const history = await listArchivedPlans(root);
             assertEquals(history.filter((plan) => plan.planId === "document-plan").length, 1);
@@ -147,7 +151,10 @@ for (const mode of ["single", "bulk"]) {
                     await runPlansArchiveCommand(
                         mode === "single" ? ["document-plan"] : ["--all", "--status", "verified"],
                     );
-                    assertEquals((await listPlans(root)).some((plan) => plan.name === "demo"), false);
+                    assertEquals(
+                        (await listPlans(root)).some((plan) => plan.name === "demo"),
+                        false,
+                    );
                     assertEquals((await listArchivedPlans(root))[0]?.path, join(tree, "docs/plans/archived/demo.md"));
                     await runPlansArchiveCommand(["restore", "document-plan"]);
                     assertEquals((await resolveWorkflowPlanLocation(root, "demo")).plan?.attrs.status, "verified");
@@ -165,6 +172,7 @@ test("failed collaboration document write rolls back controller revision and has
     const plansDir = join(root, "docs/plans");
     const original = "# Demo\n\n## Context\n\nOriginal.\n";
     const revised = "# Demo\n\n## Context\n\nRevised.\n";
+    let restorePermissions: (() => Promise<void>) | undefined;
     try {
         await savePlan(root, "demo", original, { planId: "demo-id", status: "draft" });
         await updatePlanCollaborationMetadata(
@@ -181,7 +189,7 @@ test("failed collaboration document write rolls back controller revision and has
         );
         const before = await loadPlan(root, "demo");
         assert(before);
-        await fsChmod(plansDir, 0o555);
+        restorePermissions = await makeReadOnlyDirectoryFixture(plansDir);
         await assertRejects(() =>
             updatePlanCollaborationMetadata(
                 root,
@@ -191,13 +199,13 @@ test("failed collaboration document write rolls back controller revision and has
                 },
                 COLLABORATION_LOCK_BYPASS.pull,
                 { body: revised },
-            )
+            ),
         );
         const after = await loadPlan(root, "demo");
         assertEquals(after?.body, before.body);
         assertEquals(after?.attrs.collaborationRevision, 1);
         assertEquals(after?.attrs.collaborationBodyHash, await hashPlanBody(original));
-        await fsChmod(plansDir, 0o755);
+        await restorePermissions?.();
         await updatePlanCollaborationMetadata(
             root,
             "demo",
@@ -210,7 +218,7 @@ test("failed collaboration document write rolls back controller revision and has
         assertEquals((await loadPlan(root, "demo"))?.body, revised);
         assertEquals((await loadPlan(root, "demo"))?.attrs.collaborationBodyHash, await hashPlanBody(revised));
     } finally {
-        await fsChmod(plansDir, 0o755);
+        await restorePermissions?.();
         await fsRm(root, { recursive: true });
     }
 });

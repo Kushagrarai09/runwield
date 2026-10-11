@@ -890,3 +890,11 @@ quoting for configured commands, including an executable path containing spaces.
 publication race fixture now prepends its Git wrapper inside Bash after shell initialization.
 Both affected test files pass Bun and Deno (Deno: 48.8 seconds); types/lint and independent
 Spec/Standards review pass. This follow-up awaits native qualification.
+
+Permission-recovery fixtures now use native Windows ACL denials inside disposable test
+directories and restore them before cleanup. POSIX keeps real chmod failures; no recovery
+cases were skipped. The edit-permission assertion accepts Windows EPERM while retaining
+its unchanged-file and no-content-disclosure checks. All three affected files pass Bun and
+Deno (13.4 seconds), types pass across 1,304 entries, and lint passes across 1,438 files.
+Independent Spec/Standards reviews approved the four changed paths. Actual native ACL
+behavior is pending the next Windows run.
