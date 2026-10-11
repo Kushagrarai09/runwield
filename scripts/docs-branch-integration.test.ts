@@ -53,7 +53,6 @@ async function copyTree(source: string, destination: string): Promise<void> {
 }
 
 async function buildDocs(work: string): Promise<string> {
-    await prepareDocsFixtureDependencies(work);
     await stagePublicDocs(work, join(work, "docs-site", "src", "content", "docs"));
     const output = await captureScriptProcess(process.execPath, {
         args: process.versions.deno
@@ -166,6 +165,8 @@ test("docs branch publishes Stable content, preserves corrections, and stops on 
         assertEquals(stableARelease.sourceRef === "v1.0.0", false);
         await run(work, "git", "merge-base", "--is-ancestor", stableARelease.sourceRef, "HEAD");
         await run(work, "git", "merge-base", "--is-ancestor", "v1.0.0", "HEAD");
+        // The fixture keeps the same frozen dependencies through every publication build.
+        await prepareDocsFixtureDependencies(work);
         const stableAHtml = await buildDocs(work);
         assertStringIncludes(stableAHtml, "STABLE-A");
         assertStringIncludes(stableAHtml, "v1.0.0");
