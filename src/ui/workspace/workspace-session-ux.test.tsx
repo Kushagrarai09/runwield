@@ -943,6 +943,152 @@ Deno.test("all workflow tools remain expanded outside routine activity, with acc
     assertEquals(artifactHtml.includes("Open Session findings"), true);
 });
 
+Deno.test("Plan deviation card and pair programming card render as Markdown with correct newlines", async () => {
+    const { workflowToolMarkdown, SessionTimeline } = await import("./components/SessionTimeline.jsx");
+    const { createElement } = await import("react");
+    const { renderToStaticMarkup } = await import("react-dom/server");
+
+    // 1. Plan deviation workflow card from structured details
+    const deviationFromDetails = reduceSessionEvents([{
+        type: "tool_end",
+        toolCallId: "dev-1",
+        toolName: "record_plan_deviation",
+        details: {
+            entry: {
+                supersededRequirement: "Keep monolithic router",
+                replacementRequirement: "Split router into sub-modules",
+                reason: "Improve testability",
+                approvedAt: "2026-10-11T12:00:00Z",
+            },
+        },
+    }]);
+    assertEquals(deviationFromDetails[0].kind, "workflow");
+    const mdDetails = workflowToolMarkdown(deviationFromDetails[0]);
+    assertEquals(mdDetails.includes("**Superseded requirement:**\n\nKeep monolithic router"), true);
+    assertEquals(mdDetails.includes("**Replacement requirement:**\n\nSplit router into sub-modules"), true);
+    assertEquals(mdDetails.includes("**Reason:**\n\nImprove testability"), true);
+    assertEquals(mdDetails.includes("*Approved at:* 2026-10-11T12:00:00Z"), true);
+    const htmlDeviationDetails = renderToStaticMarkup(createElement(SessionTimeline, { items: deviationFromDetails }));
+    assertEquals(htmlDeviationDetails.includes("<strong>Plan Deviation</strong>"), true);
+    assertEquals(
+        htmlDeviationDetails.includes('<strong class="quikdown-strong">Superseded requirement:</strong>'),
+        true,
+    );
+    assertEquals(
+        htmlDeviationDetails.includes('<strong class="quikdown-strong">Replacement requirement:</strong>'),
+        true,
+    );
+    assertEquals(htmlDeviationDetails.includes('<strong class="quikdown-strong">Reason:</strong>'), true);
+    assertEquals(htmlDeviationDetails.includes("<p>Keep monolithic router</p>"), true);
+    assertEquals(htmlDeviationDetails.includes("<p>Split router into sub-modules</p>"), true);
+
+    // 2. Plan deviation workflow card from prompt output string
+    const deviationFromString = reduceSessionEvents([{
+        type: "tool_end",
+        toolCallId: "dev-2",
+        toolName: "record_plan_deviation",
+        output:
+            "Plan Deviation recorded in the execution Plan. Reread the effective Plan projection and continue under this replacement.\n\n1. Superseded requirement: Single file\n   Replacement requirement: Multi file\n   Reason: Modular\n   Approved at: 2026-10-11T13:00:00Z",
+    }]);
+    const mdString = workflowToolMarkdown(deviationFromString[0]);
+    assertEquals(mdString.includes("**Superseded requirement:**\n\nSingle file"), true);
+    assertEquals(mdString.includes("**Replacement requirement:**\n\nMulti file"), true);
+    assertEquals(mdString.includes("**Reason:**\n\nModular"), true);
+    const htmlDeviationString = renderToStaticMarkup(createElement(SessionTimeline, { items: deviationFromString }));
+    assertEquals(
+        htmlDeviationString.includes('<strong class="quikdown-strong">Superseded requirement:</strong>'),
+        true,
+    );
+    assertEquals(htmlDeviationString.includes("<p>Single file</p>"), true);
+    assertEquals(
+        htmlDeviationString.includes('<strong class="quikdown-strong">Replacement requirement:</strong>'),
+        true,
+    );
+    assertEquals(htmlDeviationString.includes("<p>Multi file</p>"), true);
+
+    // 3. Pair programming workflow card from details
+    const pairFromDetails = reduceSessionEvents([{
+        type: "tool_end",
+        toolCallId: "pair-1",
+        toolName: "pair_checkpoint",
+        details: {
+            checkpointNumber: 2,
+            final: false,
+            summary: "Extracted database adapters.",
+            nextIncrement: "Wire migration tests.",
+            evidence: ["src/adapters/db.ts exists"],
+        },
+    }]);
+    const mdPairDetails = workflowToolMarkdown(pairFromDetails[0]);
+    assertEquals(mdPairDetails.includes("**Pair checkpoint 2.**"), true);
+    assertEquals(mdPairDetails.includes("**Summary**\n\nExtracted database adapters."), true);
+    assertEquals(mdPairDetails.includes("**Next increment:**\n\nWire migration tests."), true);
+    assertEquals(mdPairDetails.includes("- src/adapters/db.ts exists"), true);
+    const htmlPairDetails = renderToStaticMarkup(createElement(SessionTimeline, { items: pairFromDetails }));
+    assertEquals(htmlPairDetails.includes("<strong>Pair Checkpoint</strong>"), true);
+    assertEquals(htmlPairDetails.includes('<strong class="quikdown-strong">Pair checkpoint 2.</strong>'), true);
+    assertEquals(htmlPairDetails.includes('<strong class="quikdown-strong">Summary</strong>'), true);
+    assertEquals(htmlPairDetails.includes("<p>Extracted database adapters.</p>"), true);
+    assertEquals(htmlPairDetails.includes('<strong class="quikdown-strong">Next increment:</strong>'), true);
+    assertEquals(htmlPairDetails.includes("<p>Wire migration tests.</p>"), true);
+
+    // 4. Pair programming workflow card from output string
+    const pairFromString = reduceSessionEvents([{
+        type: "tool_end",
+        toolCallId: "pair-2",
+        toolName: "pair_checkpoint",
+        output:
+            "**Pair checkpoint 1.**\n\nThe folder rename and script updates are ready.\n\nNext increment: Update CI references and documentation.\n\nReply normally to ask a question, request a change, continue, stop, or switch to autonomous work.",
+    }]);
+    const htmlPairString = renderToStaticMarkup(createElement(SessionTimeline, { items: pairFromString }));
+    assertEquals(htmlPairString.includes('<strong class="quikdown-strong">Pair checkpoint 1.</strong>'), true);
+    assertEquals(htmlPairString.includes("<p>The folder rename and script updates are ready.</p>"), true);
+    assertEquals(htmlPairString.includes('<strong class="quikdown-strong">Next increment:</strong>'), true);
+    assertEquals(htmlPairString.includes("<p>Update CI references and documentation.</p>"), true);
+
+    // 5. Plan deviation interaction card
+    const deviationInteraction = reduceSessionEvents([{
+        type: "interaction_requested",
+        interactionId: "dev-confirm-1",
+        interactionType: "plan_deviation_confirmation",
+        prompt:
+            "Confirm this Plan Deviation before I treat it as authority.\n\nSuperseded requirement: Inline CSS styles\n\nReplacement requirement: Design system tokens\n\nReason: Consistent styling\n\nConfirmed text will be saved in the Plan and Work Record.",
+    }]);
+    assertEquals(deviationInteraction[0].kind, "interaction");
+    const htmlDeviationInteraction = renderToStaticMarkup(
+        createElement(SessionTimeline, { items: deviationInteraction }),
+    );
+    assertEquals(htmlDeviationInteraction.includes("<strong>Plan Deviation confirmation</strong>"), true);
+    assertEquals(htmlDeviationInteraction.includes('<div class="markdown-view">'), true);
+    assertEquals(
+        htmlDeviationInteraction.includes('<strong class="quikdown-strong">Superseded requirement:</strong>'),
+        true,
+    );
+    assertEquals(htmlDeviationInteraction.includes("<p>Inline CSS styles</p>"), true);
+    assertEquals(
+        htmlDeviationInteraction.includes('<strong class="quikdown-strong">Replacement requirement:</strong>'),
+        true,
+    );
+    assertEquals(htmlDeviationInteraction.includes("<p>Design system tokens</p>"), true);
+    assertEquals(htmlDeviationInteraction.includes('<strong class="quikdown-strong">Reason:</strong>'), true);
+    assertEquals(htmlDeviationInteraction.includes("<p>Consistent styling</p>"), true);
+
+    // 6. Pair programming interaction card
+    const pairInteraction = reduceSessionEvents([{
+        type: "interaction_requested",
+        interactionId: "pair-input-1",
+        interactionType: "pair_checkpoint",
+        prompt: "**Pair checkpoint 1.**\n\nStep 1 complete.\n\nNext increment: Step 2 verification.",
+    }]);
+    const htmlPairInteraction = renderToStaticMarkup(createElement(SessionTimeline, { items: pairInteraction }));
+    assertEquals(htmlPairInteraction.includes("<strong>Pair checkpoint</strong>"), true);
+    assertEquals(htmlPairInteraction.includes('<div class="markdown-view">'), true);
+    assertEquals(htmlPairInteraction.includes('<strong class="quikdown-strong">Pair checkpoint 1.</strong>'), true);
+    assertEquals(htmlPairInteraction.includes("<p>Step 1 complete.</p>"), true);
+    assertEquals(htmlPairInteraction.includes('<strong class="quikdown-strong">Next increment:</strong>'), true);
+    assertEquals(htmlPairInteraction.includes("<p>Step 2 verification.</p>"), true);
+});
+
 Deno.test("image-only user messages survive the browser timeline reducer", () => {
     const images = [{ base64: "aW1hZ2U=", mimeType: "image/png" }];
     const items = reduceSessionEvents([{ type: "user_message", messageId: "image", text: "", images }]);

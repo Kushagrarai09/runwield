@@ -177,8 +177,15 @@ Deno.test("TUI interaction adapter confirms Plan Deviations explicitly", async (
     });
 
     assertEquals(response, { outcome: "accepted", value: true });
-    assertEquals(prompt.includes("Plan Deviation confirmation"), true);
-    assertEquals(prompt.includes("Superseded requirement: Replace nav."), true);
+    assertEquals(
+        prompt,
+        "Plan Deviation confirmation\n\n" + [
+            "Confirm this Plan Deviation before I treat it as authority.",
+            "Superseded requirement: Replace nav.",
+            "Replacement requirement: Keep nav.",
+            "Confirmed text will be saved in the Plan and Work Record.",
+        ].join("\n"),
+    );
     assertEquals(options, [
         { value: "confirm", label: "Confirm Plan Deviation" },
         { value: "cancel", label: "Cancel; keep original" },
