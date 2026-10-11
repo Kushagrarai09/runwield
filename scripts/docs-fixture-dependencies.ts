@@ -26,7 +26,7 @@ export async function prepareDocsFixtureDependencies(root: string): Promise<void
             if (relativePath.startsWith("..") || resolve(store, relativePath) !== target) {
                 throw new Error(`Docs dependency is outside the frozen Bun store: ${path}`);
             }
-            const owner = relativePath.split("/")[0];
+            const owner = relativePath.split(sep)[0];
             if (visited.has(owner)) continue;
             visited.add(owner);
             await cp(join(store, owner), join(destination, owner), {

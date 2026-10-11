@@ -1,3 +1,4 @@
+import { bashFixturePath } from "./bash-fixture.ts";
 import { test } from "node:test";
 import { readFile as fsReadFile, rm as fsRm, stat as fsStat } from "node:fs/promises";
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
@@ -17,7 +18,7 @@ test("install.sh delegates missing Mnemoteca installs to the official installer"
             assertEquals(curlLog.split("raw.githubusercontent.com/gandazgul/mnemoteca/main/install.sh").length - 1, 1);
             const installerLog = await fsReadFile(fixture.mnemotecaInstallerLog, "utf8");
             assertStringIncludes(installerLog, "repo=gandazgul/mnemoteca");
-            assertStringIncludes(installerLog, `install_dir=${fixture.installDir}`);
+            assertStringIncludes(installerLog, `install_dir=${bashFixturePath(fixture.installDir)}`);
             assertStringIncludes(installerLog, `db_path=${join(fixture.root, "memory.db")}`);
             const stat = await fsStat(join(fixture.installDir, "mnemoteca"));
             assertEquals(stat.isFile(), true);

@@ -12,7 +12,7 @@ import {
  * Git worktree helpers for isolated plan execution.
  */
 
-import { basename, dirname, join } from "@std/path";
+import { basename, dirname, join, resolve } from "@std/path";
 import { getHomeDir, RUNWIELD_DIR_NAME, WORKTREE_BRANCH_PREFIX } from "../constants.js";
 import { encodeCwdForSessionDir } from "./session/root-session.js";
 import {
@@ -98,7 +98,7 @@ async function pathExists(path) {
  */
 async function isMergeInProgress(projectRoot) {
     const mergeHeadPath = (await runGit(projectRoot, ["rev-parse", "--git-path", "MERGE_HEAD"])).trim();
-    const absoluteMergeHeadPath = mergeHeadPath.startsWith("/") ? mergeHeadPath : join(projectRoot, mergeHeadPath);
+    const absoluteMergeHeadPath = resolve(projectRoot, mergeHeadPath);
     return await pathExists(absoluteMergeHeadPath);
 }
 

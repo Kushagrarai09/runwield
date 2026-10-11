@@ -1,3 +1,4 @@
+import { bashFixtureExecutable, bashFixturePath, quoteBashFixture } from "./bash-fixture.ts";
 import { delimiter } from "node:path";
 import { captureScriptProcess } from "./script-process.ts";
 import { tmpdir } from "node:os";
@@ -86,8 +87,10 @@ async function runShell(
     command: string,
     env: Record<string, string>,
 ): Promise<import("./script-process.ts").ScriptProcessOutput> {
-    return await captureScriptProcess("bash", {
-        args: ["-c", command],
+    // Git Bash prepends its own Git directory; restore the explicit boundary fixtures first.
+    const path = (env.PATH || process.env.PATH || "").split(delimiter).map(bashFixturePath).join(":");
+    return await captureScriptProcess(bashFixtureExecutable(), {
+        args: ["-c", `export PATH=${quoteBashFixture(path)}; ${command}`],
         cwd: getCwd(),
         env,
         clearEnv: false,

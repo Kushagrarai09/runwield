@@ -51,7 +51,7 @@ export const privateJsonFileCases = [
     {
         name: "private JSON replaces the inode and preserves readers of the previous document",
         run(root: string) {
-            const path = join(root, "manifest.json");
+            const path = join(root, "manifest 日本語 🐈.json");
             writeJsonAtomically(path, { generation: 1 });
             chmodSync(path, 0o644);
             const previous = openSync(path, "r");
@@ -65,7 +65,7 @@ export const privateJsonFileCases = [
                     ok(statSync(path).ino !== before.ino);
                     equal(statSync(path).mode & 0o777, 0o600);
                 }
-                deepStrictEqual(readdirSync(root), ["manifest.json"]);
+                deepStrictEqual(readdirSync(root), ["manifest 日本語 🐈.json"]);
             } finally {
                 closeSync(previous);
             }

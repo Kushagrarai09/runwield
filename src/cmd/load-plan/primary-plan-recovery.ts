@@ -54,7 +54,7 @@ async function normalizePlanArgument(projectRoot: string, planArg: string): Prom
     // even when that primary file is absent. Only genuinely external files bypass
     // controller selection.
     for (const root of [projectRoot, resolvePrimaryCheckoutRoot(projectRoot)]) {
-        const storedPath = relative(await canonicalFilePath(resolve(root, "docs/plans")), pathArgument);
+        const storedPath = relative(await canonicalFilePath(resolve(root, "docs/plans")), pathArgument).replaceAll("\\", "/");
         if (!isAbsolute(storedPath) && storedPath !== ".." && !storedPath.startsWith("../")) {
             planArg = storedPath;
             break;

@@ -1,5 +1,5 @@
 import { readFileSync as fsReadFileSync, type Stats, statSync as fsStatSync } from "node:fs";
-import { dirname, join, normalize } from "@std/path";
+import { dirname, join, resolve } from "@std/path";
 
 function isGitEntry(path: string): boolean {
     try {
@@ -36,7 +36,7 @@ export function resolvePrimaryCheckoutRoot(root: string): string {
     if (!match) return root;
 
     const rawGitDir = match[1].trim();
-    const gitDir = rawGitDir.startsWith("/") ? rawGitDir : normalize(join(root, rawGitDir));
+    const gitDir = resolve(root, rawGitDir);
     const primaryRoot = dirname(dirname(dirname(gitDir)));
     if (!isGitEntry(join(primaryRoot, ".git"))) return root;
     return primaryRoot;

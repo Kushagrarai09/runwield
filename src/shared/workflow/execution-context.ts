@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { captureForegroundProcess } from "../captured-process.ts";
 import { realpath as fsRealpath } from "node:fs/promises";
 import { effectiveDeliveryBranch } from "./plan-branch.ts";
@@ -538,10 +539,10 @@ async function resolveValidationExecutionContextInScope({
     const projectCommonDir = await runGit(projectRoot, ["rev-parse", "--git-common-dir"]);
     const worktreeCommonDir = await runGit(canonicalWorktreePath, ["rev-parse", "--git-common-dir"]);
     const projectCommonReal = await realPath(
-        projectCommonDir.startsWith("/") ? projectCommonDir : `${projectRoot}/${projectCommonDir}`,
+        resolve(projectRoot, projectCommonDir),
     );
     const worktreeCommonReal = await realPath(
-        worktreeCommonDir.startsWith("/") ? worktreeCommonDir : `${canonicalWorktreePath}/${worktreeCommonDir}`,
+        resolve(canonicalWorktreePath, worktreeCommonDir),
     );
     if (!projectCommonReal || !worktreeCommonReal || projectCommonReal !== worktreeCommonReal) {
         return blocked(

@@ -1,3 +1,4 @@
+import { bashFixtureExecutable, bashFixturePath, quoteBashFixture } from "./bash-fixture.ts";
 import { captureForegroundProcess } from "../src/shared/captured-process.ts";
 import { captureScriptProcess } from "./script-process.ts";
 import { tmpdir } from "node:os";
@@ -172,7 +173,7 @@ export async function createFixture(options = {}) {
         join(fixtureDir, "mnemoteca-install.sh"),
         `#!/usr/bin/env bash
 set -euo pipefail
-printf 'repo=%s\\ninstall_dir=%s\\ndb_path=%s\\n' "\${MNEMOTECA_REPO:-}" "\${INSTALL_DIR:-}" "\${MNEMOTECA_DB_PATH-unset}" >> '${mnemotecaInstallerLog}'
+printf 'repo=%s\\ninstall_dir=%s\\ndb_path=%s\\n' "\${MNEMOTECA_REPO:-}" "\${INSTALL_DIR:-}" "\${MNEMOTECA_DB_PATH-unset}" >> '${bashFixturePath(mnemotecaInstallerLog)}'
 ${
             options.mnemotecaInstallerPrompts
                 ? `printf 'Mnemoteca upgrade prompt: '
@@ -181,7 +182,7 @@ for _ in 1 2 3; do
   IFS= read -r answer || answer=
   [ -n "$answer" ] && break
 done
-printf 'answer=%s\\n' "$answer" >> '${mnemotecaInstallerLog}'
+printf 'answer=%s\\n' "$answer" >> '${bashFixturePath(mnemotecaInstallerLog)}'
 `
                 : ""
         }${options.mnemotecaInstallerFails ? "exit 42\n" : ""}${
@@ -210,7 +211,7 @@ while [[ $# -gt 0 ]]; do
     *) url="$1"; shift ;;
   esac
 done
-printf '%s\n' "$url" >> '${curlLog}'
+printf '%s\n' "$url" >> '${bashFixturePath(curlLog)}'
 latest_api_failures=' ${(options.latestApiFailsFor ?? []).join(" ")} '
 release_api_failures=' ${(options.releaseApiFailsFor ?? []).join(" ")} '
 case "$url" in
@@ -236,27 +237,27 @@ case "$url" in
   *github.com/edouard-claude/snip/releases/latest*) effective_url='https://github.com/edouard-claude/snip/releases/tag/${VERSIONS.snip}' ;;
   *api.github.com/repos/gandazgul/runwield/releases/tags/*)
     [[ "$release_api_failures" == *' runwield '* ]] && exit 22
-    file='${join(fixtureDir, "wld-release.json")}'
+    file='${bashFixturePath(join(fixtureDir, "wld-release.json"))}'
     ;;
   *api.github.com/repos/1broseidon/cymbal/releases/tags/*)
     [[ "$release_api_failures" == *' cymbal '* ]] && exit 22
-    file='${join(fixtureDir, "cymbal-release.json")}'
+    file='${bashFixturePath(join(fixtureDir, "cymbal-release.json"))}'
     ;;
   *api.github.com/repos/1broseidon/ketch/releases/tags/*)
     [[ "$release_api_failures" == *' ketch '* ]] && exit 22
-    file='${join(fixtureDir, "ketch-release.json")}'
+    file='${bashFixturePath(join(fixtureDir, "ketch-release.json"))}'
     ;;
   *api.github.com/repos/edouard-claude/snip/releases/tags/*)
     [[ "$release_api_failures" == *' snip '* ]] && exit 22
-    file='${join(fixtureDir, "snip-release.json")}'
+    file='${bashFixturePath(join(fixtureDir, "snip-release.json"))}'
     ;;
-  *github.com/1broseidon/cymbal/releases/expanded_assets/*) file='${join(fixtureDir, "cymbal-expanded-assets.html")}' ;;
-  *github.com/1broseidon/ketch/releases/expanded_assets/*) file='${join(fixtureDir, "ketch-expanded-assets.html")}' ;;
-  *github.com/edouard-claude/snip/releases/expanded_assets/*) file='${join(fixtureDir, "snip-expanded-assets.html")}' ;;
-  *raw.githubusercontent.com/gandazgul/mnemoteca/main/install.sh) file='${join(fixtureDir, "mnemoteca-install.sh")}' ;;
-  */SHA256SUMS) file='${join(fixtureDir, "SHA256SUMS")}' ;;
-  */checksums.txt) file='${join(fixtureDir, "checksums.txt")}' ;;
-  *) file='${fixtureDir}'/"$(basename "$url")" ;;
+  *github.com/1broseidon/cymbal/releases/expanded_assets/*) file='${bashFixturePath(join(fixtureDir, "cymbal-expanded-assets.html"))}' ;;
+  *github.com/1broseidon/ketch/releases/expanded_assets/*) file='${bashFixturePath(join(fixtureDir, "ketch-expanded-assets.html"))}' ;;
+  *github.com/edouard-claude/snip/releases/expanded_assets/*) file='${bashFixturePath(join(fixtureDir, "snip-expanded-assets.html"))}' ;;
+  *raw.githubusercontent.com/gandazgul/mnemoteca/main/install.sh) file='${bashFixturePath(join(fixtureDir, "mnemoteca-install.sh"))}' ;;
+  */SHA256SUMS) file='${bashFixturePath(join(fixtureDir, "SHA256SUMS"))}' ;;
+  */checksums.txt) file='${bashFixturePath(join(fixtureDir, "checksums.txt"))}' ;;
+  *) file='${bashFixturePath(fixtureDir)}'/"$(basename "$url")" ;;
 esac
 if [[ "$write_format" == '%{url_effective}' ]]; then
   printf '%s' "\${effective_url:-$url}"
@@ -301,22 +302,22 @@ chmod 755 "$prefix/bin/agent-browser"
  * @param {{ extraPathDir?: string, requestedVersion?: string | null, noninteractive?: boolean, extraEnv?: Record<string, string>, unsetEnv?: string[] }} [options]
  */
 export async function runInstaller(fixture, options = {}) {
-    const pathPrefix = options.extraPathDir ? `${options.extraPathDir}:` : "";
+    const pathPrefix = options.extraPathDir ? `${bashFixturePath(options.extraPathDir)}:` : "";
     /** @type {Record<string, string>} */
     const env = {
         ...{ ...process.env },
-        PATH: `${pathPrefix}${fixture.binDir}:/usr/bin:/bin`,
+        WLD_FIXTURE_PATH: `${pathPrefix}${bashFixturePath(fixture.binDir)}:/usr/bin:/bin`,
         HOME: fixture.root,
-        WLD_INSTALL_DIR: fixture.installDir,
+        WLD_INSTALL_DIR: bashFixturePath(fixture.installDir),
         WLD_TEST_UNAME_S: fixture.os,
         WLD_TEST_UNAME_M: fixture.arch,
         ...options.extraEnv,
     };
     for (const key of options.unsetEnv ?? []) delete env[key];
     if (options.noninteractive !== false) env.WLD_NONINTERACTIVE = "1";
-    const args = [repoPath("install.sh")];
+    const args = ["-c", 'export PATH="$WLD_FIXTURE_PATH"; exec /bin/bash "$@"', "installer-fixture", bashFixturePath(repoPath("install.sh"))];
     if (options.requestedVersion !== null) args.push(options.requestedVersion ?? VERSIONS.runwield);
-    const output = await captureScriptProcess("/bin/bash", {
+    const output = await captureScriptProcess(bashFixtureExecutable(), {
         args,
         cwd: REPO_ROOT,
         env,
@@ -338,20 +339,20 @@ export async function runInstaller(fixture, options = {}) {
  */
 export async function runInstallerInPseudoTty(fixture, input, options = {}) {
     const scriptPath = repoPath("install.sh");
-    const command = `PATH=${quoteShell(`${fixture.binDir}:/usr/bin:/bin`)} HOME=${
-        quoteShell(fixture.root)
-    } WLD_INSTALL_DIR=${quoteShell(fixture.installDir)} WLD_NONINTERACTIVE=0 WLD_TEST_UNAME_S=${
+    const command = `PATH=${quoteShell(`${bashFixturePath(fixture.binDir)}:/usr/bin:/bin`)} HOME=${
+        quoteShell(bashFixturePath(fixture.root))
+    } WLD_INSTALL_DIR=${quoteShell(bashFixturePath(fixture.installDir))} WLD_NONINTERACTIVE=0 WLD_TEST_UNAME_S=${
         quoteShell(fixture.os)
     } WLD_TEST_UNAME_M=${quoteShell(fixture.arch)} ${
-        Object.entries(options.extraEnv ?? {}).map(([key, value]) => `${key}=${quoteShell(value)}`).join(" ")
-    } /bin/bash ${quoteShell(scriptPath)} ${quoteShell(VERSIONS.runwield)}`;
+        Object.entries(options.extraEnv ?? {}).map(([key, value]) => `${key}=${quoteShell(key === "WLD_FILTER_LOG" ? bashFixturePath(value) : value)}`).join(" ")
+    } /bin/bash ${quoteShell(bashFixturePath(scriptPath))} ${quoteShell(VERSIONS.runwield)}`;
     if (process.versions.bun) {
         // macOS `script` rejects Bun's socket-backed stdin; attach an actual PTY directly.
         /** @type {import("./terminal-fixture.ts").TerminalRuntime} */
         const bun = Reflect.get(globalThis, String("Bun"));
         const decoder = new TextDecoder();
         let stdout = "";
-        const child = bun.spawn(["/bin/bash", "-lc", command], {
+        const child = bun.spawn([bashFixtureExecutable(), "-lc", command], {
             cwd: REPO_ROOT,
             timeout: 30_000,
             terminal: {
@@ -363,7 +364,7 @@ export async function runInstallerInPseudoTty(fixture, input, options = {}) {
             },
         });
         try {
-            child.terminal.write(input);
+            child.terminal.write(process.platform === "win32" ? input.replaceAll("\n", "\r") : input);
             const code = await child.exited;
             stdout += decoder.decode();
             return { code, stdout, stderr: "" };
@@ -390,7 +391,7 @@ export async function runInstallerInPseudoTty(fixture, input, options = {}) {
  * @param {string} value
  */
 function quoteShell(value) {
-    return `'${value.replaceAll("'", `'\\''`)}'`;
+    return quoteBashFixture(value);
 }
 
 /**
