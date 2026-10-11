@@ -1,7 +1,7 @@
 import fsPromises from "node:fs/promises";
 import { type NativeFileLock, type NativeLockSnapshot, openNativeFileLock } from "./native-file-lock.ts";
 import { readFile as fsReadFile, stat as fsStat } from "node:fs/promises";
-import { platform } from "node:process";
+import { platform, versions } from "node:process";
 export type LockFileSnapshot = {
     text: string;
     mtime: number;
@@ -22,28 +22,41 @@ type LockFileDocument = {
 export async function readLockFileSnapshot(path: string): Promise<LockFileSnapshot | null> {
     try {
         const text = await fsReadFile(path, "utf8");
+        if (platform === "win32" && versions.bun) {
+            // Bun's floating-point Date conversion can round the last 100ns tick of a
+            // millisecond upward. Match the native FILETIME reader's integer floor.
+            const stat = await fsStat(path, { bigint: true });
+            return lockFileSnapshotFromStat({
+                text,
+                size: Number(stat.size),
+                mtime: Number(stat.mtimeNs / 1000000n),
+            });
+        }
         const stat = await fsStat(path);
         return lockFileSnapshotFromStat({ text, size: stat.size, mtime: stat.mtime.getTime() });
     } catch (error) {
-        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return null;
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
         throw error;
     }
 }
 
 export function lockFileSnapshotMatches(left: LockFileSnapshot, right: LockFileSnapshot): boolean {
-    return left.text === right.text && left.mtime === right.mtime && left.size === right.size &&
-        left.token === right.token && left.createdAt === right.createdAt && left.updatedAt === right.updatedAt;
+    return (
+        left.text === right.text &&
+        left.mtime === right.mtime &&
+        left.size === right.size &&
+        left.token === right.token &&
+        left.createdAt === right.createdAt &&
+        left.updatedAt === right.updatedAt
+    );
 }
 
-export async function removeLockFileIfSnapshotMatches(
-    lockPath: string,
-    snapshot: LockFileSnapshot,
-): Promise<boolean> {
+export async function removeLockFileIfSnapshotMatches(lockPath: string, snapshot: LockFileSnapshot): Promise<boolean> {
     let file: NativeFileLock;
     try {
         file = openNativeFileLock(lockPath, false);
     } catch (error) {
-        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return true;
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return true;
         throw error;
     }
     let closed = false;
@@ -52,7 +65,8 @@ export async function removeLockFileIfSnapshotMatches(
         const current = await readLockFileSnapshotFromFile(file);
         const pathCurrent = await readLockFileSnapshot(lockPath);
         if (
-            !pathCurrent || !lockFileSnapshotMatches(current, pathCurrent) ||
+            !pathCurrent ||
+            !lockFileSnapshotMatches(current, pathCurrent) ||
             !lockFileSnapshotMatches(current, snapshot)
         ) {
             return false;

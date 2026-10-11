@@ -1,3 +1,4 @@
+import { platform } from "node:process";
 import { captureForegroundProcess } from "../../shared/captured-process.ts";
 import { opendir as fsOpendir } from "node:fs/promises";
 import { readFile as fsReadFile, realpath as fsRealpath, stat as fsStat } from "node:fs/promises";
@@ -701,26 +702,36 @@ async function collectStalePlanLockIssues(
     try {
         for await (const entry of await fsOpendir(lockDir)) {
             if (!entry.isFile() || !entry.name.endsWith(".lock")) continue;
-            const path = join(lockDir, entry.name);
-            const snapshot = await readLockFileSnapshot(path);
-            if (!snapshot) continue;
-            if (isLockHolderUnattributable(snapshot.text)) continue;
-            if (!await isLockHolderGone(snapshot.text)) continue;
-            if (repair) {
-                const current = await readLockFileSnapshot(path);
-                if (!current || !await isLockHolderGone(current.text)) continue;
-                if (await removeLockFileIfSnapshotMatches(path, snapshot)) results.push({ repaired: true });
-                continue;
+            try {
+                const path = join(lockDir, entry.name);
+                const snapshot = await readLockFileSnapshot(path);
+                if (!snapshot) continue;
+                if (isLockHolderUnattributable(snapshot.text)) continue;
+                if (!await isLockHolderGone(snapshot.text)) continue;
+                if (repair) {
+                    const current = await readLockFileSnapshot(path);
+                    if (!current || !await isLockHolderGone(current.text)) continue;
+                    if (await removeLockFileIfSnapshotMatches(path, snapshot)) results.push({ repaired: true });
+                    continue;
+                }
+                results.push({
+                    issue: {
+                        kind: "stale_plan_lock",
+                        repairable: true,
+                        message: `Plan lock ${path} was left by a recorded holder that is proven gone.`,
+                        commands: [`${CLI_BIN} plans doctor --repair`],
+                        repairSummary: "--repair rechecks and removes only this unchanged, proven-dead lock.",
+                    },
+                });
+            } catch (error) {
+                // Windows mandatory locks deny reads through a second handle. A
+                // concurrently held lock provides no evidence authorizing repair.
+                if (
+                    platform === "win32" && error instanceof Error && "code" in error &&
+                    (error.code === "EBUSY" || error.code === "EAGAIN")
+                ) continue;
+                throw error;
             }
-            results.push({
-                issue: {
-                    kind: "stale_plan_lock",
-                    repairable: true,
-                    message: `Plan lock ${path} was left by a recorded holder that is proven gone.`,
-                    commands: [`${CLI_BIN} plans doctor --repair`],
-                    repairSummary: "--repair rechecks and removes only this unchanged, proven-dead lock.",
-                },
-            });
         }
     } catch (error) {
         if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;

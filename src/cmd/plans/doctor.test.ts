@@ -1,3 +1,4 @@
+import { openNativeFileLock } from "../../shared/native-file-lock.ts";
 import { realpathSync as fsRealpathSync } from "node:fs";
 import { test } from "node:test";
 import {
@@ -983,6 +984,43 @@ test("plans doctor keeps a journal whose worktree may still hold work", async ()
         assertEquals(await fsStat(orphanPath).then((stat) => stat.isDirectory()), true, "nothing is deleted");
     } finally {
         await fsRm(cwd, { recursive: true }).catch(() => {});
+    }
+});
+
+test("plans doctor preserves a held native lock while repairing another abandoned lock", async () => {
+    const cwd = await ancestryRepo.checkout({ prefix: "runwield-doctor-held-lock-" });
+    try {
+        const layout = await enterProjectRuntime(cwd);
+        await fsMkdir(layout.selected.planLocksDir, { recursive: true });
+        const livePath = join(layout.selected.planLocksDir, "aaa-live.lock");
+        const stalePath = join(layout.selected.planLocksDir, "zzz-stale.lock");
+        const text = JSON.stringify({ token: "held-owner", pid: process.pid, hostname: getLockHostname() });
+        const owner = openNativeFileLock(livePath, "exclusive");
+        try {
+            owner.lockSync(true);
+            owner.replaceTextSync(text);
+            await fsWriteFile(stalePath, JSON.stringify({ pid: 2_147_483_647, hostname: getLockHostname() }));
+            const report = await runPlansDoctor(cwd, false);
+            const staleIssues = report.issues.filter((issue) => issue.kind === "stale_plan_lock");
+            assertEquals(staleIssues.length, 1);
+            assertEquals(staleIssues[0].message.includes("zzz-stale.lock"), true);
+            assertEquals(await fsStat(stalePath).then(() => true), true);
+            const repaired = await runPlansDoctor(cwd, true);
+            assertEquals(repaired.repaired >= 1, true);
+            await assertRejects(() => fsStat(stalePath), Error, "ENOENT");
+            assertEquals(owner.readSnapshotSync().text, text);
+            const contender = openNativeFileLock(livePath, false);
+            try {
+                assertEquals(contender.tryLockSync(true), false);
+            } finally {
+                contender.close();
+            }
+        } finally {
+            owner.close();
+        }
+        assertEquals(await fsReadFile(livePath, "utf8"), text);
+    } finally {
+        await fsRm(cwd, { recursive: true });
     }
 });
 

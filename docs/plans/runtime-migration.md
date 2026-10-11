@@ -991,3 +991,24 @@ checks and are intended to distinguish a suspected timestamp-rounding cause of i
 lock retirement. That cause is not yet proven. Two local-publication Golden scenarios remain
 unresolved; bounded failure-only Git, registry and external-helper evidence is retained for
 the next native run. No dirty-work protection, lifecycle proof or assertion is relaxed.
+
+## Native timestamp precision diagnosis (2026-10-11)
+
+Qualification of `b4434fa5f` confirms the same Windows lock-retirement defect on x64 and ARM64: the real Win32
+SetFileTime/GetFileTime probe fails 8 of 1,218 cases under Bun 1.4.3. At 100ns ticks immediately below a millisecond
+boundary, Bun's floating-point `stat.mtime`/`mtimeMs` rounds upward, while the native lock handle correctly floors
+FILETIME. For example, `mtimeNs=1700000000000999900` yields path Date `1700000000001` and native handle
+`1700000000000`; equal lock contents therefore fail the identity comparison and cannot retire. Native and Node writers
+both reproduce this. Changed-timestamp and changed-owner negative controls still pass.
+
+The corrective implementation reads bigint `mtimeNs` only for Bun on Windows and floors it to integer milliseconds,
+matching the native handle. Exact text, size, token and generation/time evidence checks remain unchanged. The dense
+native probe must pass on both architectures before this correction is considered qualified. The same x64 job also
+reported a transient `EBUSY` while removing an exited native fixture executable; fixture cleanup now uses bounded
+filesystem retries and still fails if removal cannot complete. Neither correction is a production cutover.
+
+The completed x64 source shard 2 passes 163/164 files. Its concurrent-workflow failure records `EBUSY` from a Plan
+doctor snapshot read while another operation holds the native Windows byte-range lock. The doctor now treats Windows
+read/lock contention as insufficient evidence to repair that particular file and continues scanning. A real native-lock
+regression holds one live file throughout report and repair, verifies an unrelated abandoned lock is diagnosed and
+removed, and verifies the original ownership and exact bytes remain intact.

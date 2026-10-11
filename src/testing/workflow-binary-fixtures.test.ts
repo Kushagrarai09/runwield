@@ -55,7 +55,7 @@ test("workflow binary fixtures execute supported external commands and preserve 
         await assertRejects(() => fsStat(join(bin, "git")), Error, "ENOENT");
         await assertRejects(() => fsStat(join(bin, "snip")), Error, "ENOENT");
     } finally {
-        await fsRm(root, { recursive: true });
+        await fsRm(root, { recursive: true, maxRetries: 10, retryDelay: 50 });
     }
 });
 
@@ -84,7 +84,7 @@ test("unsupported binary calls fail even when the caller swallows the exit code"
             assertStringIncludes(error.message, `Unsupported ${name}`);
         }
     } finally {
-        await fsRm(root, { recursive: true });
+        await fsRm(root, { recursive: true, maxRetries: 10, retryDelay: 50 });
     }
 });
 
@@ -98,10 +98,7 @@ test("shared executable contents keep command logs and failures isolated", async
             writeWorkflowBinaryFixtures(second),
         ]);
         if (process.platform !== "win32") {
-            assertEquals(
-                await fsRealpath(join(firstBin, "mnemoteca")),
-                await fsRealpath(join(secondBin, "cymbal")),
-            );
+            assertEquals(await fsRealpath(join(firstBin, "mnemoteca")), await fsRealpath(join(secondBin, "cymbal")));
         }
         const run = (bin: string, name: string, args: string[]) =>
             captureForegroundProcess(name, {
@@ -113,16 +110,19 @@ test("shared executable contents keep command logs and failures isolated", async
             run(firstBin, "mnemoteca", ["unexpected-operation"]),
             run(secondBin, "cymbal", ["index", "."]),
         ]);
-        assertEquals(results.map((result) => result.code), [64, 0]);
+        assertEquals(
+            results.map((result) => result.code),
+            [64, 0],
+        );
         await assertRejects(() => assertWorkflowBinaryCallsSupported(first), Error, "Unsupported mnemoteca");
         await assertWorkflowBinaryCallsSupported(second);
         assertEquals(await fsReadFile(join(firstBin, "calls.log"), "utf8"), "mnemoteca\nunexpected-operation\n");
         assertEquals(await fsReadFile(join(secondBin, "calls.log"), "utf8"), "cymbal\nindex\n.\n");
-        await fsRm(first, { recursive: true });
+        await fsRm(first, { recursive: true, maxRetries: 10, retryDelay: 50 });
         assertEquals((await run(secondBin, "mnemoteca", ["--help"])).code, 0);
         await assertWorkflowBinaryCallsSupported(second);
     } finally {
-        await fsRm(root, { recursive: true });
+        await fsRm(root, { recursive: true, maxRetries: 10, retryDelay: 50 });
     }
 });
 
@@ -139,6 +139,6 @@ test("GitHub unavailability is opt-in and preserves supported-call checks", asyn
         assertEquals(await fsReadFile(join(golden, "calls.log"), "utf8"), "gh\nauth\nstatus\n");
         await assertWorkflowBinaryCallsSupported(goldenRoot);
     } finally {
-        await fsRm(root, { recursive: true });
+        await fsRm(root, { recursive: true, maxRetries: 10, retryDelay: 50 });
     }
 });
