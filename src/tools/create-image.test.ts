@@ -1,6 +1,9 @@
 import { realpath as fsRealpath } from "node:fs/promises";
 import { delimiter } from "node:path";
-import { writeRuntimeExecutableFixture } from "../testing/runtime-executable-fixture.ts";
+import {
+    removeExecutableFixtureDirectory,
+    writeRuntimeExecutableFixture,
+} from "../testing/runtime-executable-fixture.ts";
 import {
     writeWorkflowBinaryFixtures,
     assertWorkflowBinaryCallsSupported,
@@ -13,7 +16,6 @@ import {
     mkdtemp as fsMkdtemp,
     readFile as fsReadFile,
     rename as fsRename,
-    rm as fsRm,
     stat as fsStat,
     symlink as fsSymlink,
     writeFile as fsWriteFile,
@@ -191,7 +193,7 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>) {
                 prior[index] === undefined ? delete process.env[key] : (process.env[key] = prior[index]!),
             );
             __resetSettingsForTests();
-            await fsRm(temp, { recursive: true, maxRetries: 10, retryDelay: 50 });
+            await removeExecutableFixtureDirectory(temp);
         }
     });
 }

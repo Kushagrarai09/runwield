@@ -1,5 +1,5 @@
 /** Executable external-boundary fixtures, including native Windows launchers. */
-import { chmod, copyFile, link, mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, copyFile, link, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -8,6 +8,26 @@ import { captureForegroundProcess } from "../shared/captured-process.ts";
 import { runtimeSourceArgs } from "./runtime-source-args.ts";
 
 const compiled = new Map<string, Promise<string>>();
+
+/** Windows may briefly retain an exited executable; Bun does not honor fs.rm retry options. */
+export async function removeExecutableFixtureDirectory(path: string): Promise<void> {
+    for (let attempt = 0; ; attempt++) {
+        try {
+            await rm(path, { recursive: true });
+            return;
+        } catch (error) {
+            if (
+                platform !== "win32" ||
+                attempt >= 10 ||
+                !(error instanceof Error) ||
+                !("code" in error) ||
+                !["EBUSY", "EPERM", "ENOTEMPTY"].includes(String(error.code))
+            )
+                throw error;
+            await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+        }
+    }
+}
 
 async function compileFixture(source: string): Promise<string> {
     const root = await mkdtemp(join(tmpdir(), "native-fixture-"));
