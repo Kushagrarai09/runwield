@@ -24,6 +24,9 @@ async function isolatedEnvironment(home: string): Promise<Record<string, string>
         const value = env[key];
         if (value) childEnv[key] = value;
     }
+    for (const key of ["WLD_TEST_SSHFS", "WLD_TEST_SSHFS_STALL"]) {
+        if (env[key] === "1") childEnv[key] = "1";
+    }
     Object.assign(childEnv, {
         HOME: home,
         USERPROFILE: home,

@@ -342,6 +342,9 @@ async function runIsolatedSuite(sandboxRoot, denoDir, roots = [REPO_ROOT], exclu
             const fileStartedAt = Date.now();
 
             const env = await createSandboxEnv(sandboxRoot, `slot-${slot}-file-${slotRuns}`, denoDir);
+            for (const key of ["WLD_TEST_SSHFS", "WLD_TEST_SSHFS_STALL"]) {
+                if (process.env[key] === "1") env[key] = "1";
+            }
             if (process.versions.bun) {
                 for (
                     const key of ["PATH", "SystemRoot", "WINDIR", "COMSPEC", "PATHEXT", "LANG", "LC_ALL", "TERM", "TZ"]

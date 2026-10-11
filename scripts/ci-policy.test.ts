@@ -153,6 +153,9 @@ test("prepared dependencies preserve isolated execution and changed-source failu
                     const { default: stripAnsi } = await import(${JSON.stringify(import.meta.resolve("strip-ansi"))});
                     if (stripAnsi(chalk.red("loaded")) !== "loaded") throw new Error("npm imports failed");
                     if (value !== 1) throw new Error("changed source was executed");
+                    if (process.env.WLD_TEST_SSHFS !== "1" || process.env.WLD_TEST_SSHFS_STALL !== "1") {
+                        throw new Error("explicit SSHFS qualification flags were lost");
+                    }
                     await writeFile(${JSON.stringify(join(root, `${name}.json`))}, JSON.stringify({
                         pid: process.pid, home: process.env.HOME, temp: process.env.TMPDIR,
                         database: process.env.MNEMOTECA_DB_PATH,
@@ -164,7 +167,7 @@ test("prepared dependencies preserve isolated execution and changed-source failu
         const command = () =>
             captureScriptProcess(process.execPath, {
                 args: runtimeSourceArgs(args),
-                env: { WLD_TEST_CONCURRENCY: "1" },
+                env: { WLD_TEST_CONCURRENCY: "1", WLD_TEST_SSHFS: "1", WLD_TEST_SSHFS_STALL: "1" },
                 stdout: "piped",
                 stderr: "piped",
             });

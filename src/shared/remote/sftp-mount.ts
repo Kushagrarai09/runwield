@@ -88,9 +88,12 @@ export async function startLaptopSftp(): Promise<SftpService> {
     if (!(await fsStat(source).catch(() => null))?.isDirectory()) {
         throw new Error("Laptop ~/.wld must exist before a remote mount can start");
     }
-    const paths = platform === "darwin"
-        ? ["/usr/libexec/sftp-server"]
-        : ["/usr/lib/openssh/sftp-server", "/usr/lib/ssh/sftp-server", "/usr/libexec/sftp-server"];
+    const paths = platform === "darwin" ? ["/usr/libexec/sftp-server"] : [
+        "/usr/lib/openssh/sftp-server",
+        "/usr/lib/ssh/sftp-server",
+        "/usr/libexec/sftp-server",
+        "/usr/libexec/openssh/sftp-server",
+    ];
     let executable: string | undefined;
     for (const path of paths) {
         const file = await fsStat(path).catch(() => null);

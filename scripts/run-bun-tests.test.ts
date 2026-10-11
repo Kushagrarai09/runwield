@@ -40,6 +40,8 @@ test("each file has a fresh process and private state", () => {
     equal(process.env.USERPROFILE, home);
     equal(process.env.MNEMOTECA_DB_PATH, join(home, "mnemoteca-test.db"));
     equal(process.env.OPENAI_API_KEY, undefined);
+    equal(process.env.WLD_TEST_SSHFS, "1");
+    equal(process.env.WLD_TEST_SSHFS_STALL, "1");
     equal(existsSync(join(home, "claimed")), false);
     equal(existsSync(process.env.MNEMOTECA_DB_PATH), false);
     writeFileSync(join(home, "claimed"), "claimed");
@@ -80,6 +82,8 @@ for (const concurrency of [1, 2]) {
             const result = await run([RUNNER, ...files], {
                 WLD_TEST_CONCURRENCY: String(concurrency),
                 OPENAI_API_KEY: "fixture-secret-never-forward",
+                WLD_TEST_SSHFS: "1",
+                WLD_TEST_SSHFS_STALL: "1",
             });
             equal(result.code, 0, result.output);
             const report = await readReport(result.output);

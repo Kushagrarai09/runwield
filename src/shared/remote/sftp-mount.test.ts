@@ -161,9 +161,8 @@ test("remote mount rejects bad transport without modifying existing account file
 
 // Opt in on a Linux host with working SSHFS and /dev/fuse. This exercises real kernel mounts.
 test("stalled laptop SFTP detaches its live mount before connection cleanup returns", {
-    skip: process.platform !== "linux",
+    skip: process.platform !== "linux" || process.env["WLD_TEST_SSHFS_STALL"] !== "1" || process.getuid?.() === 0,
 }, async () => {
-    if (process.env["WLD_TEST_SSHFS_STALL"] !== "1" || process.getuid?.() === 0) return;
     await syntheticHome(async (home) => {
         await fsMkdir(join(home, ".wld"));
         const remoteHome = await fsMkdtemp(join(tmpdir(), "portable-fixture-"));
@@ -236,9 +235,8 @@ test("stalled laptop SFTP detaches its live mount before connection cleanup retu
 });
 
 test("remote mount denies fallback writes and leaves existing account files intact", {
-    skip: process.platform !== "linux",
+    skip: process.platform !== "linux" || process.env["WLD_TEST_SSHFS"] !== "1" || process.getuid?.() === 0,
 }, async () => {
-    if (process.env["WLD_TEST_SSHFS"] !== "1" || process.getuid?.() === 0) return;
     await syntheticHome(async (laptopHome) => {
         for (const name of [".wld", ".agents"]) {
             await fsMkdir(join(laptopHome, name));

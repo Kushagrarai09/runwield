@@ -91,8 +91,12 @@ async function compiledSupervisor(): Promise<string> {
     if (binary) return binary;
     const root = await fsMkdtemp(join(tmpdir(), "portable-fixture-"));
     buildRoot = root;
-    const source = toFileUrl(await fsRealpath("src/shared/remote/supervisor.ts")).href;
-    await fsWriteFile(join(root, "entry.ts"), entry.replace("./src/shared/remote/supervisor.ts", source));
+    const sourcePath = await fsRealpath("src/shared/remote/supervisor.ts");
+    const source = process.versions.deno ? toFileUrl(sourcePath).href : sourcePath;
+    await fsWriteFile(
+        join(root, "entry.ts"),
+        entry.replace('"./src/shared/remote/supervisor.ts"', JSON.stringify(source)),
+    );
     const executable = join(root, "supervisor");
     const result = await captureForegroundProcess(process.execPath, {
         cwd: getCwd(),
