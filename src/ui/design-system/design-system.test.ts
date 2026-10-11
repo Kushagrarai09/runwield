@@ -2,9 +2,8 @@ import { assertEquals, assertFalse, assertStringIncludes } from "@std/assert";
 import { actionClassName } from "./components/Button.tsx";
 import { Dialog } from "./components/Dialog.jsx";
 import { RunWieldButton, RunWieldLink } from "./components/react/RunWieldPrimitives.tsx";
+import type { RunWieldLinkProps } from "./components/react/RunWieldPrimitives.tsx";
 import { readWorkspaceStyles } from "../workspace/workspace-styles.ts";
-
-/** @typedef {{ href?: string, className?: string }} LinkProps */
 
 Deno.test("design-system actionClassName maps visual action variants", () => {
     assertEquals(actionClassName("primary"), "primary-action");
@@ -21,14 +20,12 @@ Deno.test("design-system Dialog primitive is importable and styled", async () =>
 });
 
 Deno.test("React action primitives preserve button and link semantics", () => {
-    /** @type {{ type: string, props: { type?: string, className: string, href?: string } }} */
     const button = RunWieldButton({ children: "Save" });
-    /** @type {{ type: string, props: { type?: string, className: string, href?: string } }} */
     const link = RunWieldLink({ children: "Open", href: "/plans", variant: "primary" });
     assertEquals(button.type, "button");
     assertEquals(button.props.type, "button");
     assertEquals(button.props.className, "secondary-action");
-    const linkProps = /** @type {LinkProps} */ (link.props);
+    const linkProps: RunWieldLinkProps = link.props;
     assertEquals(link.type, "a");
     assertEquals(linkProps.href, "/plans");
     assertEquals(linkProps.className, "primary-action");
