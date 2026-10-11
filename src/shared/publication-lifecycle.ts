@@ -15,6 +15,29 @@ async function sealedDocument(cwd: string, commit: string, path: string): Promis
     return result.success ? new TextDecoder().decode(result.stdout) : null;
 }
 
+/** Compare Git content, including the repository's configured clean filters and line endings. */
+async function matchesGitDocument(
+    cwd: string,
+    path: string,
+    actual: string | null,
+    expected: string | null,
+): Promise<boolean> {
+    if (actual === expected) return true;
+    if (actual === null || expected === null) return false;
+    const hashes = await Promise.all(
+        [actual, expected].map(async (stdinText) => {
+            const result = await captureForegroundProcess("git", {
+                cwd,
+                args: ["hash-object", `--path=${path}`, "--stdin"],
+                stdinText,
+            });
+            if (!result.success) throw new Error(new TextDecoder().decode(result.stderr));
+            return new TextDecoder().decode(result.stdout).trim();
+        }),
+    );
+    return hashes[0] === hashes[1];
+}
+
 /** Preserve recorder prose as history; lifecycle facts are owned by publication. */
 function finalizedRecord(sealedRecord: string, sealedCommit: string, targetBranch?: string): string {
     const original = parseWorkRecordMarkdown(sealedRecord);
@@ -100,18 +123,21 @@ export async function finalizePublicationLifecycle(
         const original = parseWorkRecordMarkdown(sealedRecord);
         const legacyApproved = formatWorkRecordMarkdown({ ...original.attrs, status: "approved" }, original.body);
         const approved = finalizedRecord(sealedRecord, sealedCommit, targetBranch);
-        if (recordText !== sealedRecord && recordText !== approved && recordText !== legacyApproved) {
+        if (
+            !(await matchesGitDocument(cwd, recordPath, recordText, sealedRecord)) &&
+            !(await matchesGitDocument(cwd, recordPath, recordText, approved)) &&
+            !(await matchesGitDocument(cwd, recordPath, recordText, legacyApproved))
+        ) {
             throw new Error(`Work Record changed outside its sealed publication: ${recordPath}`);
         }
-        if (recordText !== approved) writes.set(recordPath, approved);
-        const predecessorIds = typeof record.attrs.supersedes === "string"
-            ? [record.attrs.supersedes]
-            : record.attrs.supersedes || [];
+        if (!(await matchesGitDocument(cwd, recordPath, recordText, approved))) writes.set(recordPath, approved);
+        const predecessorIds =
+            typeof record.attrs.supersedes === "string" ? [record.attrs.supersedes] : record.attrs.supersedes || [];
         if (predecessorIds.length) {
             const records = await listWorkRecords(cwd);
             for (const id of predecessorIds) {
-                const predecessor = records.find((candidate) =>
-                    candidate.attrs.recordId.toLowerCase() === id.toLowerCase()
+                const predecessor = records.find(
+                    (candidate) => candidate.attrs.recordId.toLowerCase() === id.toLowerCase(),
                 );
                 if (
                     !predecessor ||
@@ -119,11 +145,14 @@ export async function finalizePublicationLifecycle(
                 ) {
                     throw new Error(`Supersession changed during publication: ${id}`);
                 }
-                const text = formatWorkRecordMarkdown({
-                    ...predecessor.attrs,
-                    status: "superseded",
-                    supersededBy: record.attrs.recordId,
-                }, predecessor.body);
+                const text = formatWorkRecordMarkdown(
+                    {
+                        ...predecessor.attrs,
+                        status: "superseded",
+                        supersededBy: record.attrs.recordId,
+                    },
+                    predecessor.body,
+                );
                 if (text !== predecessor.markdown) writes.set(predecessor.relativePath, text);
             }
         }
@@ -195,7 +224,11 @@ export async function recoverLocalPublicationLifecycle(
         const after = await sealedDocument(cwd, "HEAD", path);
         const disk = await fsReadFile(join(cwd, path), "utf8").catch(() => null);
         const index = await sealedDocument(cwd, "", path);
-        if ((disk !== before && disk !== after) || (index !== before && index !== after)) {
+        if (
+            (!(await matchesGitDocument(cwd, path, disk, before)) &&
+                !(await matchesGitDocument(cwd, path, disk, after))) ||
+            (index !== before && index !== after)
+        ) {
             throw new Error(`Preserved edited delivery metadata: ${path}`);
         }
     }
@@ -264,7 +297,8 @@ export async function indexPublishedWorkRecords(
         }
     }
     if (!linkedIds.size) return;
-    const paths = (await git(gitRoot, ["ls-tree", "-r", "--name-only", commit, "--", "docs/work-records/"])).split("\n")
+    const paths = (await git(gitRoot, ["ls-tree", "-r", "--name-only", commit, "--", "docs/work-records/"]))
+        .split("\n")
         .filter((path) => path.endsWith(".md"));
     for (const path of paths) {
         const text = await sealedDocument(gitRoot, commit, path);

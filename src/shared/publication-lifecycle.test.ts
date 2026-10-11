@@ -44,69 +44,78 @@ const fixture = defineGitFixture(async (root) => {
     await git(root, ["commit", "-m", "Reviewed candidate with pending record"]);
 });
 
-for (const checkedOut of [true, false]) {
-    test(`local delivery finalizes exactly its target branch (checked out: ${checkedOut})`, async () => {
-        const root = await fixture.checkout();
-        try {
-            const candidate = await git(root, ["rev-parse", "HEAD"]);
-            const target = checkedOut ? "main" : "release/next";
-            if (!checkedOut) await git(root, ["branch", target]);
-            const before = await fsReadFile(join(root, planPath), "utf8");
-            await fsWriteFile(join(root, "personal-note.txt"), "Keep me\n");
-            const delivered = await finalizeLocalPublicationLifecycle(root, target, "feature", candidate, [planPath]);
-            assert(delivered !== candidate);
-            assertEquals(
-                parsePlanFrontMatter(await git(root, ["show", `${target}:${planPath}`])).attrs.status,
-                "verified",
-            );
-            assertEquals(
-                parseWorkRecordMarkdown(await git(root, ["show", `${target}:${recordPath}`])).attrs.status,
-                "approved",
-            );
-            const finalized = parseWorkRecordMarkdown(await git(root, ["show", `${target}:${recordPath}`]));
-            assertStringIncludes(finalized.summary, `Delivery destination: \`${target}\``);
-            assertEquals(finalized.summary.includes("publication pending"), false);
-            assertStringIncludes(
-                finalized.body,
-                "> Added a feature; publication pending. Full test suite has not run.",
-            );
-            assertStringIncludes(finalized.body, "> Keyboard navigation remains deferred.");
-            assertStringIncludes(buildWorkRecordIndexDocument(finalized), "> Keyboard navigation remains deferred.");
-            assertStringIncludes(finalized.summary, "no additional or full test suite is claimed");
-            assertEquals(
-                await hasFinalizedPublicationLifecycle(
-                    root,
+for (const autocrlf of [false, true]) {
+    for (const checkedOut of [true, false]) {
+        test(`local delivery finalizes exactly its target branch (checked out: ${checkedOut}, autocrlf: ${autocrlf})`, async () => {
+            const root = await fixture.checkout();
+            try {
+                await git(root, ["config", "core.autocrlf", String(autocrlf)]);
+                const candidate = await git(root, ["rev-parse", "HEAD"]);
+                const target = checkedOut ? "main" : "release/next";
+                if (!checkedOut) await git(root, ["branch", target]);
+                const before = await fsReadFile(join(root, planPath), "utf8");
+                await fsWriteFile(join(root, "personal-note.txt"), "Keep me\n");
+                const delivered = await finalizeLocalPublicationLifecycle(root, target, "feature", candidate, [
+                    planPath,
+                ]);
+                assert(delivered !== candidate);
+                assertEquals(
+                    parsePlanFrontMatter(await git(root, ["show", `${target}:${planPath}`])).attrs.status,
+                    "verified",
+                );
+                assertEquals(
+                    parseWorkRecordMarkdown(await git(root, ["show", `${target}:${recordPath}`])).attrs.status,
+                    "approved",
+                );
+                const finalized = parseWorkRecordMarkdown(await git(root, ["show", `${target}:${recordPath}`]));
+                assertStringIncludes(finalized.summary, `Delivery destination: \`${target}\``);
+                assertEquals(finalized.summary.includes("publication pending"), false);
+                assertStringIncludes(
+                    finalized.body,
+                    "> Added a feature; publication pending. Full test suite has not run.",
+                );
+                assertStringIncludes(finalized.body, "> Keyboard navigation remains deferred.");
+                assertStringIncludes(
+                    buildWorkRecordIndexDocument(finalized),
+                    "> Keyboard navigation remains deferred.",
+                );
+                assertStringIncludes(finalized.summary, "no additional or full test suite is claimed");
+                assertEquals(
+                    await hasFinalizedPublicationLifecycle(
+                        root,
+                        delivered,
+                        "feature",
+                        planId,
+                        candidate,
+                        [planPath],
+                        target,
+                    ),
+                    true,
+                );
+                assertEquals(
+                    await hasFinalizedPublicationLifecycle(root, candidate, "feature", planId, candidate, [planPath]),
+                    false,
+                );
+                assertEquals(await fsReadFile(join(root, "personal-note.txt"), "utf8"), "Keep me\n");
+                if (!checkedOut) {
+                    assertEquals(await git(root, ["rev-parse", "main"]), candidate);
+                    assertEquals(await fsReadFile(join(root, planPath), "utf8"), before);
+                }
+                assertEquals(
+                    await finalizeLocalPublicationLifecycle(root, target, "feature", candidate, [planPath]),
                     delivered,
-                    "feature",
-                    planId,
-                    candidate,
-                    [planPath],
-                    target,
-                ),
-                true,
-            );
-            assertEquals(
-                await hasFinalizedPublicationLifecycle(root, candidate, "feature", planId, candidate, [planPath]),
-                false,
-            );
-            assertEquals(await fsReadFile(join(root, "personal-note.txt"), "utf8"), "Keep me\n");
-            if (!checkedOut) {
-                assertEquals(await git(root, ["rev-parse", "main"]), candidate);
-                assertEquals(await fsReadFile(join(root, planPath), "utf8"), before);
+                );
+            } finally {
+                await fsRm(root, { recursive: true });
             }
-            assertEquals(
-                await finalizeLocalPublicationLifecycle(root, target, "feature", candidate, [planPath]),
-                delivered,
-            );
-        } finally {
-            await fsRm(root, { recursive: true });
-        }
-    });
+        });
+    }
 }
 
 test("metadata recovery settles an interrupted checkout refresh and preserves subsequent user edits", async () => {
     const root = await fixture.checkout();
     try {
+        await git(root, ["config", "core.autocrlf", "true"]);
         const candidate = await git(root, ["rev-parse", "HEAD"]);
         await finalizeLocalPublicationLifecycle(root, "main", "feature", candidate, [planPath]);
         // Simulate the filesystem/index state immediately after update-ref but before refresh.

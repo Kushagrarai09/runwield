@@ -27,6 +27,12 @@ import {
     resolveInstalledWldExecutable,
 } from "./mcp-setup.ts";
 
+const WLD_EXECUTABLE = process.platform === "win32" ? "wld.exe" : "wld";
+const NATIVE_HEADER =
+    process.platform === "win32"
+        ? new Uint8Array([0x4d, 0x5a, 0x00, 0x00])
+        : new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 0x00]);
+
 async function withSetupHome(callback: (home: string, binDir: string) => Promise<void>): Promise<void> {
     await withProcessGlobalTestLock(async () => {
         const priorHome = process.env["HOME"];
@@ -35,8 +41,8 @@ async function withSetupHome(callback: (home: string, binDir: string) => Promise
         const binDir = join(home, "bin");
         try {
             await fsMkdir(binDir, { recursive: true });
-            const wldPath = join(binDir, "wld");
-            await fsWriteFile(wldPath, new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 0x00]));
+            const wldPath = join(binDir, WLD_EXECUTABLE);
+            await fsWriteFile(wldPath, NATIVE_HEADER);
             await fsChmod(wldPath, 0o755);
             process.env["HOME"] = home;
             process.env["PATH"] = `${binDir}${delimiter}${priorPath || ""}`;
@@ -80,7 +86,7 @@ for (const initialText of ["", " \n\t\r\n"]) {
             await ensureAgyCliMcpSetup({ hostedSession: approved });
             assertEquals(await readJson(configPath), {
                 mcpServers: {
-                    runwield: { command: await fsRealpath(join(binDir, "wld")), args: [...AGY_MCP_ARGS] },
+                    runwield: { command: await fsRealpath(join(binDir, WLD_EXECUTABLE)), args: [...AGY_MCP_ARGS] },
                 },
             });
             assertEquals(await readJson(settingsPath), { permissions: { allow: [AGY_MCP_PERMISSION] } });
@@ -99,17 +105,14 @@ test("Agy MCP setup installs the exact stable server and preserves unrelated set
             configPath,
             JSON.stringify({ mcpServers: { other: { command: "other", args: ["x"] } }, keep: true }),
         );
-        await fsWriteFile(
-            settingsPath,
-            JSON.stringify({ permissions: { allow: ["shell(ls)"] }, theme: "dark" }),
-        );
+        await fsWriteFile(settingsPath, JSON.stringify({ permissions: { allow: ["shell(ls)"] }, theme: "dark" }));
 
         await installAgyCliMcpSetup();
 
         const config = await readJson(configPath);
         assertEquals(config.keep, true);
         assertEquals(config.mcpServers.other.command, "other");
-        assertEquals(config.mcpServers.runwield.command, await fsRealpath(join(binDir, "wld")));
+        assertEquals(config.mcpServers.runwield.command, await fsRealpath(join(binDir, WLD_EXECUTABLE)));
         assertEquals(config.mcpServers.runwield.args, [...AGY_MCP_ARGS]);
         assertEquals(config.mcpServers.runwield.env, undefined);
         assertEquals(config.mcpServers.runwield.url, undefined);
@@ -127,7 +130,7 @@ test("Agy MCP setup repairs persistent turn data on the runwield server entry", 
         const settingsPath = join(home, ".gemini", "antigravity-cli", "settings.json");
         await fsMkdir(join(home, ".gemini", "config"), { recursive: true });
         await fsMkdir(join(home, ".gemini", "antigravity-cli"), { recursive: true });
-        const command = await fsRealpath(join(binDir, "wld"));
+        const command = await fsRealpath(join(binDir, WLD_EXECUTABLE));
         await fsWriteFile(
             configPath,
             JSON.stringify({
@@ -142,10 +145,7 @@ test("Agy MCP setup repairs persistent turn data on the runwield server entry", 
                 },
             }),
         );
-        await fsWriteFile(
-            settingsPath,
-            JSON.stringify({ permissions: { allow: [AGY_MCP_PERMISSION] } }),
-        );
+        await fsWriteFile(settingsPath, JSON.stringify({ permissions: { allow: [AGY_MCP_PERMISSION] } }));
 
         assertEquals((await inspectAgyCliMcpSetup()).ok, false);
         await installAgyCliMcpSetup();
@@ -159,9 +159,9 @@ test("Agy MCP setup repairs persistent turn data on the runwield server entry", 
 test("Agy MCP setup accepts an existing standalone wld when switching binaries", async () => {
     await withSetupHome(async (home) => {
         const configPath = join(home, ".gemini", "config", "mcp_config.json");
-        const oldCommand = join(home, ".local", "bin", "wld");
+        const oldCommand = join(home, ".local", "bin", WLD_EXECUTABLE);
         await fsMkdir(join(home, ".local", "bin"), { recursive: true });
-        await fsWriteFile(oldCommand, new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 0x00]));
+        await fsWriteFile(oldCommand, NATIVE_HEADER);
         await fsChmod(oldCommand, 0o755);
         await fsMkdir(join(home, ".gemini", "config"), { recursive: true });
         await fsWriteFile(
@@ -200,9 +200,9 @@ test("Agy MCP setup refuses foreign runwield servers and contradictory permissio
         await fsWriteFile(settingsPath, JSON.stringify({ permissions: { allow: [] } }));
         await assertRejects(() => installAgyCliMcpSetup(), Error, "mcpServers.runwield");
 
-        const otherWld = join(home, "other", "wld");
+        const otherWld = join(home, "other", WLD_EXECUTABLE);
         await fsMkdir(join(home, "other"));
-        await fsWriteFile(otherWld, new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 0x00]));
+        await fsWriteFile(otherWld, NATIVE_HEADER);
         await fsChmod(otherWld, 0o755);
         await fsWriteFile(
             configPath,
@@ -244,8 +244,8 @@ test("Agy MCP setup asks once, accepts explicit approval, and preserves files on
         const approved = new HostedSession({ id: "agy-mcp-approved", cwd: home });
         approved.setInteractionAdapter({
             requestInteraction: (request) => {
-                assertStringIncludes(request.prompt, ".gemini/config/mcp_config.json");
-                assertStringIncludes(request.prompt, ".gemini/antigravity-cli/settings.json");
+                assertStringIncludes(request.prompt, join(".gemini", "config", "mcp_config.json"));
+                assertStringIncludes(request.prompt, join(".gemini", "antigravity-cli", "settings.json"));
                 assertStringIncludes(request.prompt, "wld mcp agy-cli");
                 assertStringIncludes(request.prompt, AGY_MCP_PERMISSION);
                 assertStringIncludes(request.prompt, "persists");
@@ -361,7 +361,7 @@ test("Agy MCP setup refuses malformed permission structures", async () => {
 test("Agy MCP setup refuses source-run wld commands", async () => {
     await withSetupHome(async (_home, binDir) => {
         process.env["PATH"] = binDir;
-        const wldPath = join(binDir, "wld");
+        const wldPath = join(binDir, WLD_EXECUTABLE);
         await fsWriteFile(wldPath, '#!/bin/sh\nexec deno run -A src/cli.ts "$@"\n');
         await fsChmod(wldPath, 0o755);
         await assertRejects(() => resolveInstalledWldExecutable(), Error, "standalone wld executable");
@@ -371,8 +371,9 @@ test("Agy MCP setup refuses source-run wld commands", async () => {
 test("Agy MCP setup refuses non-executable wld commands", async () => {
     await withSetupHome(async (_home, binDir) => {
         process.env["PATH"] = binDir;
-        const wldPath = join(binDir, "wld");
-        await fsChmod(wldPath, 0o644);
+        const wldPath = join(binDir, WLD_EXECUTABLE);
+        if (process.platform === "win32") await fsWriteFile(wldPath, new Uint8Array([0x7f, 0x45, 0x4c, 0x46]));
+        else await fsChmod(wldPath, 0o644);
         await assertRejects(() => resolveInstalledWldExecutable(), Error, "standalone wld executable");
     });
 });

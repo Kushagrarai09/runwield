@@ -72,6 +72,8 @@ export async function git(cwd: string, args: string[]): Promise<string> {
 async function configureFixtureIdentity(cwd: string) {
     await git(cwd, ["config", "user.email", "fixture@runwield.test"]);
     await git(cwd, ["config", "user.name", "RunWield Fixture"]);
+    // Fixtures own their byte format; CRLF-specific tests opt in explicitly.
+    await git(cwd, ["config", "core.autocrlf", "false"]);
     // Keep commits independent of the host's signing setup.
     await git(cwd, ["config", "commit.gpgsign", "false"]);
 }

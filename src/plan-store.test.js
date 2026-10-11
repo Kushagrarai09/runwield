@@ -173,11 +173,11 @@ async function savePlanBodyByIdForTest(cwd, planId, body, expectedBodyHash) {
 }
 
 test("getStoredPlanPath resolves canonical top-level and nested plan paths", () => {
-    assertEquals(getStoredPlanPath("/project", "demo"), "/project/docs/plans/demo.md");
-    assertEquals(getStoredPlanPath("/project", "demo.md"), "/project/docs/plans/demo.md");
-    assertEquals(getStoredPlanPath("/project", "epic/child.md"), "/project/docs/plans/epic/child.md");
+    assertEquals(getStoredPlanPath("/project", "demo"), join("/project", "docs", "plans", "demo.md"));
+    assertEquals(getStoredPlanPath("/project", "demo.md"), join("/project", "docs", "plans", "demo.md"));
+    assertEquals(getStoredPlanPath("/project", "epic/child.md"), join("/project", "docs", "plans", "epic", "child.md"));
     // The canonical store path prefix normalizes to the same store-relative name.
-    assertEquals(getStoredPlanPath("/project", "docs/plans/demo.md"), "/project/docs/plans/demo.md");
+    assertEquals(getStoredPlanPath("/project", "docs/plans/demo.md"), join("/project", "docs", "plans", "demo.md"));
 });
 
 test("getStoredPlanPath rejects escaping or ambiguous plan names", () => {
@@ -728,7 +728,7 @@ test("splitPlanMarkdownBody ignores indented front matter delimiter-like content
 testWithFs("body-only save preserves front matter bytes and markdown body fidelity", async () => {
     const cwd = await makeTempDirectory({ prefix: "runwield-fixture-" });
     try {
-        await fsMkdir(`${cwd}/docs/plans`, { recursive: true });
+        await fsMkdir(join(cwd, `docs/plans`), { recursive: true });
         const frontMatter = [
             "---",
             "# preserve this comment",
@@ -743,13 +743,13 @@ testWithFs("body-only save preserves front matter bytes and markdown body fideli
         ].join("\n");
         const body =
             "# Old\n\n- item\n- [ ] task\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n[RunWield](https://runwield.dev)\n\n```js\nconsole.log(1);\n```\n";
-        await fsWriteFile(`${cwd}/docs/plans/body.md`, frontMatter + body);
+        await fsWriteFile(join(cwd, `docs/plans/body.md`), frontMatter + body);
         const loaded = await loadPlanBodyById(cwd, "body-id");
         const nextBody =
             "# New\n\n- item\n- [x] task\n\n| A | B |\n| - | - |\n| 3 | 4 |\n\n[RunWield](https://runwield.dev)\n\n```js\nconsole.log(2);\n```\n\n";
 
         const saved = await savePlanBodyByIdForTest(cwd, "body-id", nextBody, loaded.bodyHash);
-        const after = await fsReadFile(`${cwd}/docs/plans/body.md`, "utf8");
+        const after = await fsReadFile(join(cwd, `docs/plans/body.md`), "utf8");
 
         assertEquals(after, frontMatter.replace("worktreeStatus: active\n", "") + nextBody);
         assertEquals(saved.body, nextBody);
@@ -776,8 +776,8 @@ testWithFs("body-only save rejects stale hashes duplicate IDs and archived plans
         await savePlan(cwd, "dup-a", "# A", { planId: "dup" });
         await savePlan(cwd, "dup-b", "# B", { planId: "dup" });
         await assertRejects(() => loadPlanBodyById(cwd, "dup"), Error, "Duplicate planId values found");
-        await fsRm(`${cwd}/docs/plans/dup-a.md`);
-        await fsRm(`${cwd}/docs/plans/dup-b.md`);
+        await fsRm(join(cwd, `docs/plans/dup-a.md`));
+        await fsRm(join(cwd, `docs/plans/dup-b.md`));
 
         await savePlan(cwd, "archived/hidden", "# Hidden", { planId: "hidden-id" });
         await assertRejects(() => loadPlanBodyById(cwd, "hidden-id"), Error, "Plan not found for planId");
@@ -823,9 +823,9 @@ test("groupPlanHierarchy groups Epics, nested children, standalone, and orphaned
 testWithFs("updatePlanStatus fails closed on malformed front matter and preserves bytes", async () => {
     const cwd = await makeTempDirectory({ prefix: "runwield-fixture-" });
     try {
-        const plansDir = `${cwd}/docs/plans`;
+        const plansDir = join(cwd, `docs/plans`);
         await fsMkdir(plansDir, { recursive: true });
-        const planPath = `${plansDir}/broken.md`;
+        const planPath = join(plansDir, `broken.md`);
 
         const malformed = [
             "---",
@@ -1662,8 +1662,8 @@ testWithFs("plan-store updates preserve parent-child metadata and unknown front 
                 customTags: ["alpha", "beta"],
             }),
         );
-        await fsMkdir(`${cwd}/docs/plans/project-breakdown-epic`, { recursive: true });
-        await fsWriteFile(`${cwd}/docs/plans/project-breakdown-epic/feature2.md`, markdown);
+        await fsMkdir(join(cwd, `docs/plans/project-breakdown-epic`), { recursive: true });
+        await fsWriteFile(join(cwd, `docs/plans/project-breakdown-epic/feature2.md`), markdown);
 
         await updatePlanStatusForTest(cwd, "project-breakdown-epic/feature2", "approved");
         const afterStatus = await loadPlan(cwd, "project-breakdown-epic/feature2");
@@ -1708,7 +1708,7 @@ testWithFs("plan-store rejects stored plan names that escape plans directory", a
 testWithFs("plan-store resolves external plans and injects defaults when front matter is missing", async () => {
     const cwd = await makeTempDirectory({ prefix: "runwield-fixture-" });
     try {
-        const externalPath = `${cwd}/outside.md`;
+        const externalPath = join(cwd, `outside.md`);
         await fsWriteFile(externalPath, "# External plan\n\nBody");
 
         const loaded = await loadExternalPlan(externalPath);
@@ -1951,10 +1951,10 @@ testWithFs("classification updates reject preserved canonical execution policy o
 testWithFs("lifecycle front matter updates preserve unchanged invalid raw policy values", async () => {
     const cwd = await makeTempDirectory({ prefix: "runwield-fixture-" });
     try {
-        const plansDir = `${cwd}/docs/plans`;
+        const plansDir = join(cwd, `docs/plans`);
         await fsMkdir(plansDir, { recursive: true });
         await fsWriteFile(
-            `${plansDir}/invalid-policy.md`,
+            join(plansDir, `invalid-policy.md`),
             [
                 "---",
                 "classification: FEATURE",
@@ -1992,11 +1992,11 @@ testWithFs("lifecycle front matter updates preserve unchanged invalid raw policy
 testWithFs("updatePlanFrontMatter fails closed on malformed front matter", async () => {
     const cwd = await makeTempDirectory({ prefix: "runwield-fixture-" });
     try {
-        const plansDir = `${cwd}/docs/plans`;
+        const plansDir = join(cwd, `docs/plans`);
         await fsMkdir(plansDir, { recursive: true });
-        await fsWriteFile(`${plansDir}/healed.md`, '---\nstatus: "bad\n---\n# Body');
+        await fsWriteFile(join(plansDir, `healed.md`), '---\nstatus: "bad\n---\n# Body');
 
-        const malformed = await fsReadFile(`${plansDir}/healed.md`, "utf8");
+        const malformed = await fsReadFile(join(plansDir, `healed.md`), "utf8");
         await assertRejects(
             () =>
                 updatePlanFrontMatter(cwd, "healed", { status: "feedback" }, {
@@ -2008,7 +2008,7 @@ testWithFs("updatePlanFrontMatter fails closed on malformed front matter", async
             PlanFrontMatterParseError,
             "healed.md",
         );
-        assertEquals(await fsReadFile(`${plansDir}/healed.md`, "utf8"), malformed);
+        assertEquals(await fsReadFile(join(plansDir, `healed.md`), "utf8"), malformed);
 
         await assertRejects(
             () => updatePlanFrontMatterForTest(cwd, "missing", { status: "draft" }),
@@ -2090,10 +2090,10 @@ testWithFs("ensurePlanIdentity preserves existing planId", async () => {
     const cwd = await makeTempDirectory({ prefix: "runwield-fixture-" });
     try {
         await savePlan(cwd, "has-id", "# Body", { planId: "existing-id" });
-        const before = await fsReadFile(`${cwd}/docs/plans/has-id.md`, "utf8");
+        const before = await fsReadFile(join(cwd, `docs/plans/has-id.md`), "utf8");
 
         const resource = await ensurePlanIdentity(cwd, "has-id", { idGenerator: () => "new-id" });
-        const after = await fsReadFile(`${cwd}/docs/plans/has-id.md`, "utf8");
+        const after = await fsReadFile(join(cwd, `docs/plans/has-id.md`), "utf8");
 
         assertEquals(resource.planId, "existing-id");
         assertEquals(after, before);
@@ -2106,7 +2106,7 @@ testWithFs("ensurePlanIdentity skips archived plans and does not backfill them",
     const cwd = await makeTempDirectory({ prefix: "runwield-fixture-" });
     try {
         await savePlan(cwd, "archived/old", "# Old");
-        const before = await fsReadFile(`${cwd}/docs/plans/archived/old.md`, "utf8");
+        const before = await fsReadFile(join(cwd, `docs/plans/archived/old.md`), "utf8");
 
         await assertRejects(
             () => ensurePlanIdentity(cwd, "archived/old", { idGenerator: () => "archived-id" }),
@@ -2114,7 +2114,7 @@ testWithFs("ensurePlanIdentity skips archived plans and does not backfill them",
             "archived or hidden",
         );
 
-        const after = await fsReadFile(`${cwd}/docs/plans/archived/old.md`, "utf8");
+        const after = await fsReadFile(join(cwd, `docs/plans/archived/old.md`), "utf8");
         assertEquals(after, before);
         assertEquals((await loadPlan(cwd, "archived/old"))?.attrs.planId, undefined);
     } finally {
@@ -2157,14 +2157,14 @@ testWithFs("listPlanResources detects duplicate existing planIds before backfill
         await savePlan(cwd, "a", "# A", { planId: "dup" });
         await savePlan(cwd, "b", "# B", { planId: "dup" });
         await savePlan(cwd, "missing", "# Missing");
-        const before = await fsReadFile(`${cwd}/docs/plans/missing.md`, "utf8");
+        const before = await fsReadFile(join(cwd, `docs/plans/missing.md`), "utf8");
 
         await assertRejects(
             () => listPlanResources(cwd, { idGenerator: () => "should-not-write" }),
             Error,
             "Duplicate planId",
         );
-        const after = await fsReadFile(`${cwd}/docs/plans/missing.md`, "utf8");
+        const after = await fsReadFile(join(cwd, `docs/plans/missing.md`), "utf8");
         assertEquals(after, before);
     } finally {
         await fsRm(cwd, { recursive: true });
@@ -2403,7 +2403,7 @@ testWithFs("locked shared plan writes require exact collaboration bypass", async
 testWithFs("malformed remote-canonical front matter variants reject recovery writes without mutation", async () => {
     const cwd = await makeTempDirectory({ prefix: "runwield-fixture-" });
     const dir = await ensurePlansDir(cwd);
-    const path = `${dir}/malformed.md`;
+    const path = join(dir, `malformed.md`);
     const malformed = [
         "---",
         "collaborationState : remote_canonical # locked on the Plan Server",

@@ -203,7 +203,7 @@ function shouldExitAfterRename(
     to: string,
     layout: ReturnType<typeof resolveProjectRuntimeLayout>,
 ): boolean {
-    if (effect === "recovery-backup") return to.includes("/legacy-recovery/") && to.endsWith("/contents");
+    if (effect === "recovery-backup") return to.replaceAll("\\", "/").includes("/legacy-recovery/") && to.replaceAll("\\", "/").endsWith("/contents");
     if (effect === "recovery-controller") return to === join(layout.primary.controllerPlansDir, "plan.json");
     if (effect === "recovery-registry") return to === layout.primary.worktreeRegistryPath;
     if (effect === "journal-commit") return to === layout.primary.layoutMigrationJournalPath;

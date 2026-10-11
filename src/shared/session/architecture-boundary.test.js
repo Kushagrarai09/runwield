@@ -49,7 +49,7 @@ async function findViolations(roots, rules, options = {}) {
             ? await productionJavaScriptFiles(join(REPO_ROOT, root))
             : await productionSourceFiles(join(REPO_ROOT, root));
         for (const file of files) {
-            const path = relative(REPO_ROOT, file);
+            const path = relative(REPO_ROOT, file).replaceAll("\\", "/");
             const source = await fsReadFile(file, "utf8");
             for (const rule of rules) {
                 if (rule.allowPath?.(path)) continue;
@@ -73,7 +73,7 @@ function resolvedImportTargets(file, source) {
     for (const match of source.matchAll(importPattern)) {
         const specifier = match[1];
         if (!specifier.startsWith(".")) continue;
-        targets.push(relative(REPO_ROOT, resolve(dirname(file), specifier)));
+        targets.push(relative(REPO_ROOT, resolve(dirname(file), specifier)).replaceAll("\\", "/"));
     }
     return targets;
 }
@@ -116,7 +116,7 @@ test("TUI, ACP, and Workspace remain sibling Runtime consumers", async () => {
 
     for (const { root, forbidden } of surfaceRules) {
         for (const file of await productionSourceFiles(join(REPO_ROOT, root))) {
-            const path = relative(REPO_ROOT, file);
+            const path = relative(REPO_ROOT, file).replaceAll("\\", "/");
             const source = await fsReadFile(file, "utf8");
             for (const target of resolvedImportTargets(file, source)) {
                 if (forbidden.some((prefix) => target === prefix || target.startsWith(`${prefix}/`))) {
@@ -261,7 +261,7 @@ test("non-owning Session generation synchronization remains read-only", async ()
     }
 
     for (const file of await productionSourceFiles(join(REPO_ROOT, "src/ui/tui"))) {
-        const path = relative(REPO_ROOT, file);
+        const path = relative(REPO_ROOT, file).replaceAll("\\", "/");
         if (!/(managed-session-sync|chat-session)\.[jt]sx?$/.test(path)) continue;
         const source = await fsReadFile(file, "utf8");
         if (/SessionManager\.open|openPersistedRootSession/.test(source)) {
@@ -312,7 +312,7 @@ test("session/Pi coupling in workflow validation stays at the adapter boundary",
     ]);
     const violations = [];
     for (const file of await productionSourceFiles(join(REPO_ROOT, "src/shared/workflow"))) {
-        const path = relative(REPO_ROOT, file);
+        const path = relative(REPO_ROOT, file).replaceAll("\\", "/");
         if (!/validation[^/]*\.ts$/.test(path)) continue;
         if (validationAdapterWhitelist.has(path)) continue;
         const source = await fsReadFile(file, "utf8");
@@ -344,7 +344,7 @@ test("active and isolated Agents have exactly one production lifecycle boundary 
     const violations = [];
 
     for (const file of files) {
-        const path = relative(REPO_ROOT, file);
+        const path = relative(REPO_ROOT, file).replaceAll("\\", "/");
         const source = await fsReadFile(file, "utf8");
         if (/\brunAgentSession\b|\buseRootSession\b/.test(source)) {
             violations.push(`${path}: legacy mixed root/isolated Agent runner`);

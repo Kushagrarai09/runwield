@@ -1,7 +1,8 @@
+import { writeRuntimeExecutableFixture } from "../testing/runtime-executable-fixture.ts";
 import { test } from "node:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { chmod as fsChmod, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
+import { rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
 import { env } from "node:process";
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { join } from "@std/path";
@@ -10,9 +11,9 @@ import { ensureCymbalBinary, ensureKetchBinary, ensureMnemotecaBinary, hasSnipBi
 
 async function writeAvailableBinary(directory: string, name: string): Promise<string> {
     const path = join(directory, name);
-    await fsWriteFile(path, "#!/bin/sh\nexit 0\n");
-    await fsChmod(path, 0o755);
-    return path;
+    const source = join(directory, `${name}.ts`);
+    await fsWriteFile(source, "process.exit(0);\n");
+    return await writeRuntimeExecutableFixture(path, source);
 }
 
 function runtimePreflightTest(name: string, run: (binaryDirectory: string) => Promise<void>): void {

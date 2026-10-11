@@ -24,6 +24,8 @@ import {
     supportsHostedSessionInteraction,
 } from "../../session-runtime-interactions.js";
 
+const WLD_EXECUTABLE = process.platform === "win32" ? `${CLI_BIN}.exe` : CLI_BIN;
+
 export const AGY_MCP_SERVER_NAME = "runwield" as const;
 export const AGY_MCP_PERMISSION = "mcp(runwield/*)" as const;
 export const AGY_MCP_ARGS = ["mcp", "agy-cli"] as const;
@@ -119,24 +121,39 @@ function expectedPermissionShape(): string {
     return JSON.stringify({ permissions: { allow: [AGY_MCP_PERMISSION] } });
 }
 
+function isRunWieldExecutableName(path: string): boolean {
+    const name = basename(path);
+    return (process.platform === "win32" ? name.toLowerCase() : name) === WLD_EXECUTABLE;
+}
+
 async function isUsableRunWieldServer(value: JsonValue | undefined, wldPath: string): Promise<boolean> {
     if (!isJsonMap(value)) return false;
     const keys = Object.keys(value).sort();
     if (
-        keys.length !== 2 || keys[0] !== "args" || keys[1] !== "command" ||
+        keys.length !== 2 ||
+        keys[0] !== "args" ||
+        keys[1] !== "command" ||
         JSON.stringify(value.args) !== JSON.stringify([...AGY_MCP_ARGS])
-    ) return false;
+    )
+        return false;
     // Another installed wld can serve the same stable stdio bridge. Keep its config
     // rather than making two installations repeatedly replace each other's path.
-    return value.command === wldPath || (typeof value.command === "string" &&
-        resolve(value.command) === value.command && basename(value.command) === CLI_BIN &&
-        await pathIsStandaloneExecutableFile(value.command));
+    return (
+        value.command === wldPath ||
+        (typeof value.command === "string" &&
+            resolve(value.command) === value.command &&
+            isRunWieldExecutableName(value.command) &&
+            (await pathIsStandaloneExecutableFile(value.command)))
+    );
 }
 
 async function isRepairableRunWieldServer(value: JsonValue | undefined, wldPath: string): Promise<boolean> {
-    if (value === undefined || await isUsableRunWieldServer(value, wldPath)) return true;
-    return isJsonMap(value) && value.command === wldPath &&
-        (JSON.stringify(value.args || []) === "[]" || JSON.stringify(value.args) === JSON.stringify([...AGY_MCP_ARGS]));
+    if (value === undefined || (await isUsableRunWieldServer(value, wldPath))) return true;
+    return (
+        isJsonMap(value) &&
+        value.command === wldPath &&
+        (JSON.stringify(value.args || []) === "[]" || JSON.stringify(value.args) === JSON.stringify([...AGY_MCP_ARGS]))
+    );
 }
 
 function settingsPermissionShapeError(settings: JsonMap, settingsPath: string): string | undefined {
@@ -156,14 +173,19 @@ function settingsPermissionShapeError(settings: JsonMap, settingsPath: string): 
 function settingsHaveContradiction(settings: JsonMap): boolean {
     const permissions = settings.permissions;
     if (!isJsonMap(permissions)) return false;
-    return jsonArrayContains(permissions.ask, AGY_MCP_PERMISSION) ||
-        jsonArrayContains(permissions.deny, AGY_MCP_PERMISSION);
+    return (
+        jsonArrayContains(permissions.ask, AGY_MCP_PERMISSION) ||
+        jsonArrayContains(permissions.deny, AGY_MCP_PERMISSION)
+    );
 }
 
 function settingsHavePermission(settings: JsonMap): boolean {
     const permissions = settings.permissions;
-    return isJsonMap(permissions) && jsonArrayContains(permissions.allow, AGY_MCP_PERMISSION) &&
-        !settingsHaveContradiction(settings);
+    return (
+        isJsonMap(permissions) &&
+        jsonArrayContains(permissions.allow, AGY_MCP_PERMISSION) &&
+        !settingsHaveContradiction(settings)
+    );
 }
 
 async function pathIsExecutableFile(path: string): Promise<boolean> {
@@ -176,16 +198,19 @@ async function pathIsExecutableFile(path: string): Promise<boolean> {
 function hasStandaloneExecutableHeader(header: Uint8Array, byteCount: number): boolean {
     if (byteCount < 2) return false;
     if (header[0] === 0x4d && header[1] === 0x5a) return true;
+    if (process.platform === "win32") return false;
     if (byteCount < 4) return false;
-    return (header[0] === 0x7f && header[1] === 0x45 && header[2] === 0x4c && header[3] === 0x46) ||
+    return (
+        (header[0] === 0x7f && header[1] === 0x45 && header[2] === 0x4c && header[3] === 0x46) ||
         (header[0] === 0xcf && header[1] === 0xfa && header[2] === 0xed && header[3] === 0xfe) ||
         (header[0] === 0xfe && header[1] === 0xed && header[2] === 0xfa && header[3] === 0xcf) ||
         (header[0] === 0xca && header[1] === 0xfe && header[2] === 0xba && header[3] === 0xbe) ||
-        (header[0] === 0xbe && header[1] === 0xba && header[2] === 0xfe && header[3] === 0xca);
+        (header[0] === 0xbe && header[1] === 0xba && header[2] === 0xfe && header[3] === 0xca)
+    );
 }
 
 async function pathIsStandaloneExecutableFile(path: string): Promise<boolean> {
-    if (!await pathIsExecutableFile(path)) return false;
+    if (!(await pathIsExecutableFile(path))) return false;
     const file = await open(path, "r");
     try {
         const header = new Uint8Array(4);
@@ -209,9 +234,9 @@ async function findPathExecutable(name: string): Promise<string | null> {
 export async function resolveInstalledWldExecutable(): Promise<string> {
     if (isStandaloneExecutable()) {
         const execPath = await fsRealpath(process.execPath);
-        if (basename(execPath) === CLI_BIN && await pathIsStandaloneExecutableFile(execPath)) return execPath;
+        if (isRunWieldExecutableName(execPath) && (await pathIsStandaloneExecutableFile(execPath))) return execPath;
     }
-    const pathExecutable = await findPathExecutable(CLI_BIN);
+    const pathExecutable = await findPathExecutable(WLD_EXECUTABLE);
     if (pathExecutable) return pathExecutable;
     throw new Error(`Could not find an installed standalone ${CLI_BIN} executable for Antigravity MCP setup.`);
 }
@@ -236,14 +261,13 @@ export async function inspectAgyCliMcpSetup(): Promise<SetupStatus> {
             };
         }
         const server = isJsonMap(servers) ? servers[AGY_MCP_SERVER_NAME] : undefined;
-        if (!await isRepairableRunWieldServer(server, command)) {
+        if (!(await isRepairableRunWieldServer(server, command))) {
             return {
                 ok: false,
                 repairable: false,
-                message:
-                    `${paths.configPath}: Antigravity already has a different mcpServers.runwield entry. Expected ${
-                        expectedServerShape(command)
-                    }.`,
+                message: `${paths.configPath}: Antigravity already has a different mcpServers.runwield entry. Expected ${expectedServerShape(
+                    command,
+                )}.`,
                 ...paths,
                 command,
             };
@@ -256,13 +280,12 @@ export async function inspectAgyCliMcpSetup(): Promise<SetupStatus> {
             return {
                 ok: false,
                 repairable: false,
-                message:
-                    `${paths.settingsPath}: Antigravity has an Ask or Deny rule for ${AGY_MCP_PERMISSION}. Expected ${expectedPermissionShape()}.`,
+                message: `${paths.settingsPath}: Antigravity has an Ask or Deny rule for ${AGY_MCP_PERMISSION}. Expected ${expectedPermissionShape()}.`,
                 ...paths,
                 command,
             };
         }
-        const ok = await isUsableRunWieldServer(server, command) && settingsHavePermission(settings);
+        const ok = (await isUsableRunWieldServer(server, command)) && settingsHavePermission(settings);
         return {
             ok,
             repairable: true,

@@ -65,7 +65,7 @@ function secretRecord() {
 }
 
 test("secret store paths keep global home storage and route project storage through primary runtime layout", async () => {
-    assertEquals(getGlobalSecretStorePath("/home/user"), "/home/user/.wld/collaboration-secrets.json");
+    assertEquals(getGlobalSecretStorePath("/home/user"), join("/home/user", ".wld", "collaboration-secrets.json"));
     await withProcessGlobalTestLock(async () => {
         const originalSandboxHome = process.env["WLD_TEST_SANDBOX_HOME"];
         const primaryCheckout = await gitFixture.checkout({ prefix: "runwield-secrets-primary-" });
@@ -104,7 +104,7 @@ test("secret stores read missing files as empty documents and write atomically",
         });
         await putSecretRecord(testSecretStore(path), "plan-1", secretRecord());
         assertEquals(await getSecretRecord(testSecretStore(path), "plan-1"), secretRecord());
-        assertEquals(((await fsStat(path)).mode ?? 0) & 0o777, 0o600);
+        if (process.platform !== "win32") assertEquals(((await fsStat(path)).mode ?? 0) & 0o777, 0o600);
         const siblingTemps = [];
         for await (const entry of await fsReaddir(join(dir, ".wld"), { withFileTypes: true })) {
             if (entry.name.includes(".tmp")) siblingTemps.push(entry.name);
@@ -220,7 +220,7 @@ test("secret store replacement leaves the file readable only by its owner", asyn
         });
 
         assertEquals((await readSecretStore(testSecretStore(path))).records["plan-1:space-1"], secretRecord());
-        assertEquals(((await fsStat(path)).mode ?? 0) & 0o777, 0o600);
+        if (process.platform !== "win32") assertEquals(((await fsStat(path)).mode ?? 0) & 0o777, 0o600);
     } finally {
         await fsRm(dir, { recursive: true });
     }

@@ -89,10 +89,10 @@ function createVersion5Database(dbPath) {
 test("version-five locator rows migrate to ordinal-zero transcript segments without touching transcript files", async () => {
     const dir = await fsMkdtemp(join(tmpdir(), "runwield-segment-migration-"));
     try {
-        const dbPath = `${dir}/owner.sqlite3`;
+        const dbPath = join(dir, `owner.sqlite3`);
         createVersion5Database(dbPath);
         const legacy = new DatabaseSync(dbPath);
-        const root = `${dir}/repo`;
+        const root = join(dir, `repo`);
         await fsMkdir(root);
         const transcriptPath = await writeTranscript(root, "pi-legacy", { body: "legacy body\n" });
         const before = await fsStat(transcriptPath);
@@ -136,9 +136,9 @@ test("version-five locator rows migrate to ordinal-zero transcript segments with
 test("segments append after sealing and preserve ordering while allowing duplicate Pi ids", async () => {
     const dir = await fsMkdtemp(join(tmpdir(), "runwield-segment-append-"));
     try {
-        const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+        const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
         try {
-            const root = `${dir}/repo`;
+            const root = join(dir, `repo`);
             await fsMkdir(root);
             const project = registerProject(database, { root, idFactory: idFactory(), now: () => "t0" });
             const firstPath = await writeTranscript(root, "pi-same");
@@ -188,10 +188,10 @@ test("segments append after sealing and preserve ordering while allowing duplica
 test("append rejects transcript paths outside the Project root and missing files", async () => {
     const dir = await fsMkdtemp(join(tmpdir(), "runwield-segment-guard-"));
     try {
-        const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+        const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
         try {
-            const root = `${dir}/repo`;
-            const outside = `${dir}/outside`;
+            const root = join(dir, `repo`);
+            const outside = join(dir, `outside`);
             await fsMkdir(root);
             await fsMkdir(outside);
             const project = registerProject(database, { root, idFactory: idFactory(), now: () => "t0" });
@@ -247,7 +247,7 @@ test("append rejects transcript paths outside the Project root and missing files
 test("sealed segments are immutable at the database boundary", async () => {
     const dir = await fsMkdtemp(join(tmpdir(), "runwield-segment-immutable-"));
     try {
-        const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+        const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
         try {
             database.transaction(() => {
                 database.handle.prepare(
@@ -284,9 +284,9 @@ test("sealed segments are immutable at the database boundary", async () => {
 test("catalog reconstruction regroups valid lineage-bearing transcript segments", async () => {
     const dir = await fsMkdtemp(join(tmpdir(), "runwield-segment-reconstruct-"));
     try {
-        const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+        const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
         try {
-            const root = `${dir}/repo`;
+            const root = join(dir, `repo`);
             await fsMkdir(root);
             const project = registerProject(database, { root, idFactory: idFactory(), now: () => "t0" });
             const firstPath = await writeTranscript(root, "pi-a", {
@@ -338,9 +338,9 @@ test("catalog reconstruction regroups valid lineage-bearing transcript segments"
 test("catalog reconstruction marks ambiguous lineage-bearing transcript segments for recovery", async () => {
     const dir = await fsMkdtemp(join(tmpdir(), "runwield-segment-recovery-"));
     try {
-        const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+        const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
         try {
-            const root = `${dir}/repo`;
+            const root = join(dir, `repo`);
             await fsMkdir(root);
             const project = registerProject(database, { root, idFactory: idFactory(), now: () => "t0" });
             await writeTranscript(root, "pi-a", {
@@ -399,7 +399,7 @@ test("catalog reconstruction marks ambiguous lineage-bearing transcript segments
 test("lineage diagnostics distinguish missing ambiguous cyclic and orphaned reconstruction states", async () => {
     const dir = await fsMkdtemp(join(tmpdir(), "runwield-segment-lineage-"));
     try {
-        const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+        const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
         try {
             database.transaction(() => {
                 database.handle.prepare(
@@ -411,11 +411,11 @@ test("lineage diagnostics distinguish missing ambiguous cyclic and orphaned reco
                 const insert = database.handle.prepare(
                     "INSERT INTO session_transcript_segments(id, runwield_session_id, project_id, pi_session_id, transcript_path, transcript_cwd, ordinal, kind, sealed_at, header_version, header_timestamp, first_cataloged_at, last_cataloged_at, lineage_parent_segment_id) VALUES (?, 'session-1', 'project-1', ?, ?, ?, ?, 'execution', 'sealed', 3, 'ts', 't1', 't1', ?)",
                 );
-                insert.run("a", "pi-a", `${dir}/a.jsonl`, dir, 0, "c");
-                insert.run("b", "pi-b", `${dir}/b.jsonl`, dir, 1, "a");
-                insert.run("c", "pi-c", `${dir}/c.jsonl`, dir, 2, "a");
-                insert.run("d", "pi-d", `${dir}/d.jsonl`, dir, 3, null);
-                insert.run("e", "pi-e", `${dir}/e.jsonl`, dir, 4, "missing");
+                insert.run("a", "pi-a", join(dir, `a.jsonl`), dir, 0, "c");
+                insert.run("b", "pi-b", join(dir, `b.jsonl`), dir, 1, "a");
+                insert.run("c", "pi-c", join(dir, `c.jsonl`), dir, 2, "a");
+                insert.run("d", "pi-d", join(dir, `d.jsonl`), dir, 3, null);
+                insert.run("e", "pi-e", join(dir, `e.jsonl`), dir, 4, "missing");
             });
             const codes = diagnoseSessionSegmentLineage(database, "session-1").map((diagnostic) => diagnostic.code)
                 .sort();

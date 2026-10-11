@@ -118,9 +118,7 @@ export interface ProjectRuntimeMigrationBlockedResult {
     securityAction?: ProjectRuntimeMigrationSecurityAction;
 }
 
-export type ProjectRuntimeMigrationResult =
-    | ProjectRuntimeMigrationReadyResult
-    | ProjectRuntimeMigrationBlockedResult;
+export type ProjectRuntimeMigrationResult = ProjectRuntimeMigrationReadyResult | ProjectRuntimeMigrationBlockedResult;
 
 export interface ProjectRuntimeLayoutAdoptedInspection {
     kind: "adopted";
@@ -261,7 +259,7 @@ export function resolveProjectRoot(projectRoot: string): string {
     try {
         return fsRealpathSync(projectRoot);
     } catch (error) {
-        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return resolve(projectRoot);
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return resolve(projectRoot);
         throw error;
     }
 }
@@ -328,7 +326,7 @@ export async function inspectProjectRuntimeLayout(
     if (isBlocked(marker)) return marker;
     const inspected = await preflight(layout, primaryCheckoutRoot, marker.marker);
     if (isBlocked(inspected)) return inspected;
-    if (marker.marker && await completeMarkerNeedsNoWork(layout, marker.marker, inspected)) {
+    if (marker.marker && (await completeMarkerNeedsNoWork(layout, marker.marker, inspected))) {
         return {
             kind: "adopted",
             layout,
@@ -388,7 +386,7 @@ export function enterProjectRuntime(selectedCheckoutRoot: string): Promise<Proje
 
 async function enterProjectRuntimeUncached(selectedCheckoutRoot: string): Promise<ProjectRuntimeLayout> {
     const rootInfo = await fsLstat(selectedCheckoutRoot).catch((error) => {
-        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return null;
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
         throw error;
     });
     if (rootInfo && !rootInfo.isDirectory()) throw new Error("Project root must be a directory");
@@ -430,13 +428,16 @@ export async function migrateLegacyProjectRuntimeState(
     const migrationWasInFlight = await lstatOrNull(layout.primary.layoutMigrationLockPath);
     const beforeLock = await preflight(layout, primaryCheckoutRoot, marker.marker);
     if (
-        isBlocked(beforeLock) && !migrationWasInFlight &&
+        isBlocked(beforeLock) &&
+        !migrationWasInFlight &&
         !(await lstatOrNull(layout.primary.layoutMigrationLockPath)) &&
-        !(beforeLock.reason === "active_legacy_writer" &&
-            beforeLock.paths.every((path) => path === legacyWorktreeRegistryLockPath(primaryCheckoutRoot)))
-    ) return beforeLock;
-    const unchanged = !isBlocked(beforeLock) &&
-        await completeMarkerNeedsNoWork(layout, marker.marker, beforeLock);
+        !(
+            beforeLock.reason === "active_legacy_writer" &&
+            beforeLock.paths.every((path) => path === legacyWorktreeRegistryLockPath(primaryCheckoutRoot))
+        )
+    )
+        return beforeLock;
+    const unchanged = !isBlocked(beforeLock) && (await completeMarkerNeedsNoWork(layout, marker.marker, beforeLock));
     if (unchanged && marker.marker) {
         return {
             kind: "ready",
@@ -578,8 +579,10 @@ async function readLayoutMarker(
             );
         }
         if (
-            parsed.version !== LAYOUT_VERSION || typeof parsed.primaryCheckoutRoot !== "string" ||
-            !Array.isArray(parsed.adoptedSelectedCheckoutRoots) || typeof parsed.completedAt !== "string" ||
+            parsed.version !== LAYOUT_VERSION ||
+            typeof parsed.primaryCheckoutRoot !== "string" ||
+            !Array.isArray(parsed.adoptedSelectedCheckoutRoots) ||
+            typeof parsed.completedAt !== "string" ||
             !parsed.adoptedSelectedCheckoutRoots.every((root: string) => typeof root === "string")
         ) {
             return block(
@@ -590,7 +593,7 @@ async function readLayoutMarker(
         }
         return { marker: parsed as LayoutMarker };
     } catch (error) {
-        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return { marker: null };
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return { marker: null };
         if (error instanceof SyntaxError) {
             return block(
                 "malformed_migration_evidence",
@@ -609,11 +612,15 @@ async function completeMarkerNeedsNoWork(
     options: { ignoreMigrationLock?: boolean } = {},
 ): Promise<boolean> {
     if (
-        !marker || preflightResult.operations.length !== 0 ||
+        !marker ||
+        preflightResult.operations.length !== 0 ||
         !preflightResult.selectedCheckoutRoots.every((root) => marker.adoptedSelectedCheckoutRoots.includes(root))
-    ) return false;
-    return !(await lstatOrNull(layout.primary.layoutMigrationJournalPath)) &&
-        (options.ignoreMigrationLock || !(await lstatOrNull(layout.primary.layoutMigrationLockPath)));
+    )
+        return false;
+    return (
+        !(await lstatOrNull(layout.primary.layoutMigrationJournalPath)) &&
+        (options.ignoreMigrationLock || !(await lstatOrNull(layout.primary.layoutMigrationLockPath)))
+    );
 }
 
 async function preflight(
@@ -628,9 +635,10 @@ async function preflight(
     const existingJournal = await readJournal(layout.primary.layoutMigrationJournalPath);
     if (isBlocked(existingJournal)) return existingJournal;
     if (
-        existingJournal.journal?.operations.some((operation) =>
-            operation.action === "rename" &&
-            operation.source === legacyRelativePath(primaryCheckoutRoot, "worktrees")
+        existingJournal.journal?.operations.some(
+            (operation) =>
+                operation.action === "rename" &&
+                operation.source === legacyRelativePath(primaryCheckoutRoot, "worktrees"),
         )
     ) {
         return block(
@@ -642,10 +650,12 @@ async function preflight(
 
     // Under the migration lock, every walk is fresh: that recheck is the one migration trusts.
     const reuseWalks = !options.legacyRegistryLockHeld;
-    const symlink = await findSymlinkBlocker(layout, primaryCheckoutRoot, [
-        layout.selected.checkoutRoot,
-        ...(existingJournal.journal?.selectedCheckoutRoots || []),
-    ], reuseWalks);
+    const symlink = await findSymlinkBlocker(
+        layout,
+        primaryCheckoutRoot,
+        [layout.selected.checkoutRoot, ...(existingJournal.journal?.selectedCheckoutRoots || [])],
+        reuseWalks,
+    );
     if (symlink.length > 0) {
         return block(
             "symlink",
@@ -670,7 +680,7 @@ async function preflight(
         );
     }
 
-    if (marker && await lstatOrNull(legacyWorktreeRegistryPath(primaryCheckoutRoot))) {
+    if (marker && (await lstatOrNull(legacyWorktreeRegistryPath(primaryCheckoutRoot)))) {
         try {
             const recovered = await inspectReturningRegistry(
                 legacyWorktreeRegistryPath(primaryCheckoutRoot),
@@ -818,7 +828,7 @@ async function validateMarkerRoots(
         );
     }
     for (const root of marker.adoptedSelectedCheckoutRoots) {
-        if (root !== await canonicalExistingRoot(root)) {
+        if (root !== (await canonicalExistingRoot(root))) {
             return block(
                 "malformed_migration_evidence",
                 [layout.primary.layoutMarkerPath, root],
@@ -847,7 +857,7 @@ async function listGitWorktrees(
     try {
         output = await runWorktreeList();
         // Git can report a transient failure while another process changes a linked worktree.
-        if (output.code !== 0 && await lstatOrNull(join(primaryCheckoutRoot, ".git"))) {
+        if (output.code !== 0 && (await lstatOrNull(join(primaryCheckoutRoot, ".git")))) {
             await new Promise((resolve) => setTimeout(resolve, 50));
             output = await runWorktreeList();
         }
@@ -871,8 +881,16 @@ async function listGitWorktrees(
     const records: GitWorktreeRecord[] = [];
     for (const record of text.trim().split("\n\n").filter(Boolean)) {
         const lines = record.split("\n");
-        const path = lines.find((line) => line.startsWith("worktree "))?.slice("worktree ".length).trim() || "";
-        const branch = lines.find((line) => line.startsWith("branch "))?.slice("branch ".length).trim() || "";
+        const path =
+            lines
+                .find((line) => line.startsWith("worktree "))
+                ?.slice("worktree ".length)
+                .trim() || "";
+        const branch =
+            lines
+                .find((line) => line.startsWith("branch "))
+                ?.slice("branch ".length)
+                .trim() || "";
         if (path) records.push({ path, branch });
     }
     // Paths and branches come only from repository metadata. Real paths do not,
@@ -937,9 +955,8 @@ async function resolveSelectedRoots(
         try {
             stat = await fsLstat(entry.path);
         } catch (error) {
-            if (
-                (error instanceof Error && "code" in error && error.code === "ENOENT") && entry.status === "abandoned"
-            ) continue;
+            if (error instanceof Error && "code" in error && error.code === "ENOENT" && entry.status === "abandoned")
+                continue;
             return block(
                 "invalid_registered_checkout",
                 [entry.path],
@@ -1050,8 +1067,8 @@ function isProjectSecretGitPath(path: string): boolean {
         PROJECT_SECRET_STORE_RELATIVE_PATH,
         `${RUNWIELD_DIR_NAME}/${PROJECT_INTERNAL_RUNTIME_DIR_NAME}/collaboration-secrets.json`,
     ];
-    return secretPaths.some((secretPath) =>
-        path === secretPath || (path.startsWith(`${secretPath}.`) && path.endsWith(".tmp"))
+    return secretPaths.some(
+        (secretPath) => path === secretPath || (path.startsWith(`${secretPath}.`) && path.endsWith(".tmp")),
     );
 }
 
@@ -1084,7 +1101,7 @@ async function findSymlinkBlocker(
         await collectOnlyThisSymlink(root, symlinks);
     }
     for (const root of new Set(authorityRoots)) {
-        symlinks.push(...await authoritySymlinks(primaryCheckoutRoot, root, repositoryContainers, reuseWalks));
+        symlinks.push(...(await authoritySymlinks(primaryCheckoutRoot, root, repositoryContainers, reuseWalks)));
     }
     return symlinks;
 }
@@ -1146,7 +1163,7 @@ async function collectSymlinks(
                 symlinks.push(checkoutRoot);
                 continue;
             }
-            if (checkoutInfo.isDirectory() && await lstatOrNull(join(checkoutRoot, ".git"))) continue;
+            if (checkoutInfo.isDirectory() && (await lstatOrNull(join(checkoutRoot, ".git")))) continue;
             await collectSymlinks(checkoutRoot, symlinks, repositoryContainers);
         }
         return;
@@ -1178,10 +1195,7 @@ async function collectSpecialFiles(path: string, kind: PathKind, specialFiles: s
     }
 }
 
-async function findLegacySecretConflicts(
-    primaryCheckoutRoot: string,
-    selectedRoots: string[],
-): Promise<string[]> {
+async function findLegacySecretConflicts(primaryCheckoutRoot: string, selectedRoots: string[]): Promise<string[]> {
     const sources: string[] = [];
     for (const root of selectedRoots) {
         const source = legacySecretAuthority(root, primaryCheckoutRoot).source;
@@ -1215,7 +1229,11 @@ async function findCurrentAuthorityConflicts(
     );
     if (!marker) {
         conflicts.push(
-            ...await currentConflictsInRoot(internalRootFor(primaryCheckoutRoot), allowedPrimary, allowedJournalPaths),
+            ...(await currentConflictsInRoot(
+                internalRootFor(primaryCheckoutRoot),
+                allowedPrimary,
+                allowedJournalPaths,
+            )),
         );
     }
     const adoptedRoots = new Set(marker?.adoptedSelectedCheckoutRoots || []);
@@ -1223,7 +1241,7 @@ async function findCurrentAuthorityConflicts(
         if (marker && (root === primaryCheckoutRoot || adoptedRoots.has(root))) continue;
         const selectedInternalRoot = internalRootFor(root);
         const allow = root === primaryCheckoutRoot ? allowedPrimary : new Set<string>();
-        conflicts.push(...await currentConflictsInRoot(selectedInternalRoot, allow, allowedJournalPaths));
+        conflicts.push(...(await currentConflictsInRoot(selectedInternalRoot, allow, allowedJournalPaths)));
     }
     // A completed marker establishes the current authority. Recreated old files
     // and directories are recoverable input, not competing authorities.
@@ -1261,9 +1279,10 @@ async function inspectLegacyLocks(
     const registryLock = legacyWorktreeRegistryLockPath(primaryCheckoutRoot);
     if (!options.legacyRegistryLockHeld) {
         const registryStatus = await classifyProcessLock(registryLock, 30_000);
-        const currentMigrationOwnsRegistry = registryStatus.status === "active" && options.migrationLockPath
-            ? await lockOwnersMatch(options.migrationLockPath, registryLock, registryStatus.snapshot)
-            : false;
+        const currentMigrationOwnsRegistry =
+            registryStatus.status === "active" && registryStatus.snapshot && options.migrationLockPath
+                ? await lockOwnersMatch(options.migrationLockPath, registryLock, registryStatus.snapshot)
+                : false;
         if (registryStatus.status === "active" && !currentMigrationOwnsRegistry) active.push(registryLock);
         if (registryStatus.status === "stale") retire.push(retireLockOperation(registryLock, registryStatus.snapshot));
     }
@@ -1276,15 +1295,13 @@ async function inspectLegacyLocks(
             if (status.status === "active") active.push(lockPath);
             if (status.status === "stale") retire.push(retireLockOperation(lockPath, status.snapshot));
         }
-        for (
-            const lock of [
-                { path: join(selectedBase, "work-record-supersession.lock"), staleMs: WORK_RECORD_LOCK_STALE_MS },
-                {
-                    path: join(selectedBase, "work-record-supersession-recovery.lock"),
-                    staleMs: WORK_RECORD_RECOVERY_LOCK_STALE_MS,
-                },
-            ]
-        ) {
+        for (const lock of [
+            { path: join(selectedBase, "work-record-supersession.lock"), staleMs: WORK_RECORD_LOCK_STALE_MS },
+            {
+                path: join(selectedBase, "work-record-supersession-recovery.lock"),
+                staleMs: WORK_RECORD_RECOVERY_LOCK_STALE_MS,
+            },
+        ]) {
             const status = await classifyWorkRecordLock(lock.path, lock.staleMs);
             if (status.status === "active") active.push(lock.path);
             if (status.status === "stale") retire.push(retireLockOperation(lock.path, status.snapshot));
@@ -1310,8 +1327,12 @@ async function lockOwnersMatch(
         try {
             const migrationOwner = JSON.parse(migrationSnapshot.text) as ProcessLockOwner;
             const registryOwner = JSON.parse(registrySnapshot.text) as ProcessLockOwner;
-            return Number.isInteger(migrationOwner.pid) && migrationOwner.pid === registryOwner.pid &&
-                Boolean(migrationOwner.hostname) && migrationOwner.hostname === registryOwner.hostname;
+            return (
+                Number.isInteger(migrationOwner.pid) &&
+                migrationOwner.pid === registryOwner.pid &&
+                Boolean(migrationOwner.hostname) &&
+                migrationOwner.hostname === registryOwner.hostname
+            );
         } catch {
             await new Promise((resolveTimer) => setTimeout(resolveTimer, 10));
             const refreshedRegistrySnapshot = await readLockFileSnapshot(registryLockPath);
@@ -1323,12 +1344,24 @@ async function lockOwnersMatch(
 }
 
 type LegacyLockClassification =
-    | { status: "absent" }
-    | { status: "active"; snapshot: LockSnapshot }
-    | { status: "stale"; snapshot: LockSnapshot };
+    { status: "absent" } | { status: "active"; snapshot?: LockSnapshot } | { status: "stale"; snapshot: LockSnapshot };
+
+async function readLegacyLockSnapshot(path: string): Promise<LockFileSnapshot | "locked" | null> {
+    try {
+        return await readLockFileSnapshot(path);
+    } catch (error) {
+        // Windows mandatory byte-range locks deny reads through other handles.
+        // An unreadable held lock has no snapshot that could authorize retirement.
+        if (platform === "win32" && error instanceof Error && "code" in error && error.code === "EBUSY") {
+            return "locked";
+        }
+        throw error;
+    }
+}
 
 async function classifyProcessLock(path: string, staleMs: number): Promise<LegacyLockClassification> {
-    const snapshot = await readLockFileSnapshot(path);
+    const snapshot = await readLegacyLockSnapshot(path);
+    if (snapshot === "locked") return { status: "active" };
     if (!snapshot) return { status: "absent" };
     if (await isLockHolderGone(snapshot.text)) return { status: "stale", snapshot };
     const parsed = parseJsonDocument(snapshot.text);
@@ -1339,7 +1372,8 @@ async function classifyProcessLock(path: string, staleMs: number): Promise<Legac
 }
 
 async function classifyPlanLock(path: string): Promise<LegacyLockClassification> {
-    const snapshot = await readLockFileSnapshot(path);
+    const snapshot = await readLegacyLockSnapshot(path);
+    if (snapshot === "locked") return { status: "active" };
     if (!snapshot) return { status: "absent" };
     if (await isLockHolderGone(snapshot.text)) return { status: "stale", snapshot };
     return Date.now() - snapshot.mtime > PLAN_LOCK_STALE_MS
@@ -1348,7 +1382,8 @@ async function classifyPlanLock(path: string): Promise<LegacyLockClassification>
 }
 
 async function classifyWorkRecordLock(path: string, staleMs: number): Promise<LegacyLockClassification> {
-    const snapshot = await readLockFileSnapshot(path);
+    const snapshot = await readLegacyLockSnapshot(path);
+    if (snapshot === "locked") return { status: "active" };
     if (!snapshot) return { status: "absent" };
     const updatedAt = snapshot.updatedAt ?? snapshot.mtime;
     return Date.now() - updatedAt > staleMs ? { status: "stale", snapshot } : { status: "active", snapshot };
@@ -1381,9 +1416,11 @@ async function validateLegacyAuthorities(
     primaryCheckoutRoot: string,
     selectedRoots: string[],
 ): Promise<undefined | ProjectRuntimeMigrationBlockedResult> {
-    const secretTemps = (await Promise.all(
-        selectedRoots.map((root) => listSiblingTemps(legacyRelativePath(root, "collaboration-secrets.json"))),
-    )).flat();
+    const secretTemps = (
+        await Promise.all(
+            selectedRoots.map((root) => listSiblingTemps(legacyRelativePath(root, "collaboration-secrets.json"))),
+        )
+    ).flat();
     if (secretTemps.length > 0) {
         return block("malformed_migration_evidence", secretTemps, "A legacy secret temp file is present.");
     }
@@ -1394,13 +1431,11 @@ async function validateLegacyAuthorities(
 
     const specialFiles: string[] = [];
     const symlinks: string[] = [];
-    for (
-        const authority of [
-            ...legacyPrimaryAuthorities(primaryCheckoutRoot),
-            ...selectedRoots.flatMap(legacySelectedAuthorities),
-            ...selectedRoots.map((root) => legacySecretAuthority(root, primaryCheckoutRoot)),
-        ]
-    ) {
+    for (const authority of [
+        ...legacyPrimaryAuthorities(primaryCheckoutRoot),
+        ...selectedRoots.flatMap(legacySelectedAuthorities),
+        ...selectedRoots.map((root) => legacySecretAuthority(root, primaryCheckoutRoot)),
+    ]) {
         await collectSymlinks(authority.source, symlinks);
         await collectSpecialFiles(authority.source, authority.kind, specialFiles);
     }
@@ -1425,13 +1460,12 @@ async function buildOperations(
     operations.push(...staleLocks);
     const primaryAuthorities = legacyPrimaryAuthorities(primaryCheckoutRoot);
     if (marker) {
-        for (
-            const authority of [
-                ...primaryAuthorities,
-                ...selectedRoots.filter((root) => marker.adoptedSelectedCheckoutRoots.includes(root))
-                    .flatMap(legacySelectedAuthorities),
-            ]
-        ) {
+        for (const authority of [
+            ...primaryAuthorities,
+            ...selectedRoots
+                .filter((root) => marker.adoptedSelectedCheckoutRoots.includes(root))
+                .flatMap(legacySelectedAuthorities),
+        ]) {
             if (await hasRecoverableRuntimeFiles(authority.source)) {
                 operations.push({ ...authority, action: "reconcile" });
             }
@@ -1445,9 +1479,10 @@ async function buildOperations(
     if (secretSources.length > 1) {
         throw new Error("Legacy secret conflicts must be rejected during preflight.");
     }
-    const registryAuthorities = primaryAuthorities.filter((authority) =>
-        basename(authority.source) === WORKTREE_REGISTRY_FILE ||
-        basename(authority.source) === "worktree-registry-migration-issues.json"
+    const registryAuthorities = primaryAuthorities.filter(
+        (authority) =>
+            basename(authority.source) === WORKTREE_REGISTRY_FILE ||
+            basename(authority.source) === "worktree-registry-migration-issues.json",
     );
     if (!marker) {
         for (const authority of primaryAuthorities.filter((authority) => !registryAuthorities.includes(authority))) {
@@ -1587,16 +1622,21 @@ async function readJournal(
     try {
         const parsed = JSON.parse(await fsReadFile(path, "utf8"));
         if (
-            !parsed || typeof parsed !== "object" || Array.isArray(parsed) || parsed.version !== LAYOUT_VERSION ||
-            typeof parsed.primaryCheckoutRoot !== "string" || !Array.isArray(parsed.selectedCheckoutRoots) ||
+            !parsed ||
+            typeof parsed !== "object" ||
+            Array.isArray(parsed) ||
+            parsed.version !== LAYOUT_VERSION ||
+            typeof parsed.primaryCheckoutRoot !== "string" ||
+            !Array.isArray(parsed.selectedCheckoutRoots) ||
             !parsed.selectedCheckoutRoots.every((root: string) => typeof root === "string") ||
-            !Array.isArray(parsed.operations) || !parsed.operations.every(isMigrationOperation)
+            !Array.isArray(parsed.operations) ||
+            !parsed.operations.every(isMigrationOperation)
         ) {
             return block("malformed_migration_evidence", [path], "The runtime migration journal is malformed.");
         }
         return { journal: parsed as MigrationJournal };
     } catch (error) {
-        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return { journal: null };
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return { journal: null };
         if (error instanceof SyntaxError) {
             return block("malformed_migration_evidence", [path], "The runtime migration journal is not valid JSON.");
         }
@@ -1607,20 +1647,34 @@ async function readJournal(
 function isMigrationOperation(value: MigrationOperation): boolean {
     if (!value || typeof value !== "object") return false;
     if (value.action === "reconcile") {
-        return typeof value.source === "string" && typeof value.destination === "string" &&
-            (value.kind === "directory" || value.kind === "file") && typeof value.completed === "boolean";
+        return (
+            typeof value.source === "string" &&
+            typeof value.destination === "string" &&
+            (value.kind === "directory" || value.kind === "file") &&
+            typeof value.completed === "boolean"
+        );
     }
     if (value.action === "rename") {
-        return typeof value.source === "string" && typeof value.destination === "string" &&
-            (value.kind === "file" || value.kind === "directory") && typeof value.completed === "boolean";
+        return (
+            typeof value.source === "string" &&
+            typeof value.destination === "string" &&
+            (value.kind === "file" || value.kind === "directory") &&
+            typeof value.completed === "boolean"
+        );
     }
     if (value.action === "retire") {
-        return typeof value.source === "string" && value.kind === "file" && typeof value.completed === "boolean" &&
-            Boolean(value.proof) && typeof value.proof.text === "string" &&
-            typeof value.proof.mtime === "number" && typeof value.proof.size === "number" &&
+        return (
+            typeof value.source === "string" &&
+            value.kind === "file" &&
+            typeof value.completed === "boolean" &&
+            Boolean(value.proof) &&
+            typeof value.proof.text === "string" &&
+            typeof value.proof.mtime === "number" &&
+            typeof value.proof.size === "number" &&
             (value.proof.token === undefined || typeof value.proof.token === "string") &&
             (value.proof.createdAt === undefined || typeof value.proof.createdAt === "number") &&
-            (value.proof.updatedAt === undefined || typeof value.proof.updatedAt === "number");
+            (value.proof.updatedAt === undefined || typeof value.proof.updatedAt === "number")
+        );
     }
     return false;
 }
@@ -1642,8 +1696,10 @@ async function isAllowedJournalOperation(
     const allowed = new Set(preflightResult.operations.map(operationKey));
     if (allowed.has(operationKey(operation))) return true;
     if (operation.action === "retire") {
-        return isBoundedLegacyLockPath(preflightResult, operation.source) &&
-            (operation.completed || !(await lstatOrNull(operation.source)));
+        return (
+            isBoundedLegacyLockPath(preflightResult, operation.source) &&
+            (operation.completed || !(await lstatOrNull(operation.source)))
+        );
     }
     if (operation.action === "reconcile") {
         const marker = await readLayoutMarker(preflightResult.layout);
@@ -1653,9 +1709,11 @@ async function isAllowedJournalOperation(
             ...preflightResult.selectedCheckoutRoots
                 .filter((root) => marker.marker?.adoptedSelectedCheckoutRoots.includes(root))
                 .flatMap(legacySelectedAuthorities),
-        ].some((authority) =>
-            authority.kind === operation.kind && authority.source === operation.source &&
-            authority.destination === operation.destination
+        ].some(
+            (authority) =>
+                authority.kind === operation.kind &&
+                authority.source === operation.source &&
+                authority.destination === operation.destination,
         );
     }
     // RC.1 could journal an empty staging directory before interruption. Finish
@@ -1665,19 +1723,23 @@ async function isAllowedJournalOperation(
         operation.destination === join(internalRootFor(preflightResult.primaryCheckoutRoot), PLAN_STAGING_DIR_NAME) &&
         operation.kind === "directory"
     ) {
-        return (await safeReadDir(operation.source) || []).length === 0 &&
-            (await safeReadDir(operation.destination) || []).length === 0;
+        return (
+            ((await safeReadDir(operation.source)) || []).length === 0 &&
+            ((await safeReadDir(operation.destination)) || []).length === 0
+        );
     }
     const authorities = [
         ...legacyPrimaryAuthorities(preflightResult.primaryCheckoutRoot),
         ...preflightResult.selectedCheckoutRoots.flatMap(legacySelectedAuthorities),
         ...preflightResult.selectedCheckoutRoots.map((root) =>
-            legacySecretAuthority(root, preflightResult.primaryCheckoutRoot)
+            legacySecretAuthority(root, preflightResult.primaryCheckoutRoot),
         ),
     ];
-    return authorities.some((authority) =>
-        authority.source === operation.source && authority.destination === operation.destination &&
-        authority.kind === operation.kind
+    return authorities.some(
+        (authority) =>
+            authority.source === operation.source &&
+            authority.destination === operation.destination &&
+            authority.kind === operation.kind,
     );
 }
 
@@ -1687,9 +1749,11 @@ function isBoundedLegacyLockPath(preflightResult: MigrationPreflight, path: stri
     return preflightResult.selectedCheckoutRoots.some((root) => {
         const base = legacyRuntimeBase(root);
         const planLocksDir = join(base, PLAN_LOCKS_DIR_NAME);
-        return path === join(base, "work-record-supersession.lock") ||
+        return (
+            path === join(base, "work-record-supersession.lock") ||
             path === join(base, "work-record-supersession-recovery.lock") ||
-            (path.startsWith(`${planLocksDir}${SEPARATOR}`) && path.endsWith(".lock"));
+            (path.startsWith(`${planLocksDir}${SEPARATOR}`) && path.endsWith(".lock"))
+        );
     });
 }
 
@@ -1772,7 +1836,7 @@ async function applyRenameOperation(
             "A journaled runtime rename lost both source and destination.",
         );
     }
-    if (source && destination && await isEmptyDirectory(operation.destination)) {
+    if (source && destination && (await isEmptyDirectory(operation.destination))) {
         await fsRmdir(operation.destination);
         await syncDirectory(dirname(operation.destination));
         try {
@@ -1881,10 +1945,7 @@ async function acquireLegacyWorkRecordRecoveryLock(lockPath: string): Promise<()
             if (Date.now() >= deadline) {
                 throw new Error(`Timed out waiting for the Work Record supersession recovery lock: ${lockPath}`);
             }
-            if (
-                status.status === "stale" &&
-                await removeLockFileIfSnapshotMatches(lockPath, status.snapshot)
-            ) {
+            if (status.status === "stale" && (await removeLockFileIfSnapshotMatches(lockPath, status.snapshot))) {
                 continue;
             }
             await new Promise((resolveTimer) => setTimeout(resolveTimer, WORK_RECORD_LOCK_RETRY_MS));
@@ -1925,7 +1986,7 @@ function markOperation(journal: MigrationJournal, source: string, completed: boo
     return {
         ...journal,
         operations: journal.operations.map((operation) =>
-            operation.source === source ? { ...operation, completed } : operation
+            operation.source === source ? { ...operation, completed } : operation,
         ),
         updatedAt: new Date().toISOString(),
     };
@@ -2034,7 +2095,7 @@ async function lstatOrNull(path: string): Promise<Stats | null> {
     try {
         return await fsLstat(path);
     } catch (error) {
-        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return null;
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
         throw error;
     }
 }
@@ -2045,7 +2106,7 @@ async function safeReadDir(path: string): Promise<Dirent[] | null> {
         for await (const entry of await fsReaddir(path, { withFileTypes: true })) entries.push(entry);
         return entries;
     } catch (error) {
-        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return null;
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
         throw error;
     }
 }
@@ -2056,7 +2117,7 @@ async function listFiles(path: string): Promise<string[]> {
     const files: string[] = [];
     for await (const entry of await fsReaddir(path, { withFileTypes: true })) {
         const child = join(path, entry.name);
-        if (entry.isDirectory()) files.push(...await listFiles(child));
+        if (entry.isDirectory()) files.push(...(await listFiles(child)));
         else files.push(child);
     }
     return files;

@@ -39,7 +39,7 @@ function idFactory(prefix = "id") {
 async function writeTranscript(cwd, piSessionId, options = {}) {
     const sessionDir = getRunWieldSessionDir(cwd);
     await fsMkdir(sessionDir, { recursive: true });
-    const sessionPath = `${sessionDir}/2026-01-01T00-00-00-000Z_${piSessionId}.jsonl`;
+    const sessionPath = join(sessionDir, `2026-01-01T00-00-00-000Z_${piSessionId}.jsonl`);
     const header = {
         type: "session",
         version: options.headerVersion ?? 3,
@@ -70,9 +70,9 @@ test("Session listing lazily catalogs legacy transcripts without storing message
         const previousHome = process.env["HOME"];
         const dir = await fsMkdtemp(join(tmpdir(), "runwield-session-catalog-"));
         process.env["HOME"] = dir;
-        const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+        const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
         try {
-            const root = `${dir}/repo`;
+            const root = join(dir, `repo`);
             await fsMkdir(root);
             const project = registerProject(database, { root, idFactory: idFactory(), now: () => "t1" });
             const transcriptPath = await writeTranscript(root, "pi-1", {
@@ -113,10 +113,10 @@ test("Session catalog scans registered symlink alias session directories", async
         const previousHome = process.env["HOME"];
         const dir = await fsMkdtemp(join(tmpdir(), "runwield-session-alias-"));
         process.env["HOME"] = dir;
-        const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+        const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
         try {
-            const root = `${dir}/repo`;
-            const link = `${dir}/repo-link`;
+            const root = join(dir, `repo`);
+            const link = join(dir, `repo-link`);
             await fsMkdir(root);
             await fsSymlink(root, link);
             const ids = idFactory();
@@ -147,14 +147,14 @@ test("Session listing is incremental and full rescan remains explicit", async ()
         const previousHome = process.env["HOME"];
         const dir = await fsMkdtemp(join(tmpdir(), "runwield-session-incremental-"));
         process.env["HOME"] = dir;
-        const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+        const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
         try {
-            const root = `${dir}/repo`;
+            const root = join(dir, `repo`);
             await fsMkdir(root);
             const project = registerProject(database, { root, idFactory: idFactory(), now: () => "t1" });
             await writeTranscript(root, "valid");
             const sessionDir = getRunWieldSessionDir(root);
-            const brokenPath = `${sessionDir}/2026-01-01T00-00-00-000Z_broken.jsonl`;
+            const brokenPath = join(sessionDir, `2026-01-01T00-00-00-000Z_broken.jsonl`);
             await fsWriteFile(brokenPath, "not-json\n");
 
             const first = await listProjectSessions(database, project.projectId, {
@@ -217,10 +217,10 @@ test("Session cataloging reuses stable IDs across repeated scans and database co
         const previousHome = process.env["HOME"];
         const dir = await fsMkdtemp(join(tmpdir(), "runwield-session-reuse-"));
         process.env["HOME"] = dir;
-        const dbPath = `${dir}/owner.sqlite3`;
+        const dbPath = join(dir, `owner.sqlite3`);
         const firstDb = openOwnerCoordinationDatabase({ dbPath });
         try {
-            const root = `${dir}/repo`;
+            const root = join(dir, `repo`);
             await fsMkdir(root);
             const project = registerProject(firstDb, { root, idFactory: idFactory(), now: () => "t1" });
             await writeTranscript(root, "pi-1");
@@ -252,17 +252,17 @@ test("Session cataloging reports malformed and wrong-cwd transcripts while catal
         const previousHome = process.env["HOME"];
         const dir = await fsMkdtemp(join(tmpdir(), "runwield-session-diagnostics-"));
         process.env["HOME"] = dir;
-        const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+        const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
         try {
-            const root = `${dir}/repo`;
-            const other = `${dir}/other`;
+            const root = join(dir, `repo`);
+            const other = join(dir, `other`);
             await fsMkdir(root);
             await fsMkdir(other);
             const project = registerProject(database, { root, idFactory: idFactory(), now: () => "t1" });
             await writeTranscript(root, "valid");
             await writeTranscript(root, "wrong", { headerCwd: other });
             const sessionDir = getRunWieldSessionDir(root);
-            await fsWriteFile(`${sessionDir}/broken.jsonl`, "not-json\n");
+            await fsWriteFile(join(sessionDir, `broken.jsonl`), "not-json\n");
 
             const result = await catalogProjectSessions(database, project.projectId, {
                 idFactory: idFactory(),
@@ -288,9 +288,9 @@ test("Session locator conflicts are diagnostics and do not reassign existing sta
         const previousHome = process.env["HOME"];
         const dir = await fsMkdtemp(join(tmpdir(), "runwield-session-conflict-"));
         process.env["HOME"] = dir;
-        const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+        const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
         try {
-            const root = `${dir}/repo`;
+            const root = join(dir, `repo`);
             await fsMkdir(root);
             const project = registerProject(database, { root, idFactory: idFactory(), now: () => "t1" });
             const firstPath = await writeTranscript(root, "same-pi");
@@ -331,14 +331,14 @@ test("shared Session catalog API rejects unguarded or contradictory locators", a
         const previousHome = process.env["HOME"];
         const dir = await fsMkdtemp(join(tmpdir(), "runwield-session-guard-"));
         process.env["HOME"] = dir;
-        const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+        const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
         try {
-            const root = `${dir}/repo`;
-            const other = `${dir}/other`;
+            const root = join(dir, `repo`);
+            const other = join(dir, `other`);
             await fsMkdir(root);
             await fsMkdir(other);
             const project = registerProject(database, { root, idFactory: idFactory(), now: () => "t1" });
-            const outside = `${dir}/outside.jsonl`;
+            const outside = join(dir, `outside.jsonl`);
             await fsWriteFile(
                 outside,
                 JSON.stringify({ type: "session", version: 3, id: "outside", cwd: root }) + "\n",
@@ -355,7 +355,7 @@ test("shared Session catalog API rejects unguarded or contradictory locators", a
                 "outside the RunWield session directory",
             );
 
-            const outsideTarget = `${dir}/outside-target.jsonl`;
+            const outsideTarget = join(dir, `outside-target.jsonl`);
             await fsWriteFile(
                 outsideTarget,
                 JSON.stringify({ type: "session", version: 3, id: "outside-target", cwd: root }) + "\n",
@@ -401,11 +401,11 @@ test("two database connections racing to catalog one locator converge on one sta
         const previousHome = process.env["HOME"];
         const dir = await fsMkdtemp(join(tmpdir(), "runwield-session-race-"));
         process.env["HOME"] = dir;
-        const dbPath = `${dir}/owner.sqlite3`;
+        const dbPath = join(dir, `owner.sqlite3`);
         const firstDb = openOwnerCoordinationDatabase({ dbPath });
         const secondDb = openOwnerCoordinationDatabase({ dbPath });
         try {
-            const root = `${dir}/repo`;
+            const root = join(dir, `repo`);
             await fsMkdir(root);
             const project = registerProject(firstDb, { root, idFactory: idFactory("project"), now: () => "t1" });
             const transcriptPath = await writeTranscript(root, "race-pi");
@@ -452,9 +452,9 @@ test("Session catalog persists validated header evidence and conflicts on later 
         const previousHome = process.env["HOME"];
         const dir = await fsMkdtemp(join(tmpdir(), "runwield-session-evidence-"));
         process.env["HOME"] = dir;
-        const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+        const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
         try {
-            const root = `${dir}/repo`;
+            const root = join(dir, `repo`);
             await fsMkdir(root);
             const project = registerProject(database, { root, idFactory: idFactory(), now: () => "t1" });
             const transcriptPath = await writeTranscript(root, "evidence-pi", { headerVersion: 3 });
@@ -506,11 +506,11 @@ test("Session catalog does not let an encoded-directory collision rejected candi
         const previousHome = process.env["HOME"];
         const dir = await fsMkdtemp(join(tmpdir(), "runwield-session-collision-"));
         process.env["HOME"] = dir;
-        const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+        const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
         try {
-            const historicalRoot = `${dir}/repo-root`;
-            const currentParent = `${dir}/repo`;
-            const currentRoot = `${currentParent}/root`;
+            const historicalRoot = join(dir, `repo-root`);
+            const currentParent = join(dir, `repo`);
+            const currentRoot = join(currentParent, `root`);
             await fsMkdir(historicalRoot, { recursive: true });
             await fsMkdir(currentRoot, { recursive: true });
             const ids = idFactory();
@@ -543,11 +543,11 @@ test("Session catalog rejects symlink-retargeted roots even when entered root te
         const previousHome = process.env["HOME"];
         const dir = await fsMkdtemp(join(tmpdir(), "runwield-session-retarget-"));
         process.env["HOME"] = dir;
-        const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+        const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
         try {
-            const firstTarget = `${dir}/first`;
-            const secondTarget = `${dir}/second`;
-            const link = `${dir}/repo-link`;
+            const firstTarget = join(dir, `first`);
+            const secondTarget = join(dir, `second`);
+            const link = join(dir, `repo-link`);
             await fsMkdir(firstTarget);
             await fsMkdir(secondTarget);
             await fsSymlink(firstTarget, link);
@@ -577,10 +577,10 @@ test("Session catalog accepts stored historical root evidence after old cwd disa
         const previousHome = process.env["HOME"];
         const dir = await fsMkdtemp(join(tmpdir(), "runwield-session-historical-missing-"));
         process.env["HOME"] = dir;
-        const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+        const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
         try {
-            const historicalRoot = `${dir}/old-repo`;
-            const currentRoot = `${dir}/new-repo`;
+            const historicalRoot = join(dir, `old-repo`);
+            const currentRoot = join(dir, `new-repo`);
             await fsMkdir(historicalRoot, { recursive: true });
             await fsMkdir(currentRoot, { recursive: true });
             const ids = idFactory();
@@ -617,9 +617,9 @@ test("Session catalog reconstruction after database deletion requires re-registr
         const previousHome = process.env["HOME"];
         const dir = await fsMkdtemp(join(tmpdir(), "runwield-session-reconstruct-"));
         process.env["HOME"] = dir;
-        const dbPath = `${dir}/owner.sqlite3`;
+        const dbPath = join(dir, `owner.sqlite3`);
         try {
-            const root = `${dir}/repo`;
+            const root = join(dir, `repo`);
             await fsMkdir(root);
             await writeTranscript(root, "pi-1");
             const firstDb = openOwnerCoordinationDatabase({ dbPath });

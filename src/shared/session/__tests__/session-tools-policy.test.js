@@ -1,7 +1,9 @@
+import { delimiter } from "node:path";
+import { writeWorkflowBinaryFixtures, assertWorkflowBinaryCallsSupported } from "../../../testing/workflow-binary-fixtures.ts";
 import { runtimeSourceArgs } from "../../../testing/runtime-source-args.ts";
 import { captureForegroundProcess } from "../../captured-process.ts";
 import { makeTempFile } from "../../../testing/temp-file.ts";
-import { test } from "node:test";
+import { after, before, test } from "node:test";
 import { tmpdir } from "node:os";
 import {
     mkdir as fsMkdir,
@@ -30,6 +32,23 @@ import {
 } from "../session.js";
 import { createReviewDiffTool } from "../../workflow/review-diff-tool.js";
 import { startMcpIntegration } from "../../mcp/integration.ts";
+
+let helperRoot = "";
+let priorHelperPath = "";
+before(() => withProcessGlobalTestLock(async () => {
+    priorHelperPath = process.env.PATH || "";
+    helperRoot = await fsMkdtemp(join(tmpdir(), "session-policy-helpers-"));
+    const bin = await writeWorkflowBinaryFixtures(helperRoot);
+    process.env.PATH = `${bin}${delimiter}${priorHelperPath}`;
+}));
+after(() => withProcessGlobalTestLock(async () => {
+    process.env.PATH = priorHelperPath;
+    try {
+        await assertWorkflowBinaryCallsSupported(helperRoot);
+    } finally {
+        await fsRm(helperRoot, { recursive: true });
+    }
+}));
 
 // Anchored to this file, not Deno.cwd(): test realms share one process, so a
 // concurrent test file's chdir would otherwise point these at its temp dir.

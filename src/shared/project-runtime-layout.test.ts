@@ -1,3 +1,4 @@
+import { writeRuntimeExecutableFixture } from "../testing/runtime-executable-fixture.ts";
 import { delimiter } from "node:path";
 import fsPromises from "node:fs/promises";
 import { type NativeProcess } from "./foreground-process.ts";
@@ -23,7 +24,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import process from "node:process";
-import { assert, assertEquals, assertExists } from "@std/assert";
+import { assert, assertEquals, assertExists, assertRejects } from "@std/assert";
 import { dirname, fromFileUrl, join, resolve } from "@std/path";
 import { getRunWieldRuntimeDir, PROJECT_INTERNAL_RUNTIME_DIR_NAME, RUNWIELD_DIR_NAME } from "../constants.js";
 import { withProcessGlobalTestLock } from "../testing/process-global-lock.ts";
@@ -123,24 +124,7 @@ test("runtime migration retries one transient Git worktree listing failure", asy
         const failedListMarker = join(binDir, "worktree-list-failed");
         const originalPath = process.env["PATH"] || "";
         try {
-            const gitWrapper = join(binDir, "git");
-            await fsWriteFile(
-                gitWrapper,
-                [
-                    "#!/bin/sh",
-                    `if [ \"$1\" = \"worktree\" ] && [ \"$2\" = \"list\" ] && [ ! -e ${
-                        JSON.stringify(failedListMarker)
-                    } ]; then`,
-                    `    touch ${JSON.stringify(failedListMarker)}`,
-                    "    exit 1",
-                    "fi",
-                    `PATH=${JSON.stringify(originalPath)}`,
-                    "export PATH",
-                    'exec git "$@"',
-                    "",
-                ].join("\n"),
-            );
-            await fsChmod(gitWrapper, 0o700);
+            await writeGitWrapper(binDir, originalPath, { failedListMarker });
             process.env["PATH"] = `${binDir}${delimiter}${originalPath}`;
 
             const layout = await enterProjectRuntime(primaryCheckout);
@@ -208,10 +192,7 @@ test("legacy migration adopts primary and selected runtime leaves once", async (
         await writeText(join(primaryBase, "worktree-registry-migration-issues.json"), "issues\n");
         await writeText(join(primaryBase, "debug", "trace.txt"), "debug\n");
         const secretPath = join(primaryBase, "collaboration-secrets.json");
-        await writeText(
-            secretPath,
-            `${JSON.stringify({ schemaVersion: 1, records: {} })}\n`,
-        );
+        await writeText(secretPath, `${JSON.stringify({ schemaVersion: 1, records: {} })}\n`);
         await fsChmod(secretPath, 0o600).catch(() => {});
         await writeText(join(selectedBase, "plan-transitions", "t.json"), "transition\n");
         await writeText(join(selectedBase, "plan-backups", "b.json"), "backup\n");
@@ -236,8 +217,10 @@ test("legacy migration adopts primary and selected runtime leaves once", async (
             await fsReadFile(layout.primary.projectSecretStorePath, "utf8"),
             `${JSON.stringify({ schemaVersion: 1, records: {} })}\n`,
         );
-        assertEquals(((await fsLstat(join(layout.primary.internalRoot, "controller"))).mode ?? 0) & 0o777, 0o700);
-        assertEquals(((await fsLstat(layout.primary.projectSecretStorePath)).mode ?? 0) & 0o777, 0o600);
+        if (process.platform !== "win32")
+            assertEquals(((await fsLstat(join(layout.primary.internalRoot, "controller"))).mode ?? 0) & 0o777, 0o700);
+        if (process.platform !== "win32")
+            assertEquals(((await fsLstat(layout.primary.projectSecretStorePath)).mode ?? 0) & 0o777, 0o600);
         assertEquals(await fsReadFile(join(layout.selected.transitionJournalsDir, "t.json"), "utf8"), "transition\n");
         assertEquals(await fsReadFile(join(layout.selected.planBackupsDir, "b.json"), "utf8"), "backup\n");
         await assertMissing(join(primaryBase, "controller"));
@@ -493,25 +476,25 @@ test("legacy migration resumes when a journaled rename already reached its desti
         await writeText(join(layout.primary.internalRoot, "controller", "plans", "plan.json"), "controller\n");
         await writeText(
             layout.primary.layoutMigrationJournalPath,
-            `${
-                JSON.stringify(
-                    {
-                        version: 1,
-                        primaryCheckoutRoot: project.primaryRoot,
-                        selectedCheckoutRoots: [project.primaryRoot, project.selectedRoot].sort(),
-                        operations: [{
+            `${JSON.stringify(
+                {
+                    version: 1,
+                    primaryCheckoutRoot: project.primaryRoot,
+                    selectedCheckoutRoots: [project.primaryRoot, project.selectedRoot].sort(),
+                    operations: [
+                        {
                             action: "rename",
                             source: join(primaryBase, "controller"),
                             destination: join(layout.primary.internalRoot, "controller"),
                             kind: "directory",
                             completed: false,
-                        }],
-                        updatedAt: "2026-01-01T00:00:00.000Z",
-                    },
-                    null,
-                    2,
-                )
-            }\n`,
+                        },
+                    ],
+                    updatedAt: "2026-01-01T00:00:00.000Z",
+                },
+                null,
+                2,
+            )}\n`,
         );
 
         const result = await migrateLegacyProjectRuntimeState(project.selectedRoot);
@@ -537,25 +520,25 @@ test("legacy migration blocks when a completed journal receipt has two authoriti
         await writeText(join(layout.primary.internalRoot, "controller", "plans", "internal.json"), "internal\n");
         await writeText(
             layout.primary.layoutMigrationJournalPath,
-            `${
-                JSON.stringify(
-                    {
-                        version: 1,
-                        primaryCheckoutRoot: project.primaryRoot,
-                        selectedCheckoutRoots: [project.primaryRoot, project.selectedRoot].sort(),
-                        operations: [{
+            `${JSON.stringify(
+                {
+                    version: 1,
+                    primaryCheckoutRoot: project.primaryRoot,
+                    selectedCheckoutRoots: [project.primaryRoot, project.selectedRoot].sort(),
+                    operations: [
+                        {
                             action: "rename",
                             source: join(primaryBase, "controller"),
                             destination: join(layout.primary.internalRoot, "controller"),
                             kind: "directory",
                             completed: true,
-                        }],
-                        updatedAt: "2026-01-01T00:00:00.000Z",
-                    },
-                    null,
-                    2,
-                )
-            }\n`,
+                        },
+                    ],
+                    updatedAt: "2026-01-01T00:00:00.000Z",
+                },
+                null,
+                2,
+            )}\n`,
         );
 
         const result = await migrateLegacyProjectRuntimeState(project.selectedRoot);
@@ -626,12 +609,10 @@ test("legacy migration blocks tracked secret temp files with rotation guidance",
 });
 
 test("legacy migration classifies current secret files and temps as tracked secrets", async () => {
-    for (
-        const relativePath of [
-            ".wld/internal/collaboration-secrets.json",
-            ".wld/internal/collaboration-secrets.json.write.tmp",
-        ]
-    ) {
+    for (const relativePath of [
+        ".wld/internal/collaboration-secrets.json",
+        ".wld/internal/collaboration-secrets.json.write.tmp",
+    ]) {
         const project = await makeMigrationProject();
         try {
             const path = join(project.primaryRoot, relativePath);
@@ -676,12 +657,14 @@ test("legacy migration preserves unfinished publication and repair receipts", as
                     join(getRunWieldRuntimeDir(unfinished.primaryRoot), "worktrees.json"),
                     JSON.stringify({
                         version: 2,
-                        entries: [{
-                            ...unfinished.registryEntry,
-                            planId: "plan-demo",
-                            status: "validated",
-                            publication: candidate,
-                        }],
+                        entries: [
+                            {
+                                ...unfinished.registryEntry,
+                                planId: "plan-demo",
+                                status: "validated",
+                                publication: candidate,
+                            },
+                        ],
                     }),
                 );
 
@@ -698,12 +681,14 @@ test("legacy migration preserves unfinished publication and repair receipts", as
                     join(getRunWieldRuntimeDir(unfinished.primaryRoot), "worktrees.json"),
                     JSON.stringify({
                         version: 2,
-                        entries: [{
-                            ...unfinished.registryEntry,
-                            planId: "plan-demo",
-                            status: "validated",
-                            publication: repaired,
-                        }],
+                        entries: [
+                            {
+                                ...unfinished.registryEntry,
+                                planId: "plan-demo",
+                                status: "validated",
+                                publication: repaired,
+                            },
+                        ],
                     }),
                 );
                 const repairFile = join(repaired.publicationRoot, "resolution.txt");
@@ -762,12 +747,14 @@ test("legacy migration preserves unfinished publication and repair receipts", as
                     join(getRunWieldRuntimeDir(complete.primaryRoot), "worktrees.json"),
                     JSON.stringify({
                         version: 2,
-                        entries: [{
-                            ...complete.registryEntry,
-                            planId: "plan-demo",
-                            status: "validated",
-                            publication: cleaned,
-                        }],
+                        entries: [
+                            {
+                                ...complete.registryEntry,
+                                planId: "plan-demo",
+                                status: "validated",
+                                publication: cleaned,
+                            },
+                        ],
                     }),
                 );
 
@@ -829,25 +816,25 @@ test("legacy migration rejects a journal that retires an unbounded lock path", a
         const stat = await fsStat(externalLock);
         await writeText(
             layout.primary.layoutMigrationJournalPath,
-            `${
-                JSON.stringify(
-                    {
-                        version: 1,
-                        primaryCheckoutRoot: project.primaryRoot,
-                        selectedCheckoutRoots: [project.primaryRoot, project.selectedRoot].sort(),
-                        operations: [{
+            `${JSON.stringify(
+                {
+                    version: 1,
+                    primaryCheckoutRoot: project.primaryRoot,
+                    selectedCheckoutRoots: [project.primaryRoot, project.selectedRoot].sort(),
+                    operations: [
+                        {
                             action: "retire",
                             source: externalLock,
                             kind: "file",
                             proof: { text: "external\n", mtime: stat.mtime?.getTime() ?? Date.now(), size: stat.size },
                             completed: false,
-                        }],
-                        updatedAt: "2026-01-01T00:00:00.000Z",
-                    },
-                    null,
-                    2,
-                )
-            }\n`,
+                        },
+                    ],
+                    updatedAt: "2026-01-01T00:00:00.000Z",
+                },
+                null,
+                2,
+            )}\n`,
         );
 
         const result = await migrateLegacyProjectRuntimeState(project.selectedRoot);
@@ -867,19 +854,17 @@ test("legacy migration rejects an existing journal that omits required operation
         await writeText(join(getRunWieldRuntimeDir(project.primaryRoot), "controller", "plans", "plan.json"), "x\n");
         await writeText(
             layout.primary.layoutMigrationJournalPath,
-            `${
-                JSON.stringify(
-                    {
-                        version: 1,
-                        primaryCheckoutRoot: project.primaryRoot,
-                        selectedCheckoutRoots: [project.primaryRoot, project.selectedRoot].sort(),
-                        operations: [],
-                        updatedAt: "2026-01-01T00:00:00.000Z",
-                    },
-                    null,
-                    2,
-                )
-            }\n`,
+            `${JSON.stringify(
+                {
+                    version: 1,
+                    primaryCheckoutRoot: project.primaryRoot,
+                    selectedCheckoutRoots: [project.primaryRoot, project.selectedRoot].sort(),
+                    operations: [],
+                    updatedAt: "2026-01-01T00:00:00.000Z",
+                },
+                null,
+                2,
+            )}\n`,
         );
         const result = await migrateLegacyProjectRuntimeState(project.selectedRoot);
         if (result.kind !== "blocked") throw new Error(`Expected blocked, got ${result.kind}`);
@@ -903,34 +888,30 @@ test("legacy migration cleans completed journal and migration lock after marker 
         const layout = resolveProjectRuntimeLayout(project.selectedRoot);
         await writeText(
             layout.primary.layoutMarkerPath,
-            `${
-                JSON.stringify(
-                    {
-                        version: 1,
-                        primaryCheckoutRoot: project.primaryRoot,
-                        adoptedSelectedCheckoutRoots: [project.primaryRoot, project.selectedRoot].sort(),
-                        completedAt: "2026-01-01T00:00:00.000Z",
-                    },
-                    null,
-                    2,
-                )
-            }\n`,
+            `${JSON.stringify(
+                {
+                    version: 1,
+                    primaryCheckoutRoot: project.primaryRoot,
+                    adoptedSelectedCheckoutRoots: [project.primaryRoot, project.selectedRoot].sort(),
+                    completedAt: "2026-01-01T00:00:00.000Z",
+                },
+                null,
+                2,
+            )}\n`,
         );
         await writeText(
             layout.primary.layoutMigrationJournalPath,
-            `${
-                JSON.stringify(
-                    {
-                        version: 1,
-                        primaryCheckoutRoot: project.primaryRoot,
-                        selectedCheckoutRoots: [project.primaryRoot, project.selectedRoot].sort(),
-                        operations: [],
-                        updatedAt: "2026-01-01T00:00:00.000Z",
-                    },
-                    null,
-                    2,
-                )
-            }\n`,
+            `${JSON.stringify(
+                {
+                    version: 1,
+                    primaryCheckoutRoot: project.primaryRoot,
+                    selectedCheckoutRoots: [project.primaryRoot, project.selectedRoot].sort(),
+                    operations: [],
+                    updatedAt: "2026-01-01T00:00:00.000Z",
+                },
+                null,
+                2,
+            )}\n`,
         );
         await writeText(
             layout.primary.layoutMigrationLockPath,
@@ -964,47 +945,45 @@ test("legacy migration resumes selected-root adoption after the registry was alr
         await writeText(join(getRunWieldRuntimeDir(laterRoot), "plan-transitions", "later.json"), "later\n");
         await writeText(
             layout.primary.layoutMigrationJournalPath,
-            `${
-                JSON.stringify(
-                    {
-                        version: 1,
-                        primaryCheckoutRoot: project.primaryRoot,
-                        selectedCheckoutRoots: [project.primaryRoot, project.selectedRoot, laterRoot].sort(),
-                        operations: [
-                            {
-                                action: "rename",
-                                source: join(getRunWieldRuntimeDir(project.primaryRoot), "worktrees.json"),
-                                destination: layout.primary.worktreeRegistryPath,
-                                kind: "file",
-                                completed: true,
-                            },
-                            {
-                                action: "rename",
-                                source: join(getRunWieldRuntimeDir(project.selectedRoot), "plan-transitions"),
-                                destination: join(
-                                    resolveProjectRuntimeLayout(project.selectedRoot).selected.internalRoot,
-                                    "plan-transitions",
-                                ),
-                                kind: "directory",
-                                completed: false,
-                            },
-                            {
-                                action: "rename",
-                                source: join(getRunWieldRuntimeDir(laterRoot), "plan-transitions"),
-                                destination: join(
-                                    resolveProjectRuntimeLayout(laterRoot).selected.internalRoot,
-                                    "plan-transitions",
-                                ),
-                                kind: "directory",
-                                completed: false,
-                            },
-                        ],
-                        updatedAt: "2026-01-01T00:00:00.000Z",
-                    },
-                    null,
-                    2,
-                )
-            }\n`,
+            `${JSON.stringify(
+                {
+                    version: 1,
+                    primaryCheckoutRoot: project.primaryRoot,
+                    selectedCheckoutRoots: [project.primaryRoot, project.selectedRoot, laterRoot].sort(),
+                    operations: [
+                        {
+                            action: "rename",
+                            source: join(getRunWieldRuntimeDir(project.primaryRoot), "worktrees.json"),
+                            destination: layout.primary.worktreeRegistryPath,
+                            kind: "file",
+                            completed: true,
+                        },
+                        {
+                            action: "rename",
+                            source: join(getRunWieldRuntimeDir(project.selectedRoot), "plan-transitions"),
+                            destination: join(
+                                resolveProjectRuntimeLayout(project.selectedRoot).selected.internalRoot,
+                                "plan-transitions",
+                            ),
+                            kind: "directory",
+                            completed: false,
+                        },
+                        {
+                            action: "rename",
+                            source: join(getRunWieldRuntimeDir(laterRoot), "plan-transitions"),
+                            destination: join(
+                                resolveProjectRuntimeLayout(laterRoot).selected.internalRoot,
+                                "plan-transitions",
+                            ),
+                            kind: "directory",
+                            completed: false,
+                        },
+                    ],
+                    updatedAt: "2026-01-01T00:00:00.000Z",
+                },
+                null,
+                2,
+            )}\n`,
         );
         const result = await migrateLegacyProjectRuntimeState(project.selectedRoot);
         if (result.kind !== "ready") throw new Error(`Expected ready, got ${JSON.stringify(result)}`);
@@ -1033,25 +1012,25 @@ test("legacy migration rejects a stale lock retirement when the lock proof chang
         await fsUtimes(lockPath, old, old);
         await writeText(
             layout.primary.layoutMigrationJournalPath,
-            `${
-                JSON.stringify(
-                    {
-                        version: 1,
-                        primaryCheckoutRoot: project.primaryRoot,
-                        selectedCheckoutRoots: [project.primaryRoot, project.selectedRoot].sort(),
-                        operations: [{
+            `${JSON.stringify(
+                {
+                    version: 1,
+                    primaryCheckoutRoot: project.primaryRoot,
+                    selectedCheckoutRoots: [project.primaryRoot, project.selectedRoot].sort(),
+                    operations: [
+                        {
                             action: "retire",
                             source: lockPath,
                             kind: "file",
                             proof: { text: "old stale lock\n", mtime: 0, size: "old stale lock\n".length },
                             completed: false,
-                        }],
-                        updatedAt: "2026-01-01T00:00:00.000Z",
-                    },
-                    null,
-                    2,
-                )
-            }\n`,
+                        },
+                    ],
+                    updatedAt: "2026-01-01T00:00:00.000Z",
+                },
+                null,
+                2,
+            )}\n`,
         );
         const result = await migrateLegacyProjectRuntimeState(project.selectedRoot);
         if (result.kind !== "blocked") throw new Error(`Expected blocked, got ${result.kind}`);
@@ -1164,25 +1143,25 @@ test("legacy migration rejects an old journaled project-local worktree rename", 
         await writeText(file, "preserve\n");
         await writeText(
             layout.primary.layoutMigrationJournalPath,
-            `${
-                JSON.stringify(
-                    {
-                        version: 1,
-                        primaryCheckoutRoot: project.primaryRoot,
-                        selectedCheckoutRoots: [project.primaryRoot, project.selectedRoot].sort(),
-                        operations: [{
+            `${JSON.stringify(
+                {
+                    version: 1,
+                    primaryCheckoutRoot: project.primaryRoot,
+                    selectedCheckoutRoots: [project.primaryRoot, project.selectedRoot].sort(),
+                    operations: [
+                        {
                             action: "rename",
                             source,
                             destination: layout.primary.fallbackWorktreesRoot,
                             kind: "directory",
                             completed: false,
-                        }],
-                        updatedAt: "2026-01-01T00:00:00.000Z",
-                    },
-                    null,
-                    2,
-                )
-            }\n`,
+                        },
+                    ],
+                    updatedAt: "2026-01-01T00:00:00.000Z",
+                },
+                null,
+                2,
+            )}\n`,
         );
         const result = await migrateLegacyProjectRuntimeState(project.selectedRoot);
         if (result.kind !== "blocked") throw new Error(`Expected blocked, got ${result.kind}`);
@@ -1206,13 +1185,15 @@ test("legacy migration resumes RC.1 empty staging rename journals", async () => 
                 version: 1,
                 primaryCheckoutRoot: project.primaryRoot,
                 selectedCheckoutRoots: [project.primaryRoot, project.selectedRoot].sort(),
-                operations: [{
-                    action: "rename",
-                    source,
-                    destination: layout.primary.publicationStagingRoot,
-                    kind: "directory",
-                    completed: false,
-                }],
+                operations: [
+                    {
+                        action: "rename",
+                        source,
+                        destination: layout.primary.publicationStagingRoot,
+                        kind: "directory",
+                        completed: false,
+                    },
+                ],
                 updatedAt: "2026-01-01T00:00:00.000Z",
             }),
         );
@@ -1257,7 +1238,7 @@ test("legacy migration rejects selected runtime base symlinks", async () => {
     }
 });
 
-test("legacy migration rejects special-file descendants", async () => {
+test("legacy migration rejects special-file descendants", { skip: process.platform === "win32" }, async () => {
     const project = await makeMigrationProject();
     try {
         const fifo = join(getRunWieldRuntimeDir(project.primaryRoot), "controller", "plans", "events.fifo");
@@ -1294,18 +1275,16 @@ test("legacy migration rejects malformed selected roots in a completed marker", 
         const layout = resolveProjectRuntimeLayout(project.selectedRoot);
         await writeText(
             layout.primary.layoutMarkerPath,
-            `${
-                JSON.stringify(
-                    {
-                        version: 1,
-                        primaryCheckoutRoot: project.primaryRoot,
-                        adoptedSelectedCheckoutRoots: [project.selectedRoot, project.selectedRoot],
-                        completedAt: "2026-01-01T00:00:00.000Z",
-                    },
-                    null,
-                    2,
-                )
-            }\n`,
+            `${JSON.stringify(
+                {
+                    version: 1,
+                    primaryCheckoutRoot: project.primaryRoot,
+                    adoptedSelectedCheckoutRoots: [project.selectedRoot, project.selectedRoot],
+                    completedAt: "2026-01-01T00:00:00.000Z",
+                },
+                null,
+                2,
+            )}\n`,
         );
         const result = await migrateLegacyProjectRuntimeState(project.selectedRoot);
         if (result.kind !== "blocked") throw new Error(`Expected blocked, got ${result.kind}`);
@@ -1321,18 +1300,16 @@ test("legacy migration rejects a newer completed marker version", async () => {
         const layout = resolveProjectRuntimeLayout(project.selectedRoot);
         await writeText(
             layout.primary.layoutMarkerPath,
-            `${
-                JSON.stringify(
-                    {
-                        version: 2,
-                        primaryCheckoutRoot: project.primaryRoot,
-                        adoptedSelectedCheckoutRoots: [project.primaryRoot, project.selectedRoot].sort(),
-                        completedAt: "2026-01-01T00:00:00.000Z",
-                    },
-                    null,
-                    2,
-                )
-            }\n`,
+            `${JSON.stringify(
+                {
+                    version: 2,
+                    primaryCheckoutRoot: project.primaryRoot,
+                    adoptedSelectedCheckoutRoots: [project.primaryRoot, project.selectedRoot].sort(),
+                    completedAt: "2026-01-01T00:00:00.000Z",
+                },
+                null,
+                2,
+            )}\n`,
         );
         const result = await migrateLegacyProjectRuntimeState(project.selectedRoot);
         if (result.kind !== "blocked") throw new Error(`Expected blocked, got ${result.kind}`);
@@ -1355,25 +1332,25 @@ test("legacy migration ignores completed retire receipts and rejects normalized 
         const stat = await fsStat(victim);
         await writeText(
             layout.primary.layoutMigrationJournalPath,
-            `${
-                JSON.stringify(
-                    {
-                        version: 1,
-                        primaryCheckoutRoot: project.primaryRoot,
-                        selectedCheckoutRoots: [project.primaryRoot, project.selectedRoot].sort(),
-                        operations: [{
+            `${JSON.stringify(
+                {
+                    version: 1,
+                    primaryCheckoutRoot: project.primaryRoot,
+                    selectedCheckoutRoots: [project.primaryRoot, project.selectedRoot].sort(),
+                    operations: [
+                        {
                             action: "retire",
                             source: craftedSource,
                             kind: "file",
                             proof: { text: "victim\n", mtime: stat.mtime?.getTime() ?? Date.now(), size: stat.size },
                             completed: true,
-                        }],
-                        updatedAt: "2026-01-01T00:00:00.000Z",
-                    },
-                    null,
-                    2,
-                )
-            }\n`,
+                        },
+                    ],
+                    updatedAt: "2026-01-01T00:00:00.000Z",
+                },
+                null,
+                2,
+            )}\n`,
         );
         const result = await migrateLegacyProjectRuntimeState(project.selectedRoot);
         if (result.kind !== "blocked") throw new Error(`Expected blocked, got ${result.kind}`);
@@ -1392,7 +1369,8 @@ test("legacy migration blocks active Work Record supersession and recovery locks
         const lockPath = join(getRunWieldRuntimeDir(supersession.selectedRoot), "work-record-supersession.lock");
         supersessionChild = spawnDriver("hold-work-record-lock", supersession.selectedRoot);
         await readReadyLine(supersessionChild.stdout);
-        assertEquals(typeof JSON.parse(await fsReadFile(lockPath, "utf8")).token, "string");
+        if (process.platform === "win32") await assertRejects(() => fsReadFile(lockPath, "utf8"));
+        else assertEquals(typeof JSON.parse(await fsReadFile(lockPath, "utf8")).token, "string");
         const result = await migrateLegacyProjectRuntimeState(supersession.selectedRoot);
         if (result.kind !== "blocked") throw new Error(`Expected blocked, got ${result.kind}`);
         assertEquals(result.reason, "active_legacy_writer");
@@ -1409,7 +1387,8 @@ test("legacy migration blocks active Work Record supersession and recovery locks
         const lockPath = join(getRunWieldRuntimeDir(recovery.selectedRoot), "work-record-supersession-recovery.lock");
         recoveryChild = spawnDriver("hold-work-record-recovery-lock", recovery.selectedRoot);
         await readReadyLine(recoveryChild.stdout);
-        assertEquals(typeof JSON.parse(await fsReadFile(lockPath, "utf8")).token, "string");
+        if (process.platform === "win32") await assertRejects(() => fsReadFile(lockPath, "utf8"));
+        else assertEquals(typeof JSON.parse(await fsReadFile(lockPath, "utf8")).token, "string");
         const result = await migrateLegacyProjectRuntimeState(recovery.selectedRoot);
         if (result.kind !== "blocked") throw new Error(`Expected blocked, got ${result.kind}`);
         assertEquals(result.reason, "active_legacy_writer");
@@ -1422,12 +1401,10 @@ test("legacy migration blocks active Work Record supersession and recovery locks
 });
 
 test("legacy migration blocks primary Work Record locks when entry starts linked", async () => {
-    for (
-        const lock of [
-            { mode: "hold-work-record-lock", name: "work-record-supersession.lock" },
-            { mode: "hold-work-record-recovery-lock", name: "work-record-supersession-recovery.lock" },
-        ] as const
-    ) {
+    for (const lock of [
+        { mode: "hold-work-record-lock", name: "work-record-supersession.lock" },
+        { mode: "hold-work-record-recovery-lock", name: "work-record-supersession-recovery.lock" },
+    ] as const) {
         const project = await makeMigrationProject();
         let child: NativeProcess | undefined;
         try {
@@ -1478,7 +1455,8 @@ test("legacy migration blocks active Plan locks held by a subprocess", async () 
         const lockPath = join(getRunWieldRuntimeDir(project.selectedRoot), "plan-locks", "demo.lock");
         child = spawnDriver("hold-plan-lock", project.selectedRoot, "demo");
         await readReadyLine(child.stdout);
-        assertEquals(typeof JSON.parse(await fsReadFile(lockPath, "utf8")).pid, "number");
+        if (process.platform === "win32") await assertRejects(() => fsReadFile(lockPath, "utf8"));
+        else assertEquals(typeof JSON.parse(await fsReadFile(lockPath, "utf8")).pid, "number");
         const result = await migrateLegacyProjectRuntimeState(project.selectedRoot);
         if (result.kind !== "blocked") throw new Error(`Expected blocked, got ${result.kind}`);
         assertEquals(result.reason, "active_legacy_writer");
@@ -1581,8 +1559,9 @@ test("legacy migration lock serializes concurrent stale-lock recovery", async ()
         const secondResult = JSON.parse(await readChildStdout(second)) as ProjectRuntimeMigrationResult;
         if (firstResult.kind !== "ready") throw new Error(JSON.stringify(firstResult));
         if (secondResult.kind !== "ready") throw new Error(JSON.stringify(secondResult));
-        const migratedCount = [firstResult, secondResult].filter((result) => result.kind === "ready" && result.migrated)
-            .length;
+        const migratedCount = [firstResult, secondResult].filter(
+            (result) => result.kind === "ready" && result.migrated,
+        ).length;
         assertEquals(migratedCount, 1);
         assertEquals(await fsReadFile(join(layout.primary.controllerPlansDir, "plan.json"), "utf8"), "x\n");
     } finally {
@@ -2005,8 +1984,9 @@ async function assertInterruptedMigrationEffect(
         await assertMissing(join(selectedBase, "collaboration-secrets.json"));
         const journal = JSON.parse(await fsReadFile(layout.primary.layoutMigrationJournalPath, "utf8"));
         assert(
-            journal.operations.some((operation: { source: string }) =>
-                operation.source === join(selectedBase, "collaboration-secrets.json")
+            journal.operations.some(
+                (operation: { source: string }) =>
+                    operation.source === join(selectedBase, "collaboration-secrets.json"),
             ),
         );
         await assertMissing(layout.primary.layoutMarkerPath);
@@ -2060,27 +2040,41 @@ async function settleGitEvidence(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 150));
 }
 
-async function writeGitLoggingWrapper(binDir: string, log: string, originalPath: string): Promise<void> {
-    const wrapper = join(binDir, "git");
+interface GitWrapperOptions {
+    log?: string;
+    failedListMarker?: string;
+}
+
+async function writeGitWrapper(binDir: string, originalPath: string, options: GitWrapperOptions): Promise<void> {
+    const source = join(binDir, "git-fixture.ts");
     await fsWriteFile(
-        wrapper,
-        [
-            "#!/bin/sh",
-            `echo "$1 $2" >> ${JSON.stringify(log)}`,
-            `PATH=${JSON.stringify(originalPath)}`,
-            "export PATH",
-            'exec git "$@"',
-            "",
-        ].join("\n"),
+        source,
+        `
+import { appendFileSync, existsSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+const args = process.argv.slice(2);
+const options = ${JSON.stringify(options)};
+if (options.log) appendFileSync(options.log, args.slice(0, 2).join(" ") + "\\n");
+if (options.failedListMarker && args[0] === "worktree" && args[1] === "list" && !existsSync(options.failedListMarker)) {
+    writeFileSync(options.failedListMarker, "failed");
+    process.exit(1);
+}
+const result = spawnSync("git", args, { stdio: "inherit", env: { ...process.env, PATH: ${JSON.stringify(originalPath)} } });
+process.exit(result.status ?? 1);
+`,
     );
-    await fsChmod(wrapper, 0o700);
+    await writeRuntimeExecutableFixture(join(binDir, "git"), source);
+}
+
+async function writeGitLoggingWrapper(binDir: string, log: string, originalPath: string): Promise<void> {
+    await writeGitWrapper(binDir, originalPath, { log });
 }
 
 /** The runtime-entry Git reads a log recorded, in order. */
 async function readRuntimeGitReads(log: string): Promise<string[]> {
     const lines = (await fsReadFile(log, "utf8")).split("\n").filter(Boolean);
     return lines.flatMap((line) =>
-        line === "worktree list" ? ["worktree list"] : line.startsWith("ls-files ") ? ["ls-files"] : []
+        line === "worktree list" ? ["worktree list"] : line.startsWith("ls-files ") ? ["ls-files"] : [],
     );
 }
 
@@ -2094,7 +2088,7 @@ async function assertMissing(path: string): Promise<void> {
         await fsLstat(path);
         throw new Error(`Expected ${path} to be absent.`);
     } catch (error) {
-        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return;
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
         throw error;
     }
 }

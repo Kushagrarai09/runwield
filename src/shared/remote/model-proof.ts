@@ -7,7 +7,7 @@ import { createBoundedRemoteModelSession } from "./bounded-model-session.ts";
 import { parseRemoteModelProof, type RemoteModelProof } from "./model-proof-config.ts";
 
 function inside(root: string, path: string): boolean {
-    const rest = relative(root, path);
+    const rest = relative(root, path).replaceAll("\\", "/");
     return rest === "" || (rest !== ".." && !rest.startsWith("../") && !isAbsolute(rest));
 }
 

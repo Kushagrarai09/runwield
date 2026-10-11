@@ -1,3 +1,4 @@
+import { writeRuntimeExecutableFixture } from "../../testing/runtime-executable-fixture.ts";
 import { delimiter } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -91,7 +92,7 @@ let standaloneWldProxyPath: Promise<string> | null = null;
 async function compileStandaloneWldProxy(): Promise<string> {
     const fixtureDir = await fsMkdtemp(join(tmpdir(), "runwield-standalone-wld-proxy-"));
     const sourcePath = join(fixtureDir, "wld-proxy.ts");
-    const outputPath = join(fixtureDir, "wld");
+    const outputPath = join(fixtureDir, process.platform === "win32" ? "wld.exe" : "wld");
     const cliArgs = runtimeSourceArgs(["run", "-A", "--unstable-no-legacy-abort", join(getCwd(), "src", "cli.ts")]);
     await fsWriteFile(
         sourcePath,
@@ -156,15 +157,8 @@ async function waitForProcessDeath(pid: number, timeoutMs = 5000): Promise<boole
 async function installAgyExecutionFixture(binDir: string, logPath: string): Promise<void> {
     await fsMkdir(binDir, { recursive: true });
     const fixturePath = fileURLToPath(new URL("./backends/agy-cli/testing/fake-agy-execution.ts", import.meta.url));
-    const agyPath = join(binDir, "agy");
-    await fsWriteFile(
-        agyPath,
-        `#!/bin/sh\nexec ${
-            [process.execPath, ...runtimeSourceArgs(["run", "-A", fixturePath])].map(shellQuote).join(" ")
-        } "$@"\n`,
-    );
-    await fsChmod(agyPath, 0o755);
-    const wldPath = join(binDir, "wld");
+    await writeRuntimeExecutableFixture(join(binDir, "agy"), fixturePath);
+    const wldPath = join(binDir, process.platform === "win32" ? "wld.exe" : "wld");
     await fsCopyFile(await getStandaloneWldProxyPath(), wldPath);
     await fsChmod(wldPath, 0o755);
     await fsWriteFile(logPath, "");
@@ -1635,7 +1629,3 @@ test("Agy accepts the requested model family echoed by current CLI versions", as
         }
     });
 });
-
-function shellQuote(value: string): string {
-    return "'" + value.replaceAll("'", "'\"'\"'") + "'";
-}

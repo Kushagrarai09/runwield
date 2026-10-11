@@ -1,7 +1,7 @@
+import { writeRuntimeExecutableFixture } from "../../../../testing/runtime-executable-fixture.ts";
 import { delimiter } from "node:path";
 import process from "node:process";
 import {
-    chmod as fsChmod,
     mkdir as fsMkdir,
     mkdtemp as fsMkdtemp,
     readFile as fsReadFile,
@@ -139,12 +139,7 @@ async function main(): Promise<void> {
 await main();
 `;
     await fsWriteFile(fixturePath, fixtureSource);
-    const script = `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} run ${process.versions.deno ? "-A " : ""}${
-        JSON.stringify(fixturePath)
-    } "$@"\n`;
-    const path = join(binDir, "agy");
-    await fsWriteFile(path, script);
-    await fsChmod(path, 0o755);
+    await writeRuntimeExecutableFixture(join(binDir, "agy"), fixturePath);
     await fsWriteFile(logPath, "");
 }
 
@@ -208,7 +203,7 @@ test("Agy custom agent materialization is owner-only and cleans up only owned un
         assertEquals(ownership.definitionPath, join(ownership.agentDirectoryPath, "agent.md"));
         assertEquals(await fsReadFile(ownership.definitionPath, "utf8"), definition);
         const mode = (await fsStat(ownership.definitionPath)).mode;
-        if (mode !== null) assertEquals(mode & 0o777, 0o600);
+        if (process.platform !== "win32" && mode !== null) assertEquals(mode & 0o777, 0o600);
 
         const same = await materializeAgyCustomAgent("runwield-owned-agent", definition);
         assertEquals(same.createdAgentDirectory, false);

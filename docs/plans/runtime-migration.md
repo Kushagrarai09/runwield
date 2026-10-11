@@ -782,3 +782,42 @@ public-repository runners, pinned Bun 1.4.3, separate frozen dependency graphs, 
 the complete isolated Bun inventory and relocated executable/provider qualification.
 Native Windows execution remains pending until those jobs pass; no skipped or failed case
 is evidence of qualification. Source types/lint and macOS lock regression pass locally.
+
+
+### Windows package checkpoint and source corrections
+
+Draft PR #235 consolidates the foundation and Linux follow-up. At `65e313d92`, native Windows
+run [38104934570](https://github.com/gandazgul/runwield/actions/runs/38104934570) completed the
+x64 package job successfully: 22/22 focused files, native compilation, relocated CLI/Workspace,
+provider streaming and terminal restoration. ARM64 passed 21/22 focused files and both package
+checks; its remaining legacy-validation file reached the 120-second file limit while six cases
+had passed and another was running. This is incomplete qualification, not a passing file.
+The ordinary PR gate passed at that checkpoint.
+
+The native runs verified Bun/Deno lock interoperability, crash release, descendant termination,
+ConPTY interaction and private JSON replacement with an old reader still open. Bun and Node's
+ordinary Windows rename both returned EPERM for that reader case; RunWield now uses the native
+FileRenameInfoEx replacement semantics already used by the production Deno/Rust path. The
+existing six atomic JSON cases pass on both architectures. Windows docs fixtures rebuild
+junctions into their copied frozen dependency store and safely reuse them on repeated builds.
+
+The longer source run identified additional application defects: Git CRLF checkout conversion
+was mistaken for post-validation Work Record edits, Windows mandatory lock reads needed to
+block migration as active writers, and Agy setup did not recognize installed `wld.exe` binaries.
+The fixes preserve Git's configured content filters, reject actual later edits, retain unreadable
+held locks without manufacturing stale-lock snapshots, and recognize Windows executable names.
+Remote sentinel containment and architecture-policy checks now handle native path separators.
+
+Executable test fixtures now compile native Windows helpers instead of relying on shebang
+execution. Tests retain real Git, process and lifecycle behavior; no owned-code seam is added.
+POSIX mode/FIFO-specific checks are explicitly platform-scoped and do not establish Windows ACL
+privacy. Four disjoint source shards per architecture retain all 648 inventory files, with the
+normal bounded ten-minute file allowance, forty-minute source steps and sixty-minute jobs.
+No native source-suite pass is claimed before all shards complete.
+
+Local verification of these source corrections: 16 affected Deno files pass in the separate
+Deno graph; focused Bun publication, runtime migration, Agy, policy, path and remote-proof suites
+pass; source types cover 1,303 entries and lint covers 1,437 files with zero diagnostics. The
+new CRLF publication cases reproduce the failure before the fix and pass afterward, including
+retry and preservation of later user edits. Independent Spec and Standards review is performed
+before the correction batch is pushed. Deno remains the production/default release lane.

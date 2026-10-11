@@ -1,3 +1,4 @@
+import { platform } from "node:process";
 import { chmodSync as fsChmodSync, readdirSync as fsReaddirSync } from "node:fs";
 import { test } from "node:test";
 import {
@@ -33,10 +34,10 @@ function idFactory() {
 
 test("Project registration converges symlink duplicates and re-adding after removal creates a new registration", async () => {
     const dir = await fsMkdtemp(join(tmpdir(), "runwield-project-reg-"));
-    const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+    const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
     try {
-        const root = `${dir}/repo`;
-        const link = `${dir}/repo-link`;
+        const root = join(dir, `repo`);
+        const link = join(dir, `repo-link`);
         await fsMkdir(root);
         await fsSymlink(root, link);
         const ids = idFactory();
@@ -67,9 +68,9 @@ test("Project registration converges symlink duplicates and re-adding after remo
 
 test("disabled Projects stay disabled on duplicate registration", async () => {
     const dir = await fsMkdtemp(join(tmpdir(), "runwield-project-disabled-"));
-    const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+    const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
     try {
-        const root = `${dir}/repo`;
+        const root = join(dir, `repo`);
         await fsMkdir(root);
         const project = registerProject(database, { root, idFactory: idFactory(), now: () => "t1" });
         setProjectEnabled(database, project.projectId, false, { now: () => "t2" });
@@ -90,9 +91,9 @@ test("disabled Projects stay disabled on duplicate registration", async () => {
 
 test("Project health is filesystem-based and non-Git directories are available", async () => {
     const dir = await fsMkdtemp(join(tmpdir(), "runwield-project-health-"));
-    const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+    const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
     try {
-        const root = `${dir}/plain-directory`;
+        const root = join(dir, `plain-directory`);
         await fsMkdir(root);
         const project = registerProject(database, { root, idFactory: idFactory(), now: () => "t1" });
         assertEquals(getProjectHealth(database, project.projectId).status, "available");
@@ -104,10 +105,10 @@ test("Project health is filesystem-based and non-Git directories are available",
     }
 });
 
-test("Project health reports unreadable registered roots distinctly from missing roots", async () => {
+test("Project health reports unreadable registered roots distinctly from missing roots", { skip: platform === "win32" }, async () => {
     const dir = await fsMkdtemp(join(tmpdir(), "runwield-project-unreadable-"));
-    const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
-    const root = `${dir}/repo`;
+    const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
+    const root = join(dir, `repo`);
     try {
         await fsMkdir(root);
         const project = registerProject(database, { root, idFactory: idFactory(), now: () => "t1" });
@@ -125,7 +126,7 @@ test("Project health reports unreadable registered roots distinctly from missing
 
 test("Project removal clears dependent database records and rolls back on failure", async () => {
     const dir = await fsMkdtemp(join(tmpdir(), "runwield-project-remove-"));
-    const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+    const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
     try {
         const project = registerProject(database, { root: dir });
         const id = project.projectId;
@@ -184,13 +185,13 @@ test("Project removal clears dependent database records and rolls back on failur
 
 test("migration deletes previously removed registrations and preserves other Projects", async () => {
     const dir = await fsMkdtemp(join(tmpdir(), "runwield-project-removal-migration-"));
-    const dbPath = `${dir}/owner.sqlite3`;
+    const dbPath = join(dir, `owner.sqlite3`);
     const database = openOwnerCoordinationDatabase({ dbPath });
     let keptId;
     try {
-        await fsMkdir(`${dir}/kept`);
+        await fsMkdir(join(dir, `kept`));
         const removed = registerProject(database, { root: dir });
-        keptId = registerProject(database, { root: `${dir}/kept` }).projectId;
+        keptId = registerProject(database, { root: join(dir, `kept`) }).projectId;
         database.handle.prepare("UPDATE projects SET lifecycle = 'removed' WHERE id = ?").run(removed.projectId);
         database.handle.exec("DELETE FROM schema_migrations WHERE version = 10");
     } finally {
@@ -200,7 +201,7 @@ test("migration deletes previously removed registrations and preserves other Pro
     try {
         assertEquals(listProjects(migrated).map((project) => project.projectId), [keptId]);
         assertEquals(migrated.handle.prepare("PRAGMA foreign_key_check").all(), []);
-        assertEquals((await fsStat(`${dir}/kept`)).isDirectory(), true);
+        assertEquals((await fsStat(join(dir, `kept`))).isDirectory(), true);
         const backups = Array.from(fsReaddirSync(dir, { withFileTypes: true })).filter((entry) =>
             entry.name.includes("backup-v9")
         );
@@ -213,11 +214,11 @@ test("migration deletes previously removed registrations and preserves other Pro
 
 test("Project relink preserves root history and rejects another Project root", async () => {
     const dir = await fsMkdtemp(join(tmpdir(), "runwield-project-relink-"));
-    const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+    const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
     try {
-        const oldRoot = `${dir}/old`;
-        const newRoot = `${dir}/new`;
-        const otherRoot = `${dir}/other`;
+        const oldRoot = join(dir, `old`);
+        const newRoot = join(dir, `new`);
+        const otherRoot = join(dir, `other`);
         await fsMkdir(oldRoot);
         await fsMkdir(newRoot);
         await fsMkdir(otherRoot);
@@ -256,11 +257,11 @@ test("Project relink preserves root history and rejects another Project root", a
 
 test("Project registration and relink report symlink path reuse conflicts", async () => {
     const dir = await fsMkdtemp(join(tmpdir(), "runwield-project-retarget-"));
-    const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+    const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
     try {
-        const firstRoot = `${dir}/first`;
-        const secondRoot = `${dir}/second`;
-        const link = `${dir}/project-link`;
+        const firstRoot = join(dir, `first`);
+        const secondRoot = join(dir, `second`);
+        const link = join(dir, `project-link`);
         await fsMkdir(firstRoot);
         await fsMkdir(secondRoot);
         await fsSymlink(firstRoot, link);
@@ -286,11 +287,11 @@ test("Project registration and relink report symlink path reuse conflicts", asyn
 
 test("two database connections racing to register one Project converge on one stable ID", async () => {
     const dir = await fsMkdtemp(join(tmpdir(), "runwield-project-race-"));
-    const dbPath = `${dir}/owner.sqlite3`;
+    const dbPath = join(dir, `owner.sqlite3`);
     const firstDb = openOwnerCoordinationDatabase({ dbPath });
     const secondDb = openOwnerCoordinationDatabase({ dbPath });
     try {
-        const root = `${dir}/repo`;
+        const root = join(dir, `repo`);
         await fsMkdir(root);
         const [first, second] = await Promise.all([
             new Promise((resolvePromise) =>
@@ -316,7 +317,7 @@ test("two database connections racing to register one Project converge on one st
 
 test("Project registration rejects relative roots before filesystem resolution", async () => {
     const dir = await fsMkdtemp(join(tmpdir(), "runwield-project-relative-"));
-    const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+    const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
     try {
         assertThrows(
             () => registerProject(database, { root: "relative/project" }),
@@ -336,9 +337,9 @@ test("Project registration rejects relative roots before filesystem resolution",
 
 test("Project registration rejects files", async () => {
     const dir = await fsMkdtemp(join(tmpdir(), "runwield-project-file-"));
-    const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
+    const database = openOwnerCoordinationDatabase({ dbPath: join(dir, `owner.sqlite3`) });
     try {
-        const file = `${dir}/not-directory`;
+        const file = join(dir, `not-directory`);
         await fsWriteFile(file, "x");
         assertThrows(
             () => registerProject(database, { root: file }),
