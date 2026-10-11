@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { readdir as fsReaddir, readFile as fsReadFile } from "node:fs/promises";
 import { assert, assertEquals } from "@std/assert";
@@ -53,7 +54,7 @@ async function validationDisplaySources(): Promise<string[]> {
     const paths: string[] = [];
     for await (const entry of await fsReaddir(new URL(".", import.meta.url), { withFileTypes: true })) {
         if (entry.isFile() && /^validation-.*\.(?:ts|js)$/.test(entry.name) && !entry.name.includes("test")) {
-            paths.push(new URL(entry.name, import.meta.url).pathname);
+            paths.push(fileURLToPath(new URL(entry.name, import.meta.url)));
         }
     }
     return paths;
@@ -67,7 +68,7 @@ function recoveryDisplaySources(): string[] {
         "plan-recovery-reset.ts",
         "plan-recovery-worktree.ts",
     ];
-    return names.map((name) => new URL(name, directory).pathname);
+    return names.map((name) => fileURLToPath(new URL(name, directory)));
 }
 
 test("publication messages name the selected target branch", () => {

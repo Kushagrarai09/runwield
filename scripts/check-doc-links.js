@@ -1,4 +1,5 @@
 #!/usr/bin/env -S deno run --allow-read --allow-run
+import { fileURLToPath } from "node:url";
 import { captureScriptProcess } from "./script-process.ts";
 import { readFile as fsReadFile, stat as fsStat } from "node:fs/promises";
 import process from "node:process";
@@ -14,7 +15,7 @@ import process from "node:process";
 
 import { dirname, join, normalize } from "@std/path";
 
-const REPO_ROOT = new URL("../", import.meta.url).pathname;
+const REPO_ROOT = fileURLToPath(new URL("../", import.meta.url));
 const EXCLUDED_PREFIXES = ["node_modules/", ".history/", "dist/", "third_party/"];
 const LINK_PATTERN = /\[(?:[^\]\\]|\\.)*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
 const HEADING_PATTERN = /^#{1,6}\s+(.+?)\s*$/;

@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { captureScriptProcess } from "./script-process.ts";
 import { test } from "node:test";
 import { mkdir as fsMkdir, mkdtemp as fsMkdtemp, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
@@ -5,7 +6,7 @@ import { tmpdir } from "node:os";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { join } from "@std/path";
 
-const repoRoot = new URL("..", import.meta.url).pathname;
+const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 
 async function run(cwd: string, command: string, args: string[]) {
     const result = await captureScriptProcess(command, {

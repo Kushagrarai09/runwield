@@ -49,7 +49,8 @@ try {
             "--no-config",
             `${open}
 file.lockSync(true); console.log("held");
-await Deno.stdin.read(new Uint8Array(1)); file.close(); console.log("released");`,
+await Deno.stdin.read(new Uint8Array(1)); file.close(); console.log("released");
+await Deno.stdin.read(new Uint8Array(1));`,
         ], { stdio: ["pipe", "pipe", "pipe"], env: childEnv, cwd: home });
         const finished = once(child, "close");
         let errors = "";
@@ -64,8 +65,11 @@ await Deno.stdin.read(new Uint8Array(1)); file.close(); console.log("released");
                 const released = once(lines, "line", { signal: AbortSignal.timeout(10_000) });
                 child.stdin.write("\n");
                 equal((await released)[0], "released", errors);
-            } else ok(child.kill("SIGKILL"));
-            await finished;
+                equal(child.exitCode, null, "Deno remains alive after explicitly closing its lock");
+            } else {
+                ok(child.kill("SIGKILL"));
+                await finished;
+            }
             equal(contender.tryLockSync(true), true, `Bun acquires ownership after Deno ${exit}`);
             contender.replaceTextSync("complete metadata λ");
             equal(contender.readSnapshotSync().text, "complete metadata λ");

@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { collectProcessOutput } from "../../testing/subprocess-output.ts";
 import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
 import { spawnNativeProcess } from "../../shared/foreground-process.ts";
@@ -213,7 +214,7 @@ test("Workspace accepts a live Sequence group decision from a registered plannin
             args: runtimeSourceArgs([
                 "eval",
                 "--config",
-                new URL("../../../deno.json", import.meta.url).pathname,
+                fileURLToPath(new URL("../../../deno.json", import.meta.url)),
                 code,
             ]),
             cwd: repo,

@@ -47,7 +47,7 @@ test("each file has a fresh process and private state", () => {
     writeFileSync(join(home, "claimed"), "claimed");
     writeFileSync(process.env.MNEMOTECA_DB_PATH, "private database");
     console.log("ISOLATED_STATE=" + JSON.stringify({ home, pid: process.pid, tmp: process.env.TMPDIR }));
-    ok(process.env.XDG_CONFIG_HOME.startsWith(home + "/"));
+    equal(process.env.XDG_CONFIG_HOME, join(home, ".config"));
 });
 `;
 

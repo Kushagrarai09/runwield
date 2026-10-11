@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
 import { captureForegroundProcess } from "../../shared/captured-process.ts";
 import { test } from "node:test";
@@ -35,7 +36,7 @@ test("importing the registry does not initialize the TUI", async () => {
     );
     const result = await captureForegroundProcess(process.execPath, {
         args: runtimeSourceArgs(["run", "-A", "--config", "deno.json", script]),
-        cwd: new URL("../../..", import.meta.url).pathname,
+        cwd: fileURLToPath(new URL("../../..", import.meta.url)),
         env: { HOME: home, WLD_TEST_SANDBOX_HOME: home, MNEMOTECA_DB_PATH: join(home, "mnemoteca.sqlite") },
     });
     assertEquals(result.code, 0, new TextDecoder().decode(result.stderr));

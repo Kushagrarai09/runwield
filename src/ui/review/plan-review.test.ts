@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { captureForegroundProcess } from "../../shared/captured-process.ts";
 import { getCwd } from "../../constants.js";
 import { test } from "node:test";
@@ -181,7 +182,7 @@ test("submitPlanForReview accepts approval after Markdown body formatting", asyn
             args: process.versions.deno ? ["fmt", "--quiet", "--line-width", "50", planPath] : [
                 "run",
                 "--no-install",
-                new URL("../../../node_modules/prettier/bin/prettier.cjs", import.meta.url).pathname,
+                fileURLToPath(new URL("../../../node_modules/prettier/bin/prettier.cjs", import.meta.url)),
                 "--parser",
                 "markdown",
                 "--prose-wrap",

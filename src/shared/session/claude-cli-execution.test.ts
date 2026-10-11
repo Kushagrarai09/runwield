@@ -264,7 +264,7 @@ test("Claude CLI roots discover initially empty MCP tools and refresh them betwe
         const externalLogPath = join(cwd, "external-mcp.jsonl");
         const toolsPath = join(cwd, "external-mcp-tools.txt");
         await fsWriteFile(toolsPath, "");
-        const fixtureServer = new URL("../mcp/fixture-server.ts", import.meta.url).pathname;
+        const fixtureServer = fileURLToPath(new URL("../mcp/fixture-server.ts", import.meta.url));
         const poolResult = await startMcpIntegration({
             cwd,
             servers: [{

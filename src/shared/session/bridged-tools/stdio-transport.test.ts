@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { spawnForegroundProcess } from "../../foreground-process.ts";
 import { runtimeSourceArgs } from "../../../testing/runtime-source-args.ts";
 import process from "node:process";
@@ -108,7 +109,7 @@ test("Agy stdio review calls survive sixty elapsed seconds and preserve structur
         assistantBase: { api: "agy-cli", provider: "agy-cli", model: "fixture-model" },
         provenance: AGY_CLI_MCP_PROVENANCE,
     });
-    const fixture = new URL("./testing/stdio-clock-fixture.ts", import.meta.url).pathname;
+    const fixture = fileURLToPath(new URL("./testing/stdio-clock-fixture.ts", import.meta.url));
     const transport = new StdioClientTransport({
         command: process.execPath,
         args: ["run", ...(process.versions.deno ? ["-A"] : []), fixture, advancePath, advancedPath],

@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { execPath, versions } from "node:process";
 import { captureForegroundProcess } from "../captured-process.ts";
 import { mkdtemp as fsMkdtemp, readFile as fsReadFile, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
@@ -97,7 +98,7 @@ try {
         const output = await captureForegroundProcess(execPath, {
             args: [
                 ...(versions.deno
-                    ? ["run", "-A", "--config", new URL("../../../deno.json", import.meta.url).pathname]
+                    ? ["run", "-A", "--config", fileURLToPath(new URL("../../../deno.json", import.meta.url))]
                     : ["--no-env-file", "--no-install"]),
                 script,
                 f.session.id,

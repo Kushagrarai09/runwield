@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { openNativeFileLock } from "../../shared/native-file-lock.ts";
 // @ts-nocheck: Workspace service is JavaScript and returns projected event records.
 import { collectProcessOutput } from "../../testing/subprocess-output.ts";
@@ -723,7 +724,7 @@ test("Workspace answers a live question in a separate TUI process", async () => 
             args: runtimeSourceArgs([
                 "eval",
                 "--config",
-                new URL("../../../deno.json", import.meta.url).pathname,
+                fileURLToPath(new URL("../../../deno.json", import.meta.url)),
                 code,
             ]),
             cwd: projectRoot,

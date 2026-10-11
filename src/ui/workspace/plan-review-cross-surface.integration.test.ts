@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 // @ts-nocheck: The live session and owner service expose JavaScript records.
 import { collectProcessOutput } from "../../testing/subprocess-output.ts";
 import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
@@ -64,7 +65,7 @@ async function withRemoteReview(changePlan, expectDecision) {
             args: runtimeSourceArgs([
                 "eval",
                 "--config",
-                new URL("../../../deno.json", import.meta.url).pathname,
+                fileURLToPath(new URL("../../../deno.json", import.meta.url)),
                 code,
             ]),
             cwd: projectRoot,

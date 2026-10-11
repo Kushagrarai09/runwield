@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { captureScriptProcess } from "./script-process.ts";
 import { runtimeSourceArgs } from "../src/testing/runtime-source-args.ts";
 import { getCwd } from "../src/constants.js";
@@ -122,7 +123,7 @@ test("prototype launcher executes the configured Deno task and preserves its exi
             args: runtimeSourceArgs([
                 "run",
                 "-A",
-                new URL("./run-prototype.js", import.meta.url).pathname,
+                fileURLToPath(new URL("./run-prototype.js", import.meta.url)),
                 "real-launch",
             ]),
             cwd: dir,

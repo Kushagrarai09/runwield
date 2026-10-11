@@ -423,15 +423,13 @@ test("spawnForegroundShell tolerates an abort that arrives after natural exit", 
 test("spawnForegroundShell on Windows abort kills a real descendant tree", { skip: !IS_WINDOWS }, async () => {
     const pidFile = await makeTempFile("runwield-fg-windows-descendant-");
     const abortController = new AbortController();
-    const command = [
-        "powershell",
-        "-NoProfile",
-        "-Command",
-        `\"$p = Start-Process powershell -ArgumentList '-NoProfile','-Command','Start-Sleep -Seconds 30' -PassThru; Set-Content -LiteralPath '${
-            pidFile.replaceAll("'", "''")
-        }' -Value $p.Id; Wait-Process -Id $p.Id\"`,
-    ].join(" ");
+    const script = `$p = Start-Process powershell -ArgumentList '-NoProfile','-Command','Start-Sleep -Seconds 30' -PassThru; Set-Content -Encoding ascii -LiteralPath '${
+        pidFile.replaceAll("'", "''")
+    }' -Value $p.Id; Wait-Process -Id $p.Id`;
+    const command = `powershell -NoProfile -EncodedCommand ${Buffer.from(script, "utf16le").toString("base64")}`;
     const shell = spawnForegroundShell({ command, cwd: getCwd(), signal: abortController.signal });
+    const stderr = readAll(shell.stderr);
+    const stdout = readAll(shell.stdout);
     let descendantPid = 0;
     try {
         const deadline = Date.now() + 10_000;
@@ -440,12 +438,19 @@ test("spawnForegroundShell on Windows abort kills a real descendant tree", { ski
             if (descendantPid && processAlive(descendantPid)) break;
             await new Promise((resolve) => setTimeout(resolve, 20));
         }
-        assert(descendantPid && processAlive(descendantPid), "descendant should be running before abort");
+        if (!descendantPid || !processAlive(descendantPid)) {
+            abortController.abort();
+            await shell.done;
+            throw new Error(`Descendant did not start: ${await stderr} ${await stdout}`);
+        }
         abortController.abort();
         const outcome = await shell.done;
         assertEquals(outcome, { exitCode: null, terminatedBy: "abort" });
         assertEquals(await waitForProcessDeath(descendantPid), true);
     } finally {
+        abortController.abort();
+        await shell.done;
+        await Promise.all([stdout, stderr]);
         if (descendantPid && processAlive(descendantPid)) {
             spawnSync("taskkill", ["/F", "/T", "/PID", String(descendantPid)]);
         }

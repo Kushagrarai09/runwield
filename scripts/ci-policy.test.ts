@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { runtimeSourceArgs } from "../src/testing/runtime-source-args.ts";
 import { captureScriptProcess } from "./script-process.ts";
 import { tmpdir } from "node:os";
@@ -62,7 +63,7 @@ test("the test runner skips excluded paths it would otherwise discover", async (
             args: runtimeSourceArgs([
                 "run",
                 "-A",
-                new URL("./run-tests.js", import.meta.url).pathname,
+                fileURLToPath(new URL("./run-tests.js", import.meta.url)),
                 "--isolated",
                 root,
                 "--exclude",

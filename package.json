@@ -15,7 +15,7 @@
         "test:bun": "bun scripts/run-bun-tests.ts",
         "check:portable-json": "bun scripts/check-portable-json.ts",
         "ci:deno": "deno task ci",
-        "workspace:build:bun": "bun scripts/check-bun-runtime.ts && bun node_modules/astro/bin/astro.mjs build --config src/ui/workspace/astro.config.mjs",
+        "workspace:build:bun": "bun scripts/check-bun-runtime.ts && bun scripts/write-version.js && bun node_modules/astro/bin/astro.mjs build --config src/ui/workspace/astro.config.mjs",
         "ci:bun": "bun scripts/check-bun-runtime.ts && bun scripts/run-ci.ts",
         "compile:bun": "bun run workspace:build:bun && bun run scripts/compile-bun.ts",
         "check:package:bun": "bun run scripts/check-bun-package.ts",

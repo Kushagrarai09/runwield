@@ -103,10 +103,11 @@ exec /bin/sh -c "$4"
                 preload,
                 `import { plugin } from "bun";
 import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 const replacements = ${JSON.stringify(replacements)};
 plugin({ name: "fixture-build-boundary", setup(build) {
     build.onResolve({ filter: /(?:build-identity|version)\\.js$/ }, ({ path, importer }) => {
-        const target = new URL(path, "file://" + importer).pathname;
+        const target = resolve(dirname(importer), path);
         const replacement = replacements[target];
         if (replacement) return { path: replacement };
     });

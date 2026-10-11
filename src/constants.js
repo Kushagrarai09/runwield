@@ -4,7 +4,7 @@
  */
 
 import { realpathSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import { argv, cwd, env, platform, versions } from "node:process";
 import { RUNWIELD_SOURCE_ROOT } from "../runtime-root.js";
 
@@ -317,7 +317,8 @@ function isTempTestHome(homeDir) {
     try {
         const tempDir = realpathSync(readOptionalEnv("TMPDIR") || "/tmp");
         const resolvedHome = realpathSync(homeDir);
-        return resolvedHome === tempDir || resolvedHome.startsWith(`${tempDir}/`);
+        const child = relative(tempDir, resolvedHome);
+        return child === "" || (!child.startsWith("..") && !isAbsolute(child));
     } catch {
         return false;
     }

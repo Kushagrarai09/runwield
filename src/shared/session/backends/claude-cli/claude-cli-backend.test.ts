@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import process from "node:process";
 import {
     chmod as fsChmod,
@@ -37,7 +38,7 @@ async function withTempDir(callback: (dir: string) => Promise<void>): Promise<vo
 
 async function installClaudeFixture(binDir: string, logPath: string): Promise<void> {
     await fsMkdir(binDir, { recursive: true });
-    const fixturePath = new URL("./testing/fake-claude-mcp-client.ts", import.meta.url).pathname;
+    const fixturePath = fileURLToPath(new URL("./testing/fake-claude-mcp-client.ts", import.meta.url));
     // The fixture lives in the workspace so its npm imports (the real MCP SDK
     // client) resolve through the repository deno.json/node_modules.
     const script = `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} run ${process.versions.deno ? "-A " : ""}${
@@ -425,7 +426,7 @@ test("captured Claude Code 2.1.284 Read stream reaches the execution owner's JSO
     await withClaudeFixture(async (root) => {
         await setCustomSetting("workflowMetrics", true, "project", root);
         process.env["RUNWIELD_CLAUDE_FIXTURE_STREAM_FILE"] =
-            new URL("./fixtures/claude-2.1.284-read-tool-stream.jsonl", import.meta.url).pathname;
+            fileURLToPath(new URL("./fixtures/claude-2.1.284-read-tool-stream.jsonl", import.meta.url));
         const model = getModelRegistry().find("claude-cli", "sonnet");
         if (!model) throw new Error("missing claude model");
         const manager = SessionManager.inMemory(root);

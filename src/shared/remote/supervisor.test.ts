@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { spawnNativeProcess } from "../foreground-process.ts";
 import { captureForegroundProcess } from "../captured-process.ts";
 import { serveHttp } from "../http-server.ts";
@@ -106,7 +107,7 @@ async function compiledSupervisor(): Promise<string> {
                 "-A",
                 "--no-check",
                 "--config",
-                new URL("../../../deno.json", import.meta.url).pathname,
+                fileURLToPath(new URL("../../../deno.json", import.meta.url)),
                 "--output",
                 executable,
                 join(root, "entry.ts"),

@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { copyFile, rename } from "node:fs/promises";
 import { spawnNativeProcess } from "../foreground-process.ts";
 import { captureForegroundProcess } from "../captured-process.ts";
@@ -44,7 +45,7 @@ test("remote synchronous settings refresh after a lost acknowledgement and an un
             args: [
                 "run",
                 ...(process.versions.deno ? ["-A", "--no-check"] : []),
-                new URL("./settings-service-fixture.ts", import.meta.url).pathname,
+                fileURLToPath(new URL("./settings-service-fixture.ts", import.meta.url)),
             ],
             env: { HOME: home },
             stdin: "piped",
@@ -69,7 +70,7 @@ test("remote synchronous settings refresh after a lost acknowledgement and an un
                 args: [
                     "run",
                     ...(process.versions.deno ? ["-A", "--no-check"] : []),
-                    new URL("./settings-service-fixture.ts", import.meta.url).pathname,
+                    fileURLToPath(new URL("./settings-service-fixture.ts", import.meta.url)),
                     "write",
                 ],
                 env: { HOME: home },

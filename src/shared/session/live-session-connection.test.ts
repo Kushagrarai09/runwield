@@ -1,3 +1,7 @@
+import { createHash } from "node:crypto";
+import { Agent, request } from "node:http";
+import { platform } from "node:process";
+import { getHomeDir } from "../../constants.js";
 import { mkdtemp as fsMkdtemp, rm as fsRm } from "node:fs/promises";
 import { mock, test } from "node:test";
 import { join } from "node:path";
@@ -119,6 +123,40 @@ test("a retry after five elapsed minutes still does not steer twice", async () =
         assertEquals(first, second);
     } finally {
         mock.timers.reset();
+        await f.cleanup();
+    }
+});
+
+
+test("closing a live connection releases an idle HTTP keep-alive client", async () => {
+    const f = await fixture(() => Promise.resolve({ ok: true, queued: true }));
+    const agent = new Agent({ keepAlive: true });
+    const key = createHash("sha256")
+        .update(`${getHomeDir()}:umbrella-session:${f.operationId}`).digest("hex").slice(0, 40);
+    const path = platform === "win32" ? `\\\\.\\pipe\\runwield-${key}` : `/tmp/runwield-${key}.sock`;
+    try {
+        await new Promise<void>((resolve, reject) => {
+            const req = request({ socketPath: path, path: "/", agent }, (response) => {
+                response.resume();
+                response.once("end", resolve);
+                response.once("error", reject);
+            });
+            req.once("error", reject);
+            req.end();
+        });
+        let timer: ReturnType<typeof setTimeout>;
+        try {
+            await Promise.race([
+                f.close(),
+                new Promise<void>((_resolve, reject) => {
+                    timer = setTimeout(() => reject(new Error("An idle client blocked live connection shutdown")), 1000);
+                }),
+            ]);
+        } finally {
+            clearTimeout(timer!);
+        }
+    } finally {
+        agent.destroy();
         await f.cleanup();
     }
 });

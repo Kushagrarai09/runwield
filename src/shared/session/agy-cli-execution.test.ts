@@ -341,7 +341,7 @@ test("Agy roots discover initially empty MCP tools and refresh without recreatin
             servers: [{
                 name: "fixture",
                 command: process.execPath,
-                args: runtimeSourceArgs(["run", "-A", new URL("../mcp/fixture-server.ts", import.meta.url).pathname]),
+                args: runtimeSourceArgs(["run", "-A", fileURLToPath(new URL("../mcp/fixture-server.ts", import.meta.url))]),
                 env: { RUNWIELD_MCP_FIXTURE_LOG: externalLog, RUNWIELD_MCP_FIXTURE_TOOLS_PATH: toolsPath },
                 source: "request",
             }],
@@ -581,7 +581,7 @@ test("captured Antigravity CLI 1.2.12 tool stream reaches the execution owner's 
     await withAgyExecutionFixture(async (_home, cwd) => {
         await setCustomSetting("workflowMetrics", true, "project", cwd);
         process.env["RUNWIELD_AGY_CAPTURED_STREAM"] =
-            new URL("./backends/agy-cli/fixtures/agy-1.2.12-model-read-tool-stream.jsonl", import.meta.url).pathname;
+            fileURLToPath(new URL("./backends/agy-cli/fixtures/agy-1.2.12-model-read-tool-stream.jsonl", import.meta.url));
         const manager = SessionManager.inMemory(cwd);
         const hostedSession = createHostedSession(cwd, manager);
         try {
