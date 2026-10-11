@@ -582,7 +582,8 @@ before it runs and may reshape any sibling that has not started, moving scope in
 reshaped sibling that was already approved returns to draft. A started or validated child stays as it is. Each child's
 review judges that child's own correctness with the Epic as context; work a sibling owns is not a finding, and agents do
 not write general "unfinished" warnings. A reviewer can leave Integration Notes for the integration review in a managed
-subsection of the Epic's Verification Plan; when there is nothing to note, it leaves nothing.
+subsection of the Epic's Verification Plan; when there is nothing to note, it leaves nothing. The saved-note message
+names the parent Epic and states that these notes guide its later review, not fixes to the current child Plan.
 
 A separate registered planning worktree does not make an unstarted sibling unavailable for scope changes. Core
 synchronizes compatible edits into that sibling's authoritative Plan, preserves independent planning work, and resets
@@ -633,7 +634,9 @@ and siblings active. Listings keep held work distinct from active and finished w
   copies automatically, including after a preparation retry. Independent edits survive; conflicting scope remains
   preserved in both copies for a requirements decision. Metadata-only normalization does not invalidate sibling scope.
 - Given a child review that leaves Integration Notes, when the review finishes, the notes appear in the Epic's
-  `### Integration Notes` subsection and the integration review receives them as places to look.
+  `### Integration Notes` subsection and the integration review receives them as places to look. The saved-note message
+  names the parent Epic and distinguishes these later checks from child Plan fixes, including when the child review
+  approves the work.
 - Given an approved Epic, when the user saves draft children, they remain drafts; finalizing decomposition enables child
   selection without approving each child.
 - Given an independently held child, when the parent Epic is held and resumed, that child stays held and other children
@@ -2062,7 +2065,8 @@ Windows WinGet requirements:
 - keep model and browser payload downloads in per-user first-use locations
 - make `wld update` and `wld upgrade` print `winget upgrade --id Gandazgul.RunWield --exact`
 - reject Candidate tags for Stable WinGet manifest generation and external submission
-- submit each Stable manifest to `microsoft/winget-pkgs` from the release workflow with a repository secret
+- prepare Stable manifest artifacts; automatic submission to `microsoft/winget-pkgs` is paused until further owner
+  notice and must not require a submission credential while paused
 - include `https://runwield.dev/privacy/` as `PrivacyUrl` in the WinGet package metadata
 - keep public install docs marked pending until Microsoft accepts the listing
 
@@ -2074,8 +2078,9 @@ Windows WinGet requirements:
   does not run the shell installer.
 - Given a WinGet-owned `wld`, when the user runs `wld update`, RunWield prints
   `winget upgrade --id Gandazgul.RunWield --exact` and does not run the shell installer.
-- Given a Stable release, when its Windows package and manifest jobs pass, the release workflow submits a PR to
-  `microsoft/winget-pkgs`; given a Candidate release, it does not submit one.
+- Given a Stable release while WinGet submission is paused, the workflow prepares manifest artifacts without submitting
+  a PR to `microsoft/winget-pkgs` or requiring a submission credential. Recovery also preserves this pause. Candidate
+  releases do not prepare Stable manifests or submit PRs.
 - Given a generated WinGet manifest, its package metadata links to the published RunWield privacy policy.
 - Given a standalone Unix install, when the user runs `wld update`, RunWield can still use the tag-pinned shell
   installer.
