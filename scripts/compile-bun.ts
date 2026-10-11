@@ -85,7 +85,7 @@ async function stagedPayloadIdentity(root: string): Promise<string> {
 
 export async function compileBun(output: string, target?: string, runtime?: string): Promise<void> {
     requirePinnedBun();
-    if (target && !/^bun-(darwin|linux)-(arm64|x64)$/.test(target)) {
+    if (target && !/^bun-(darwin|linux|windows)-(arm64|x64)$/.test(target)) {
         throw new Error(`Unsupported migration target: ${target}`);
     }
     const bun: BunBuildRuntime = createRequire(import.meta.url)("bun");
@@ -198,7 +198,8 @@ export async function compileBun(output: string, target?: string, runtime?: stri
                     schema: BUILD_METADATA_SCHEMA,
                     protocol: REMOTE_PROTOCOL_VERSION,
                     buildId,
-                    target: target || `bun-${process.platform}-${process.arch}`,
+                    target: target ||
+                        `bun-${process.platform === "win32" ? "windows" : process.platform}-${process.arch}`,
                     version,
                     sha256: await sha256File(outfile),
                 },
@@ -213,10 +214,11 @@ export async function compileBun(output: string, target?: string, runtime?: stri
 }
 
 if (import.meta.main) {
-    const [output = "bin/wld-bun", target, runtime, ...extra] = argv.slice(2);
+    const [output = process.platform === "win32" ? "bin/wld-bun.exe" : "bin/wld-bun", target, runtime, ...extra] = argv
+        .slice(2);
     if (extra.length) {
         throw new Error(
-            "Usage: compile-bun.ts [output] [bun-darwin-arm64|bun-linux-arm64|bun-darwin-x64|bun-linux-x64] [cached-runtime]",
+            "Usage: compile-bun.ts [output] [bun-darwin-arm64|bun-linux-arm64|bun-darwin-x64|bun-linux-x64|bun-windows-arm64|bun-windows-x64] [cached-runtime]",
         );
     }
     await compileBun(output, target, runtime);

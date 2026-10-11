@@ -753,3 +753,32 @@ versions in the separated Bun locks were already present in the prior lock. Fixt
 store. A fresh Deno dependency tree passes every pre-test gate after this correction; its full suite is in progress.
 Manager switching must replace both generated dependency directories or use separate checkouts, because cached install
 metadata can retain stale links. No formatter-wide rewrite or production distribution switch is included.
+
+## Native Windows qualification and draft publication (2026-10-11, in progress)
+
+The verified portable foundation and Linux supervisor follow-up are consolidated on
+`codex/bun-runtime-migration`. The owner authorized a draft PR and Windows CI; Deno remains
+the production release/default lane. Release tags, publishing workflows, credentials and
+local VM provisioning are outside this change.
+
+The Linux follow-up closes the real SSHFS/FUSE gap on the existing non-root ARM64 VM:
+eight SFTP cases and seven supervisor cases passed, including stalled transport, launcher
+death, silent control and descendant cleanup. Losing deadline timers are cancelled after
+cleanup settles; the launcher-death fixture scopes Bun's orphan-guardian override to its
+owned process tree. The new deadline regression fails against the earlier implementation.
+Both macOS runtimes and Linux Bun passed the 26 affected test files. The original full
+647-file foundation qualification remains separate from those follow-up checks.
+
+Windows implementation adds Win32 handle-backed locking with `LockFileEx`, shared/exclusive
+ownership, descriptor-safe metadata I/O, durable flush and mapped filesystem errors.
+The existing lock tests now assert Windows mandatory-read exclusion explicitly, preserve
+POSIX advisory-read behavior, and use Unicode lock paths. Bun's development compiler
+accepts Windows x64 and ARM64 targets. Relocated package/provider checks use native helper
+fixtures and Windows executable/environment conventions. Windows process termination is
+verified separately from interactive `/quit`, since Win32 termination is not POSIX SIGTERM.
+
+The new read-only-token CI workflow uses only standard `windows-2025` and `windows-11-arm`
+public-repository runners, pinned Bun 1.4.3, separate frozen dependency graphs, bounded jobs,
+the complete isolated Bun inventory and relocated executable/provider qualification.
+Native Windows execution remains pending until those jobs pass; no skipped or failed case
+is evidence of qualification. Source types/lint and macOS lock regression pass locally.

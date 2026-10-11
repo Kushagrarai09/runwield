@@ -4,10 +4,11 @@ import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { argv, env, platform } from "node:process";
 
 import { fileURLToPath } from "node:url";
+import { installPackageHelperFixtures } from "./package-helper-fixtures.ts";
 
 interface ProviderRequest {
     tools: Array<{ function: { name: string } }>;
@@ -17,7 +18,6 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 if (argv.length < 3 || argv.length > 4) {
     throw new Error("Usage: check-bun-provider.ts <executable> [helper-fixture-path]");
 }
-if (platform === "win32") throw new Error("Bun provider package qualification currently requires a POSIX host.");
 const home = await mkdtemp(join(tmpdir(), "compiled-provider-"));
 const marker = "Compiled provider turn completed.";
 const requestTexts: string[] = [];
@@ -62,10 +62,7 @@ try {
     const project = join(home, "project");
     const bin = join(home, "bin");
     await Promise.all([mkdir(state), mkdir(project), mkdir(bin)]);
-    const fixture = await readFile(argv[3] || join(ROOT, "src/testing/workflow-binary-fixture.sh"), "utf8");
-    for (const name of ["mnemoteca", "cymbal", "ketch", "osascript"]) {
-        await writeFile(join(bin, name), fixture, { mode: 0o755 });
-    }
+    await installPackageHelperFixtures(bin, argv[3] || join(ROOT, "src/testing/workflow-binary-fixture.sh"));
     const models = {
         providers: {
             fixture: {
@@ -99,7 +96,7 @@ try {
         }),
         { mode: 0o600 },
     );
-    const executable = join(home, "wld");
+    const executable = join(home, platform === "win32" ? "wld.exe" : "wld");
     await cp(resolve(argv[2]), executable);
     const prompt = "Say hello for migration qualification.";
     const command = platform === "darwin" ? "/usr/bin/sandbox-exec" : executable;
@@ -109,10 +106,15 @@ try {
     const child = spawn(command, args, {
         cwd: project,
         env: {
+            ...(env.SystemRoot ? { SystemRoot: env.SystemRoot } : {}),
+            ...(env.COMSPEC ? { COMSPEC: env.COMSPEC } : {}),
+            ...(env.PATHEXT ? { PATHEXT: env.PATHEXT } : {}),
             HOME: home,
             USERPROFILE: home,
             TMPDIR: home,
-            PATH: `${bin}:${env.PATH || "/usr/bin:/bin"}`,
+            TEMP: home,
+            TMP: home,
+            PATH: `${bin}${delimiter}${env.PATH || "/usr/bin:/bin"}`,
             NO_COLOR: "1",
             MNEMOTECA_DB_PATH: join(home, "memory.db"),
         },

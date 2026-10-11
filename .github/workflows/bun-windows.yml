@@ -1,0 +1,89 @@
+name: Bun Windows qualification
+
+on:
+    pull_request:
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+concurrency:
+    group: bun-windows-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    native:
+        name: Bun Windows ${{ matrix.arch }}
+        # These exact labels are standard, free public-repository runners.
+        if: github.event.repository.private == false
+        runs-on: ${{ matrix.runner }}
+        timeout-minutes: 60
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - runner: windows-2025
+                      arch: x64
+                      asset: x64
+                    - runner: windows-11-arm
+                      arch: arm64
+                      asset: aarch64
+        env:
+            WLD_TEST_CONCURRENCY: "4"
+            WLD_TEST_FILE_TIMEOUT_MS: "120000"
+        defaults:
+            run:
+                shell: pwsh
+        steps:
+            - uses: actions/checkout@v5
+              with:
+                  submodules: recursive
+                  persist-credentials: false
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: "24"
+            - name: Install pinned native Bun
+              run: |
+                  $asset = 'bun-windows-${{ matrix.asset }}'
+                  $zip = Join-Path $env:RUNNER_TEMP "$asset.zip"
+                  Invoke-WebRequest "https://github.com/oven-sh/bun/releases/download/bun-v1.4.3/$asset.zip" -OutFile $zip
+                  Expand-Archive $zip -DestinationPath $env:RUNNER_TEMP
+                  $bin = Join-Path $env:RUNNER_TEMP $asset
+                  $bin >> $env:GITHUB_PATH
+                  & "$bin/bun.exe" --version
+                  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+                  & "$bin/bun.exe" -e 'if (process.arch !== "${{ matrix.arch }}" || process.versions.bun !== "1.4.3") throw new Error("Wrong native Bun runtime")'
+                  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            - name: Install separate frozen root and docs graphs
+              id: install
+              run: bun run install:locked
+            - name: Check all source and test types
+              run: bun run check
+            - name: Run complete isolated Bun test inventory
+              if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+              timeout-minutes: 40
+              run: bun run test:bun
+            - name: Compile native executable and embedded Workspace
+              id: compile
+              if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+              timeout-minutes: 10
+              run: bun run compile:bun bin/wld-bun.exe bun-windows-${{ matrix.arch }}
+            - name: Qualify relocated package
+              if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
+              timeout-minutes: 5
+              run: bun run check:package:bun bin/wld-bun.exe
+            - name: Qualify local provider and terminal restoration
+              if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
+              timeout-minutes: 5
+              run: bun run check:provider:bun bin/wld-bun.exe
+            - name: Retain bounded qualification evidence
+              if: always()
+              uses: actions/upload-artifact@v5
+              with:
+                  name: bun-windows-${{ matrix.arch }}-${{ github.run_attempt }}
+                  retention-days: 3
+                  include-hidden-files: true
+                  if-no-files-found: warn
+                  path: |
+                      .ci-cache/bun-report-*/
+                      bin/*.build.json

@@ -1,13 +1,14 @@
 /** Qualify a relocated development executable without touching the user's home. */
 import { deepEqual, doesNotMatch, equal, match, ok } from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { argv, env, platform } from "node:process";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
+import { installPackageHelperFixtures } from "./package-helper-fixtures.ts";
 import { verifyBuildArtifact } from "./build-metadata.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -33,13 +34,16 @@ export async function checkBunPackage(
     const metadata = await verifyBuildArtifact(executable);
     const home = await mkdtemp(join(tmpdir(), "runwield-bun-package-"));
     try {
-        const relocated = join(home, "wld");
+        const relocated = join(home, platform === "win32" ? "wld.exe" : "wld");
         await cp(executable, relocated);
         // Both files must be ignored by the compiled executable.
         await writeFile(join(home, ".env"), "WLD_WORKSPACE_DISABLE_BUILT_SERVER=1\n");
         await writeFile(join(home, "bunfig.toml"), 'preload = ["./unexpected-preload.js"]\n');
         await writeFile(join(home, "unexpected-preload.js"), 'throw new Error("Ambient Bun config executed");\n');
         const childEnv = {
+            ...(env.SystemRoot ? { SystemRoot: env.SystemRoot } : {}),
+            ...(env.COMSPEC ? { COMSPEC: env.COMSPEC } : {}),
+            ...(env.PATHEXT ? { PATHEXT: env.PATHEXT } : {}),
             HOME: home,
             USERPROFILE: home,
             TMPDIR: home,
@@ -82,13 +86,9 @@ export async function checkBunPackage(
                 clearTimeout(timeout);
             }
         }
-        const fixture = await readFile(helperFixturePath, "utf8");
         const bin = join(home, "bin");
-        await mkdir(bin);
-        for (const name of ["mnemoteca", "cymbal", "ketch", "osascript"]) {
-            await writeFile(join(bin, name), fixture, { mode: 0o755 });
-        }
-        childEnv.PATH = `${bin}:${childEnv.PATH}`;
+        await installPackageHelperFixtures(bin, helperFixturePath);
+        childEnv.PATH = `${bin}${delimiter}${childEnv.PATH}`;
         const onboarding = start(["Runtime migration startup qualification"]);
         let reachedPicker = false;
         const cancelAtPicker = () => {
@@ -161,8 +161,20 @@ export async function checkBunPackage(
             const invalid = await fetch(`${base}/projects/%/plans`);
             equal(invalid.status, 500);
             equal(await invalid.text(), "Internal Server Error");
-            running.child.kill("SIGTERM");
-            equal(await running.finished, 0, running.output());
+            ok(running.child.kill("SIGTERM"), "Workspace process accepts termination");
+            const exit = await running.finished;
+            // Windows TerminateProcess has no POSIX SIGTERM handler; interactive /quit
+            // is qualified separately. Here require actual exit and a closed listener.
+            if (platform !== "win32") equal(exit, 0, running.output());
+            else {
+                ok(running.child.exitCode !== null || running.child.signalCode !== null);
+                await fetch(base, { signal: AbortSignal.timeout(2_000) }).then(
+                    () => {
+                        throw new Error("Workspace listener survived termination");
+                    },
+                    () => {},
+                );
+            }
         } finally {
             clearTimeout(watchdog);
             if (running.child.exitCode === null) running.child.kill("SIGKILL");

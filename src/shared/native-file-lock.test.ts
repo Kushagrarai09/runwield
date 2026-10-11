@@ -10,7 +10,11 @@ import { openNativeFileLock } from "./native-file-lock.ts";
 
 function fixture() {
     const directory = mkdtempSync(join(tmpdir(), "runwield-native-lock-"));
-    return { directory, path: join(directory, "writer.lock"), close: () => rmSync(directory, { recursive: true }) };
+    return {
+        directory,
+        path: join(directory, "writer-λ守🔒.lock"),
+        close: () => rmSync(directory, { recursive: true }),
+    };
 }
 
 test("native locks exclude separate descriptors without truncating private lock contents", () => {
@@ -22,9 +26,12 @@ test("native locks exclude separate descriptors without truncating private lock 
         equal(first.tryLockSync(true), true);
         equal(second.tryLockSync(true), false);
         equal(second.tryLockSync(false), false);
-        equal(readFileSync(f.path, "utf8"), "owner evidence");
+        equal(first.readSnapshotSync().text, "owner evidence");
+        if (platform === "win32") throws(() => readFileSync(f.path));
+        else equal(readFileSync(f.path, "utf8"), "owner evidence");
         if (platform !== "win32") equal(statSync(f.path).mode & 0o777, 0o600);
         first.unlockSync();
+        equal(readFileSync(f.path, "utf8"), "owner evidence");
         equal(second.tryLockSync(true), true);
         equal(first.tryLockSync(true), false);
         second.unlockSync();
@@ -81,8 +88,8 @@ test("closing releases ownership and a closed handle cannot affect a subsequentl
 test("missing and invalid lock paths fail instead of reporting contention", () => {
     const f = fixture();
     try {
-        throws(() => openNativeFileLock(f.path, false));
-        throws(() => openNativeFileLock(join(f.directory, "missing", "lock")));
+        throws(() => openNativeFileLock(f.path, false), { code: "ENOENT" });
+        throws(() => openNativeFileLock(join(f.directory, "missing", "lock")), { code: "ENOENT" });
         throws(() => openNativeFileLock(f.directory));
     } finally {
         f.close();
@@ -136,11 +143,13 @@ test("exclusive lock creation and descriptor writes preserve complete metadata",
         const text = "λ守🔒".repeat(8192);
         owner.replaceTextSync(text);
         equal(owner.readSnapshotSync().text, text);
-        equal(readFileSync(f.path, "utf8"), text);
+        if (platform === "win32") throws(() => readFileSync(f.path));
+        else equal(readFileSync(f.path, "utf8"), text);
         equal(owner.readSnapshotSync().size, new TextEncoder().encode(text).length);
         equal(owner.readSnapshotSync().mtime, statSync(f.path).mtime.getTime());
         throws(() => openNativeFileLock(f.path, "exclusive"), { code: "EEXIST" });
-        equal(readFileSync(f.path, "utf8"), text);
+        if (platform === "win32") throws(() => readFileSync(f.path));
+        else equal(readFileSync(f.path, "utf8"), text);
         owner.replaceTextSync("short");
         equal(owner.readSnapshotSync().text, "short");
         equal(owner.readSnapshotSync().size, 5);

@@ -3,6 +3,7 @@ import { closeSync, constants, fstatSync, fsyncSync, ftruncateSync, openSync, re
 import { createRequire } from "node:module";
 import { platform, versions } from "node:process";
 import { getSystemErrorName } from "node:util";
+import { openWindowsFileLock } from "./native-file-lock-windows.ts";
 
 export interface NativeFileLock {
     tryLockSync(exclusive?: boolean): boolean;
@@ -153,6 +154,7 @@ export function openNativeFileLock(path: string, create: boolean | "exclusive" =
             },
         };
     }
+    if (versions.bun && platform === "win32") return openWindowsFileLock(path, create);
     const api = getPosixLockAPI();
     let fd = openSync(
         path,
