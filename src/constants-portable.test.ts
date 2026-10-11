@@ -2,7 +2,7 @@ import { equal, match, notEqual } from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { chdir, cwd, env, execPath, versions } from "node:process";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -21,7 +21,7 @@ test("portable HOME and cwd accessors observe changes after import", async () =>
             equal(getHomeDir(), home);
             notEqual(getHomeDir(), beforeHome);
             equal(getCwd(), work);
-            equal(getRunWieldRuntimeDir("/a/project").startsWith(env.WLD_TEST_SANDBOX_HOME + "/"), true);
+            equal(getRunWieldRuntimeDir("/a/project").startsWith(env.WLD_TEST_SANDBOX_HOME + sep), true);
         } finally {
             chdir(beforeCwd);
             if (beforeHome === undefined) delete env.HOME;
@@ -43,9 +43,9 @@ test("portable constants reject a test entrypoint before unsandboxed code can ru
         const path = join(fixture, "guard.test.ts");
         await writeFile(
             path,
-            `await import(${
-                JSON.stringify(new URL("./constants.js", import.meta.url).href)
-            }); console.log("BODY_RAN");`,
+            `await import(${JSON.stringify(
+                new URL("./constants.js", import.meta.url).href,
+            )}); console.log("BODY_RAN");`,
         );
         const child = spawn(
             execPath,
@@ -58,8 +58,8 @@ test("portable constants reject a test entrypoint before unsandboxed code can ru
             },
         );
         let output = "";
-        child.stdout.on("data", (chunk) => output += chunk.toString());
-        child.stderr.on("data", (chunk) => output += chunk.toString());
+        child.stdout.on("data", (chunk) => (output += chunk.toString()));
+        child.stderr.on("data", (chunk) => (output += chunk.toString()));
         const code = await new Promise<number | null>((resolve, reject) => {
             child.on("error", reject);
             child.on("close", resolve);

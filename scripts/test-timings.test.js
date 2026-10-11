@@ -26,7 +26,7 @@ test("test runner parses scheduling controls without passing them to Deno", () =
     ]);
 
     assertEquals(parsed.failFast, true);
-    assertEquals(parsed.timingsFile?.endsWith(".ci-cache/golden-timings.json"), true);
+    assertEquals(parsed.timingsFile?.endsWith(join(".ci-cache", "golden-timings.json")), true);
     assertEquals(parsed.rest, ["--isolated", "src/ui/tui/testing"]);
 });
 
@@ -39,12 +39,10 @@ test("historical timings schedule slow files first and place new files near the 
         "slow.test.ts": { durationMs: 100, runs: 3 },
     });
 
-    assertEquals(ordered.map((file) => file.slice(root.length + 1)), [
-        "slow.test.ts",
-        "middle.test.ts",
-        "new.test.ts",
-        "fast.test.ts",
-    ]);
+    assertEquals(
+        ordered.map((file) => file.slice(root.length + 1)),
+        ["slow.test.ts", "middle.test.ts", "new.test.ts", "fast.test.ts"],
+    );
 });
 
 test("the first observation schedules slow files first without changing membership", () => {
@@ -67,10 +65,10 @@ test("test timing history survives invalid cache data and merges recent observat
         await fsWriteFile(path, "not json");
         assertEquals(await readTestTimings(path), {});
 
-        const merged = mergeTestTimings(
-            { "a.test.ts": { durationMs: 100, runs: 3 } },
-            [{ file: "a.test.ts", durationMs: 200 }, { file: "b.test.ts", durationMs: 40 }],
-        );
+        const merged = mergeTestTimings({ "a.test.ts": { durationMs: 100, runs: 3 } }, [
+            { file: "a.test.ts", durationMs: 200 },
+            { file: "b.test.ts", durationMs: 40 },
+        ]);
         await writeTestTimings(path, merged);
 
         assertEquals(await readTestTimings(path), {
@@ -90,9 +88,9 @@ test("release fail-fast stops scheduling new isolated test files", async () => {
         await fsWriteFile(
             join(root, "a-failure.test.js"),
             `import {test} from "node:test"; import {writeFile} from "node:fs/promises";
-            test("fails", async () => { await writeFile(${
-                JSON.stringify(firstMarker)
-            }, "ran"); throw new Error("stop"); });\n`,
+            test("fails", async () => { await writeFile(${JSON.stringify(
+                firstMarker,
+            )}, "ran"); throw new Error("stop"); });\n`,
         );
         await fsWriteFile(
             join(root, "b-later.test.js"),
@@ -111,7 +109,12 @@ test("release fail-fast stops scheduling new isolated test files", async () => {
 
         assertEquals(output.success, false);
         assertEquals(await fsReadFile(firstMarker, "utf8"), "ran");
-        assertEquals(await fsStat(marker).then(() => true).catch(() => false), false);
+        assertEquals(
+            await fsStat(marker)
+                .then(() => true)
+                .catch(() => false),
+            false,
+        );
     } finally {
         await fsRm(root, { recursive: true });
     }

@@ -40,6 +40,7 @@ export interface NativeSpawnOptions {
     stderr: "piped" | "null" | "inherit";
     detached?: boolean;
     signal?: AbortSignal;
+    windowsRawArguments?: boolean;
 }
 interface DenoProcessRuntime {
     Command: new (command: string, options: NativeSpawnOptions) => { spawn(): NativeProcess };
@@ -65,6 +66,7 @@ interface BunSpawnOptions {
     stdout: "ignore" | "pipe" | "inherit";
     stderr: "ignore" | "pipe" | "inherit";
     detached: boolean;
+    windowsVerbatimArguments?: boolean;
 }
 interface BunProcessRuntime {
     spawn(options: BunSpawnOptions): BunProcess;
@@ -86,17 +88,20 @@ export function spawnNativeProcess(command: string, options: NativeSpawnOptions)
         stdout: options.stdout === "piped" ? "pipe" : options.stdout === "inherit" ? "inherit" : "ignore",
         stderr: options.stderr === "piped" ? "pipe" : options.stderr === "inherit" ? "inherit" : "ignore",
         detached: options.detached === true,
+        windowsVerbatimArguments: options.windowsRawArguments,
     });
     const abort = () => {
         try {
             child.kill("SIGTERM");
-        } catch { /* Exit raced with cancellation. */ }
+        } catch {
+            /* Exit raced with cancellation. */
+        }
     };
     options.signal?.addEventListener("abort", abort, { once: true });
     if (options.signal?.aborted) abort();
-    const status = child.exited.then((code) => ({ code, success: code === 0 })).finally(() =>
-        options.signal?.removeEventListener("abort", abort)
-    );
+    const status = child.exited
+        .then((code) => ({ code, success: code === 0 }))
+        .finally(() => options.signal?.removeEventListener("abort", abort));
     // FileSink owns buffering; waiting for flush preserves web-stream
     // backpressure for interactive protocol writers and large stdin payloads.
     const stdin = new WritableStream<Uint8Array>({
@@ -237,7 +242,7 @@ function terminateProcessTree(child: NativeProcess): void {
     }
 }
 
-function spawnOwnedProcess(options: SpawnForegroundProcessOptions): ForegroundProcess {
+function spawnOwnedProcess(options: SpawnForegroundProcessOptions, windowsRawArguments = false): ForegroundProcess {
     const { command, args = [], cwd, env, stdinText, signal, timeoutMs } = options;
     if (options.stdin && stdinText !== undefined) throw new Error("Choose interactive stdin or stdinText, not both.");
 
@@ -270,6 +275,7 @@ function spawnOwnedProcess(options: SpawnForegroundProcessOptions): ForegroundPr
             args,
             cwd,
             env,
+            windowsRawArguments,
             stdin: options.stdin || (stdinText === undefined ? "null" : "piped"),
             stdout: "piped",
             stderr: "piped",
@@ -286,7 +292,10 @@ function spawnOwnedProcess(options: SpawnForegroundProcessOptions): ForegroundPr
     if (stdinText !== undefined) {
         const writer = spawned.stdin.getWriter();
         const stdin = new TextEncoder().encode(stdinText);
-        writer.write(stdin).then(() => writer.close()).catch(() => undefined);
+        writer
+            .write(stdin)
+            .then(() => writer.close())
+            .catch(() => undefined);
     }
     // Close the pre-spawn race: if the abort fired while `child` was still null,
     // `terminatedBy` is already set and this call sends the kill exactly once.
@@ -338,12 +347,16 @@ export function spawnForegroundProcess(options: SpawnForegroundProcessOptions): 
 export function spawnForegroundShell(options: SpawnForegroundShellOptions): ForegroundShell {
     const { command, cwd, env, signal, timeoutMs } = options;
     const isWindows = platform === "win32";
-    return spawnOwnedProcess({
-        command: isWindows ? "cmd" : "sh",
-        args: [isWindows ? "/c" : "-c", command],
-        cwd,
-        env,
-        signal,
-        timeoutMs,
-    });
+    return spawnOwnedProcess(
+        {
+            command: isWindows ? "cmd" : "sh",
+            // cmd parses its own quoting; CRT escaping would turn quotes into literal backslashes.
+            args: isWindows ? ["/d", "/s", "/c", `"${command}"`] : ["-c", command],
+            cwd,
+            env,
+            signal,
+            timeoutMs,
+        },
+        isWindows,
+    );
 }

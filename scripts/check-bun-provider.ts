@@ -31,26 +31,22 @@ const server = createServer(async (request, response) => {
     }
     response.writeHead(200, { "content-type": "text/event-stream" });
     response.write(
-        `data: ${
-            JSON.stringify({
-                id: "fixture-response",
-                object: "chat.completion.chunk",
-                created: 1,
-                model: "fixture",
-                choices: [{ index: 0, delta: { role: "assistant", content: marker }, finish_reason: null }],
-            })
-        }\n\n`,
+        `data: ${JSON.stringify({
+            id: "fixture-response",
+            object: "chat.completion.chunk",
+            created: 1,
+            model: "fixture",
+            choices: [{ index: 0, delta: { role: "assistant", content: marker }, finish_reason: null }],
+        })}\n\n`,
     );
     response.write(
-        `data: ${
-            JSON.stringify({
-                id: "fixture-response",
-                object: "chat.completion.chunk",
-                created: 1,
-                model: "fixture",
-                choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
-            })
-        }\n\n`,
+        `data: ${JSON.stringify({
+            id: "fixture-response",
+            object: "chat.completion.chunk",
+            created: 1,
+            model: "fixture",
+            choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+        })}\n\n`,
     );
     response.end("data: [DONE]\n\n");
 });
@@ -70,15 +66,17 @@ try {
                 baseUrl: `http://127.0.0.1:${address.port}/v1`,
                 apiKey: "fixture-key",
                 api: "openai-completions",
-                models: [{
-                    id: "fixture",
-                    name: "Fixture",
-                    api: "openai-completions",
-                    reasoning: false,
-                    input: ["text"],
-                    contextWindow: 128000,
-                    maxTokens: 4096,
-                }],
+                models: [
+                    {
+                        id: "fixture",
+                        name: "Fixture",
+                        api: "openai-completions",
+                        reasoning: false,
+                        input: ["text"],
+                        contextWindow: 128000,
+                        maxTokens: 4096,
+                    },
+                ],
             },
         },
     };
@@ -100,9 +98,15 @@ try {
     await cp(resolve(argv[2]), executable);
     const prompt = "Say hello for migration qualification.";
     const command = platform === "darwin" ? "/usr/bin/sandbox-exec" : executable;
-    const args = platform === "darwin"
-        ? ["-p", `(version 1)(allow default)(deny file-read* (subpath ${JSON.stringify(ROOT)}))`, executable, prompt]
-        : [prompt];
+    const args =
+        platform === "darwin"
+            ? [
+                  "-p",
+                  `(version 1)(allow default)(deny file-read* (subpath ${JSON.stringify(ROOT)}))`,
+                  executable,
+                  prompt,
+              ]
+            : [prompt];
     const child = spawn(command, args, {
         cwd: project,
         env: {
@@ -180,5 +184,6 @@ try {
 } finally {
     server.closeAllConnections();
     await new Promise<void>((done) => server.close(() => done()));
-    await rm(home, { recursive: true, force: true });
+    // Windows can briefly retain an executable mapping after the process close event.
+    await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }

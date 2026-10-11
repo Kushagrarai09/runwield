@@ -13,7 +13,7 @@ import process from "node:process";
  * `../architecture.md` from inside `docs/`. Neither resolved, and nothing noticed.
  */
 
-import { dirname, join, normalize } from "@std/path";
+import { join, posix } from "node:path";
 
 const REPO_ROOT = fileURLToPath(new URL("../", import.meta.url));
 const EXCLUDED_PREFIXES = ["node_modules/", ".history/", "dist/", "third_party/"];
@@ -41,7 +41,8 @@ async function trackedMarkdownFiles() {
     if (!output.success) {
         throw new Error(new TextDecoder().decode(output.stderr).trim() || "git ls-files failed");
     }
-    return new TextDecoder().decode(output.stdout)
+    return new TextDecoder()
+        .decode(output.stdout)
         .split("\0")
         .filter((path) => path && !EXCLUDED_PREFIXES.some((prefix) => path.startsWith(prefix)))
         .sort();
@@ -167,7 +168,9 @@ export async function findBrokenLinks(
         const markdown = await readTextFile(sourceFile);
         for (const { line, target } of extractRelativeLinks(markdown)) {
             const [pathPart, fragment] = target.split("#");
-            const resolved = pathPart ? normalize(join(dirname(sourceFile), decodeURIComponent(pathPart))) : sourceFile;
+            const resolved = pathPart
+                ? posix.normalize(posix.join(posix.dirname(sourceFile), decodeURIComponent(pathPart)))
+                : sourceFile;
 
             if (resolved.startsWith("..")) {
                 broken.push({ sourceFile, line, target, reason: "resolves outside the repository" });

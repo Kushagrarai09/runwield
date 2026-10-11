@@ -38,7 +38,7 @@ async function collectMarkdownFiles(rootDir, relativeDir = "") {
     const currentDir = relativeDir ? join(rootDir, ...relativeDir.split("/")) : rootDir;
     for await (const entry of await fsReaddir(currentDir, { withFileTypes: true })) {
         const relativePath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
-        if (entry.isDirectory()) files.push(...await collectMarkdownFiles(rootDir, relativePath));
+        if (entry.isDirectory()) files.push(...(await collectMarkdownFiles(rootDir, relativePath)));
         else if (entry.isFile() && entry.name.endsWith(".md")) files.push(relativePath);
     }
     return files.sort();
@@ -82,58 +82,61 @@ test("runReleaseCheck propagates build identity to compile and preserves stage o
         const stages = [];
         /** @type {Array<{ command: string, args: string[], env?: NodeJS.ProcessEnv }>} */
         const calls = [];
-        await runReleaseCheck({
-            buildVersion: "v1.2.3-rc.1",
-            rootDir: root,
-        }, {
-            makeTempDir: () => Promise.resolve("release-temp"),
-            remove: () => Promise.resolve(),
-            async run(command, args, options = {}) {
-                calls.push({ command, args, env: options.env });
-                if (command === "deno" && args.includes("scripts/compile.js")) {
-                    stages.push("compile");
-                    await fsWriteFile(
-                        join(root, "src", "shared", "version.js"),
-                        'export const VERSION = "compiled";\n',
-                    );
-                    return { success: true, code: 0, stdout: "", stderr: "" };
-                }
-                if (command === "deno" && args.includes("test:golden-tui:extensive")) {
-                    stages.push("golden-tui");
-                    return { success: true, code: 0, stdout: "", stderr: "" };
-                }
-                if (command === "deno") {
-                    stages.push("workspace-review-routes");
-                    return { success: true, code: 0, stdout: "", stderr: "" };
-                }
-                if (args[0] === "package-smoke") {
-                    assertEquals(args, ["package-smoke", "image-resize"]);
-                    assertEquals(options.cwd, "release-temp");
-                    assertEquals(options.env?.WLD_INTERNAL_PACKAGE_CHECK, "1");
-                    stages.push("image-resize");
-                    return { success: true, code: 0, stdout: "", stderr: "" };
-                }
-                stages.push("version");
-                return {
-                    success: true,
-                    code: 0,
-                    stdout: "runwield v1.2.3-rc.1 (test-target)\n",
-                    stderr: "",
-                };
+        await runReleaseCheck(
+            {
+                buildVersion: "v1.2.3-rc.1",
+                rootDir: root,
             },
-            smokeTestBundledAgentReferenceExtraction() {
-                stages.push("references");
-                return Promise.resolve();
+            {
+                makeTempDir: () => Promise.resolve("release-temp"),
+                remove: () => Promise.resolve(),
+                async run(command, args, options = {}) {
+                    calls.push({ command, args, env: options.env });
+                    if (command === "deno" && args.includes("scripts/compile.js")) {
+                        stages.push("compile");
+                        await fsWriteFile(
+                            join(root, "src", "shared", "version.js"),
+                            'export const VERSION = "compiled";\n',
+                        );
+                        return { success: true, code: 0, stdout: "", stderr: "" };
+                    }
+                    if (command === "deno" && args.includes("test:golden-tui:extensive")) {
+                        stages.push("golden-tui");
+                        return { success: true, code: 0, stdout: "", stderr: "" };
+                    }
+                    if (command === "deno") {
+                        stages.push("workspace-review-routes");
+                        return { success: true, code: 0, stdout: "", stderr: "" };
+                    }
+                    if (args[0] === "package-smoke") {
+                        assertEquals(args, ["package-smoke", "image-resize"]);
+                        assertEquals(options.cwd, "release-temp");
+                        assertEquals(options.env?.WLD_INTERNAL_PACKAGE_CHECK, "1");
+                        stages.push("image-resize");
+                        return { success: true, code: 0, stdout: "", stderr: "" };
+                    }
+                    stages.push("version");
+                    return {
+                        success: true,
+                        code: 0,
+                        stdout: "runwield v1.2.3-rc.1 (test-target)\n",
+                        stderr: "",
+                    };
+                },
+                smokeTestBundledAgentReferenceExtraction() {
+                    stages.push("references");
+                    return Promise.resolve();
+                },
+                smokeTestBinaryPlansUiSurface() {
+                    stages.push("plans-ui");
+                    return Promise.resolve();
+                },
+                smokeTestBinaryReviewSurface() {
+                    stages.push("review");
+                    return Promise.resolve();
+                },
             },
-            smokeTestBinaryPlansUiSurface() {
-                stages.push("plans-ui");
-                return Promise.resolve();
-            },
-            smokeTestBinaryReviewSurface() {
-                stages.push("review");
-                return Promise.resolve();
-            },
-        });
+        );
 
         assertEquals(stages, [
             "compile",
@@ -157,24 +160,30 @@ test("runReleaseCheck can leave Golden qualification to a parallel CI job", asyn
     await withTemporaryVersionProject(async (root) => {
         /** @type {string[]} */
         const commands = [];
-        await runReleaseCheck({ rootDir: root, includeGolden: false }, {
-            makeTempDir: () => Promise.resolve("release-temp"),
-            remove: () => Promise.resolve(),
-            run(command, args) {
-                commands.push(`${command} ${args.join(" ")}`);
-                return Promise.resolve({
-                    success: true,
-                    code: 0,
-                    stdout: command === "deno" ? "" : "runwield test-version (test-target)\n",
-                    stderr: "",
-                });
+        await runReleaseCheck(
+            { rootDir: root, includeGolden: false },
+            {
+                makeTempDir: () => Promise.resolve("release-temp"),
+                remove: () => Promise.resolve(),
+                run(command, args) {
+                    commands.push(`${command} ${args.join(" ")}`);
+                    return Promise.resolve({
+                        success: true,
+                        code: 0,
+                        stdout: command === "deno" ? "" : "runwield test-version (test-target)\n",
+                        stderr: "",
+                    });
+                },
+                smokeTestBundledAgentReferenceExtraction: () => Promise.resolve(),
+                smokeTestBinaryPlansUiSurface: () => Promise.resolve(),
+                smokeTestBinaryReviewSurface: () => Promise.resolve(),
             },
-            smokeTestBundledAgentReferenceExtraction: () => Promise.resolve(),
-            smokeTestBinaryPlansUiSurface: () => Promise.resolve(),
-            smokeTestBinaryReviewSurface: () => Promise.resolve(),
-        });
+        );
 
-        assertEquals(commands.some((command) => command.includes("test:golden-tui")), false);
+        assertEquals(
+            commands.some((command) => command.includes("test:golden-tui")),
+            false,
+        );
     });
 });
 
@@ -184,33 +193,36 @@ test("runReleaseCheck short-circuits after compile failure and restores generate
         const stages = [];
         await assertRejects(
             () =>
-                runReleaseCheck({
-                    buildVersion: "v1.2.3",
-                    rootDir: root,
-                }, {
-                    makeTempDir: () => Promise.resolve("release-temp"),
-                    remove: () => Promise.resolve(),
-                    async run(command) {
-                        stages.push(command === "deno" ? "compile" : "version");
-                        await fsWriteFile(
-                            join(root, "src", "shared", "version.js"),
-                            'export const VERSION = "failed";\n',
-                        );
-                        return { success: false, code: 1, stdout: "", stderr: "compile failed" };
+                runReleaseCheck(
+                    {
+                        buildVersion: "v1.2.3",
+                        rootDir: root,
                     },
-                    smokeTestBundledAgentReferenceExtraction() {
-                        stages.push("references");
-                        return Promise.resolve();
+                    {
+                        makeTempDir: () => Promise.resolve("release-temp"),
+                        remove: () => Promise.resolve(),
+                        async run(command) {
+                            stages.push(command === "deno" ? "compile" : "version");
+                            await fsWriteFile(
+                                join(root, "src", "shared", "version.js"),
+                                'export const VERSION = "failed";\n',
+                            );
+                            return { success: false, code: 1, stdout: "", stderr: "compile failed" };
+                        },
+                        smokeTestBundledAgentReferenceExtraction() {
+                            stages.push("references");
+                            return Promise.resolve();
+                        },
+                        smokeTestBinaryPlansUiSurface() {
+                            stages.push("plans-ui");
+                            return Promise.resolve();
+                        },
+                        smokeTestBinaryReviewSurface() {
+                            stages.push("review");
+                            return Promise.resolve();
+                        },
                     },
-                    smokeTestBinaryPlansUiSurface() {
-                        stages.push("plans-ui");
-                        return Promise.resolve();
-                    },
-                    smokeTestBinaryReviewSurface() {
-                        stages.push("review");
-                        return Promise.resolve();
-                    },
-                }),
+                ),
             Error,
             "Compile release binary failed",
         );
@@ -232,23 +244,27 @@ test("release check rejects worker errors even when image fallback exits success
         };
         await assertRejects(
             () =>
-                runReleaseCheck({ rootDir: root }, {
-                    makeTempDir: () => Promise.resolve("release-temp"),
-                    remove: () => Promise.resolve(),
-                    run(_command, args) {
-                        return Promise.resolve({
-                            success: true,
-                            code: 0,
-                            stdout: "",
-                            stderr: args[0] === "package-smoke"
-                                ? "error: Uncaught (in worker) Module not found: image-resize-worker.js"
-                                : "",
-                        });
+                runReleaseCheck(
+                    { rootDir: root },
+                    {
+                        makeTempDir: () => Promise.resolve("release-temp"),
+                        remove: () => Promise.resolve(),
+                        run(_command, args) {
+                            return Promise.resolve({
+                                success: true,
+                                code: 0,
+                                stdout: "",
+                                stderr:
+                                    args[0] === "package-smoke"
+                                        ? "error: Uncaught (in worker) Module not found: image-resize-worker.js"
+                                        : "",
+                            });
+                        },
+                        smokeTestBundledAgentReferenceExtraction: laterCheck,
+                        smokeTestBinaryPlansUiSurface: laterCheck,
+                        smokeTestBinaryReviewSurface: laterCheck,
                     },
-                    smokeTestBundledAgentReferenceExtraction: laterCheck,
-                    smokeTestBinaryPlansUiSurface: laterCheck,
-                    smokeTestBinaryReviewSurface: laterCheck,
-                }),
+                ),
             Error,
             "Packaged image resize wrote unexpected terminal output",
         );
@@ -262,41 +278,44 @@ test("runReleaseCheck restores generated version after binary version mismatch",
         const stages = [];
         await assertRejects(
             () =>
-                runReleaseCheck({
-                    buildVersion: "v1.2.3-rc.1",
-                    rootDir: root,
-                }, {
-                    makeTempDir: () => Promise.resolve("release-temp"),
-                    remove: () => Promise.resolve(),
-                    async run(command, args) {
-                        if (command === "deno" && args.includes("scripts/compile.js")) {
-                            stages.push("compile");
-                            await fsWriteFile(
-                                join(root, "src", "shared", "version.js"),
-                                'export const VERSION = "compiled";\n',
-                            );
-                            return { success: true, code: 0, stdout: "", stderr: "" };
-                        }
-                        if (command === "deno") {
-                            stages.push("workspace-review-routes");
-                            return { success: true, code: 0, stdout: "", stderr: "" };
-                        }
-                        stages.push("version");
-                        return { success: true, code: 0, stdout: "runwield v1.2.3 (test-target)\n", stderr: "" };
+                runReleaseCheck(
+                    {
+                        buildVersion: "v1.2.3-rc.1",
+                        rootDir: root,
                     },
-                    smokeTestBundledAgentReferenceExtraction() {
-                        stages.push("references");
-                        return Promise.resolve();
+                    {
+                        makeTempDir: () => Promise.resolve("release-temp"),
+                        remove: () => Promise.resolve(),
+                        async run(command, args) {
+                            if (command === "deno" && args.includes("scripts/compile.js")) {
+                                stages.push("compile");
+                                await fsWriteFile(
+                                    join(root, "src", "shared", "version.js"),
+                                    'export const VERSION = "compiled";\n',
+                                );
+                                return { success: true, code: 0, stdout: "", stderr: "" };
+                            }
+                            if (command === "deno") {
+                                stages.push("workspace-review-routes");
+                                return { success: true, code: 0, stdout: "", stderr: "" };
+                            }
+                            stages.push("version");
+                            return { success: true, code: 0, stdout: "runwield v1.2.3 (test-target)\n", stderr: "" };
+                        },
+                        smokeTestBundledAgentReferenceExtraction() {
+                            stages.push("references");
+                            return Promise.resolve();
+                        },
+                        smokeTestBinaryPlansUiSurface() {
+                            stages.push("plans-ui");
+                            return Promise.resolve();
+                        },
+                        smokeTestBinaryReviewSurface() {
+                            stages.push("review");
+                            return Promise.resolve();
+                        },
                     },
-                    smokeTestBinaryPlansUiSurface() {
-                        stages.push("plans-ui");
-                        return Promise.resolve();
-                    },
-                    smokeTestBinaryReviewSurface() {
-                        stages.push("review");
-                        return Promise.resolve();
-                    },
-                }),
+                ),
             Error,
             "wrong version",
         );
@@ -369,12 +388,12 @@ test("collectBundledAgentReferenceFiles covers all agent definitions, prompts, a
 test("collectExtractedBundledMarkdownFiles covers agent definitions and bundled skills", async () => {
     const extracted = await collectExtractedBundledMarkdownFiles();
     assertEquals(
-        extracted.map((file) => `${file.cacheDir}/${file.relativePath}`),
+        extracted.map((file) => join(file.cacheDir, file.relativePath)),
         [
             ...(await collectMarkdownFiles(join("src", "agent-definitions"))).map((path) =>
-                `.wld/bundled-agent-definitions/${path}`
+                join(".wld", "bundled-agent-definitions", path),
             ),
-            ...(await collectMarkdownFiles(join("src", "skills"))).map((path) => `.wld/bundled-skills/${path}`),
+            ...(await collectMarkdownFiles(join("src", "skills"))).map((path) => join(".wld", "bundled-skills", path)),
         ].sort((a, b) => a.localeCompare(b)),
     );
 });
@@ -424,11 +443,7 @@ test("assertReviewAssetsLoad fails when a dynamic review chunk is missing", asyn
     const html = '<astro-island component-url="/_astro/Review.js"></astro-island>';
 
     try {
-        await assertRejects(
-            () => assertReviewAssetsLoad(pageUrl, html),
-            Error,
-            "Review UI asset failed to load (404)",
-        );
+        await assertRejects(() => assertReviewAssetsLoad(pageUrl, html), Error, "Review UI asset failed to load (404)");
     } finally {
         await server.shutdown();
     }

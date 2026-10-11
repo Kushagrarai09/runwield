@@ -83,7 +83,7 @@ async function nativeTerminalSession(project: string, home: string): Promise<{ c
                 status: "Connected",
                 trust: "SSH verified",
                 readiness: "No user turns",
-            }) + "\n",
+            }) + (process.platform === "win32" ? "\r" : "\n"),
         );
         const deadline = Date.now() + 20_000;
         while (!screen.includes("Press q") && !exited && Date.now() < deadline) {

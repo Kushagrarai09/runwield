@@ -37,9 +37,9 @@ const typed = route;
 `;
 
     assertEquals(getServerEntryImportPaths(source, "dist/workspace/server"), [
-        "dist/workspace/server/chunks/route.mjs",
-        "dist/workspace/server/chunks/setup.mjs",
-        "dist/workspace/server/chunks/page.mjs",
+        join("dist", "workspace", "server", "chunks", "route.mjs"),
+        join("dist", "workspace", "server", "chunks", "setup.mjs"),
+        join("dist", "workspace", "server", "chunks", "page.mjs"),
     ]);
 });
 
@@ -123,9 +123,12 @@ test("standalone Workspace bundle omits runner environment without changing buil
         await fsWriteFile(serverEntry, "export default true;\n");
         await fsMkdir(clientDir);
         await fsWriteFile(join(clientDir, "client.css"), "body{}\n");
-        await buildWorkspaceRuntime({ serverEntry, clientDir, runtimeDir }, {
-            run: () => fsWriteFile(serverOutput, `const mode=${snapshot}?.PROD;\n`),
-        });
+        await buildWorkspaceRuntime(
+            { serverEntry, clientDir, runtimeDir },
+            {
+                run: () => fsWriteFile(serverOutput, `const mode=${snapshot}?.PROD;\n`),
+            },
+        );
         assertEquals(await fsReadFile(serverOutput, "utf8"), `const mode=Object.assign(${flags},{})?.PROD;\n`);
     } finally {
         await fsRm(root, { recursive: true });
@@ -149,9 +152,12 @@ test("standalone Workspace runtime is identical across manifest asset discovery 
         await fsMkdir(clientDir);
         await fsWriteFile(join(clientDir, "client.js"), "export default true;\n");
         for (const source of sources) {
-            await buildWorkspaceRuntime({ serverEntry, clientDir, runtimeDir }, {
-                run: () => fsWriteFile(serverOutput, source),
-            });
+            await buildWorkspaceRuntime(
+                { serverEntry, clientDir, runtimeDir },
+                {
+                    run: () => fsWriteFile(serverOutput, source),
+                },
+            );
             assertEquals(await fsReadFile(serverOutput, "utf8"), expected);
             assertEquals(
                 await fsReadFile(join(runtimeDir, "client/client.js.asset"), "utf8"),

@@ -46,7 +46,11 @@ test("CI collects all failures by default and supports explicit fail-fast", asyn
                 stdout: "piped",
                 stderr: "piped",
             });
-            assertEquals(output.code, 7);
+            assertEquals(
+                output.code,
+                7,
+                new TextDecoder().decode(output.stderr) + new TextDecoder().decode(output.stdout),
+            );
             assertEquals(
                 JSON.parse(await fsReadFile(join(root, "args.json"), "utf8")),
                 flags.includes("--fail-fast") ? ["--fail-fast"] : [],
@@ -172,7 +176,7 @@ test("runCi preserves a failed test exit code", async () => {
         Promise.resolve({
             name: taskName,
             code: taskName === "test:all:suite" ? 7 : 0,
-        })
+        }),
     );
 
     assertEquals(result, {
@@ -183,10 +187,13 @@ test("runCi preserves a failed test exit code", async () => {
 
 test("source-only CI supports the independently required Golden job", async () => {
     const starts: CiTaskName[] = [];
-    const result = await runCi((name) => {
-        starts.push(name);
-        return Promise.resolve({ name, code: 0 });
-    }, { sourceOnly: true });
+    const result = await runCi(
+        (name) => {
+            starts.push(name);
+            return Promise.resolve({ name, code: 0 });
+        },
+        { sourceOnly: true },
+    );
     assertEquals(starts, [...PRE_TEST_TASKS, "test:suite"]);
     assertEquals(result, { exitCode: 0, failures: [] });
 });
