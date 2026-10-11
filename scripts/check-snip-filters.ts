@@ -37,9 +37,7 @@ export async function checkSnipFilters(): Promise<void> {
         const configPath = join(tempHome, ".config", "snip", "config.toml");
         await fsWriteFile(
             configPath,
-            `[tracking]\ndb_path = "${
-                join(tempHome, "tracking.db")
-            }"\n\n[filters]\ndir = "${filtersDir}"\n\n[tee]\nenabled = false\n`,
+            `[tracking]\ndb_path = ${JSON.stringify(join(tempHome, "tracking.db"))}\n\n[filters]\ndir = ${JSON.stringify(filtersDir)}\n\n[tee]\nenabled = false\n`,
         );
         const result = await captureScriptProcess("snip", {
             args: ["verify"],

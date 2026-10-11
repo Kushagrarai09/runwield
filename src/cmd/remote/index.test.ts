@@ -1,5 +1,7 @@
 import { writeRuntimeExecutableFixture } from "../../testing/runtime-executable-fixture.ts";
-import { delimiter } from "node:path";
+import { basename, delimiter } from "node:path";
+import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
 import { captureForegroundProcess } from "../../shared/captured-process.ts";
 import { test } from "node:test";
@@ -35,10 +37,11 @@ interface RemoteFixture {
     remote: string;
     sshLog: string;
     run: (args: string[], proof?: string) => Promise<CliResult>;
+    runWithOpenStdin: () => Promise<CliResult>;
 }
 
 /** Real CLI with disposable homes: POSIX runs remote Python; Windows uses a native SSH protocol boundary. */
-async function withRemoteFixture(test: (fixture: RemoteFixture) => Promise<void>): Promise<void> {
+async function withRemoteFixture(test: (fixture: RemoteFixture) => Promise<void>, connected = false): Promise<void> {
     const root = await fsRealpath(await fsMkdtemp(join(tmpdir(), "runwield-fixture-")));
     try {
         const local = join(root, "local");
@@ -46,7 +49,81 @@ async function withRemoteFixture(test: (fixture: RemoteFixture) => Promise<void>
         const bin = join(root, "bin");
         const sshLog = join(root, "ssh-args");
         await Promise.all([fsMkdir(local), fsMkdir(remote), fsMkdir(bin)]);
-        if (process.platform === "win32") {
+        let executable = process.execPath;
+        if (connected) {
+            // The development artifact is discovered beside the running executable.
+            // Keep that real build boundary entirely inside this disposable tree.
+            executable = join(root, basename(process.execPath));
+            await fsCopyFile(process.execPath, executable);
+            await fsChmod(executable, 0o700);
+            const bytes = new TextEncoder().encode("remote fixture artifact\n");
+            const artifact = join(root, "wld-x86_64-unknown-linux-gnu");
+            await fsWriteFile(artifact, bytes);
+            await fsWriteFile(
+                `${artifact}.build.json`,
+                JSON.stringify({
+                    schema: 1,
+                    protocol: 1,
+                    buildId: "a".repeat(64),
+                    target: "x86_64-unknown-linux-gnu",
+                    version: "development",
+                    sha256: createHash("sha256").update(bytes).digest("hex"),
+                }),
+            );
+            await fsMkdir(join(local, ".wld"));
+            const source = join(root, "ssh-connected.mjs");
+            await fsWriteFile(
+                source,
+                `
+import { existsSync, writeFileSync } from "node:fs";
+import { createInterface } from "node:readline";
+const args = process.argv.slice(2);
+const readyFile = process.env.SSH_LOG + ".ready";
+if (args[0] === "-tt") {
+    if (!args.includes("ExitOnForwardFailure=yes") || !args.includes("remote-alias")) process.exit(42);
+    process.stdout.write("REMOTE_SUPERVISOR_READY:/tmp/wld-remote-fixture/control.sock\\n");
+    const deadline = Date.now() + 15000;
+    while (!existsSync(readyFile)) {
+        if (Date.now() > deadline) throw new Error("Private header never arrived");
+        await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    process.stdout.write("REMOTE_CONNECTED\\n");
+    const lines = createInterface({ input: process.stdin });
+    for await (const line of lines) {
+        if (line !== "terminal-input") throw new Error("Unexpected terminal input");
+        // Let the launcher start its next read, without delivering EOF to it.
+        await new Promise(resolve => setTimeout(resolve, 100));
+        process.stdout.write("REMOTE_EXIT_AFTER_INPUT\\n", () => process.exit(0));
+        break;
+    }
+} else {
+    if (args.length !== 4 || args[0] !== "-T" || args[1] !== "--" || args[2] !== "remote-alias") process.exit(42);
+    const lines = createInterface({ input: process.stdin });
+    for await (const line of lines) {
+        const request = JSON.parse(line);
+        if ("path" in request) {
+            console.log(JSON.stringify({ ok: true, cwd: "/remote/home", home: "/remote/home", os: "Linux", arch: "x86_64", gitRoot: null, gitDir: null, gitCommonDir: null, primaryRoot: null, isWorktree: false }));
+        } else if ("sha256" in request) {
+            console.log(JSON.stringify({ ok: true, reused: true, path: "/remote/home/.cache/runwield/runtime/" + request.buildId + "/" + request.target + "/" + request.sha256 + "/wld" }));
+        } else {
+            if (request.socket !== "/tmp/wld-remote-fixture/control.sock") throw new Error("Wrong private socket");
+            const header = request.header;
+            for (const route of ["handshake", "readiness"]) {
+                const response = await fetch("http://127.0.0.1:" + header.port + "/" + route, {
+                    method: "POST", headers: { Authorization: "Bearer " + header.credential },
+                    body: JSON.stringify({ buildId: header.buildId, protocol: header.protocol }),
+                });
+                if (!response.ok || (await response.json()).shutdown) throw new Error("Control handshake failed");
+            }
+            writeFileSync(readyFile, "authenticated");
+        }
+        process.exit(0);
+    }
+}
+`,
+            );
+            await writeRuntimeExecutableFixture(join(bin, "ssh"), source);
+        } else if (process.platform === "win32") {
             const source = join(root, "ssh.mjs");
             await fsWriteFile(
                 source,
@@ -140,37 +217,94 @@ plugin({ name: "fixture-build-boundary", setup(build) {
 `,
             );
         }
+        const cliArgs = (args: string[]) =>
+            process.versions.deno
+                ? runtimeSourceArgs(["run", "-A", "--quiet", "--config", config, cli, "remote", ...args])
+                : ["run", "--preload", preload, ...runtimeSourceArgs(["run", "-A", cli, "remote", ...args]).slice(1)];
+        const cliEnv = (proof?: string) => ({
+            ...process.env,
+            HOME: local,
+            WLD_TEST_SANDBOX_HOME: local,
+            MNEMOTECA_DB_PATH: join(local, "mnemoteca.db"),
+            PATH: `${bin}${delimiter}${process.env["PATH"] ?? ""}`,
+            SSH_LOG: sshLog,
+            REMOTE_HOME: remote,
+            REMOTE_PYTHONPATH: root,
+            ...(proof === undefined ? {} : { WLD_REMOTE_MODEL_PROOF: proof }),
+        });
         await test({
             local,
             remote,
             sshLog,
             run: async (args, proof) => {
-                const output = await captureForegroundProcess(process.execPath, {
-                    args: process.versions.deno
-                        ? runtimeSourceArgs(["run", "-A", "--quiet", "--config", config, cli, "remote", ...args])
-                        : [
-                              "run",
-                              "--preload",
-                              preload,
-                              ...runtimeSourceArgs(["run", "-A", cli, "remote", ...args]).slice(1),
-                          ],
+                const output = await captureForegroundProcess(executable, {
+                    args: cliArgs(args),
                     cwd: local,
-                    env: {
-                        HOME: local,
-                        WLD_TEST_SANDBOX_HOME: local,
-                        MNEMOTECA_DB_PATH: join(local, "mnemoteca.db"),
-                        PATH: `${bin}${delimiter}${process.env["PATH"] ?? ""}`,
-                        SSH_LOG: sshLog,
-                        REMOTE_HOME: remote,
-                        REMOTE_PYTHONPATH: root,
-                        ...(proof === undefined ? {} : { WLD_REMOTE_MODEL_PROOF: proof }),
-                    },
+                    env: cliEnv(proof),
                 });
                 return {
                     code: output.code,
                     stdout: decoder.decode(output.stdout),
                     stderr: decoder.decode(output.stderr),
                 };
+            },
+            runWithOpenStdin: async () => {
+                const child = spawn(executable, cliArgs(["remote-alias"]), {
+                    cwd: local,
+                    env: cliEnv(),
+                    stdio: ["pipe", "pipe", "pipe"],
+                });
+                let stdout = "";
+                let stderr = "";
+                let sent = false;
+                child.stdout.setEncoding("utf8");
+                child.stderr.setEncoding("utf8");
+                child.stdout.on("data", (chunk: string) => {
+                    stdout += chunk;
+                    if (!sent && stdout.includes("REMOTE_CONNECTED")) {
+                        sent = true;
+                        child.stdin.write("terminal-input\n");
+                    }
+                });
+                child.stderr.on("data", (chunk: string) => {
+                    stderr += chunk;
+                });
+                child.stdin.on("error", () => {});
+                let timer: ReturnType<typeof setTimeout> | undefined;
+                try {
+                    const result = await Promise.race([
+                        new Promise<CliResult>((resolve, reject) => {
+                            child.once("error", reject);
+                            child.once("close", (code) => resolve({ code: code ?? -1, stdout, stderr }));
+                        }),
+                        new Promise<never>((_, reject) => {
+                            timer = setTimeout(
+                                () =>
+                                    reject(
+                                        new Error(`Remote CLI failed to exit with stdin open: ${stderr}\n${stdout}`),
+                                    ),
+                                30000,
+                            );
+                        }),
+                    ]);
+                    assertEquals(result.code, 0, result.stderr + "\n" + result.stdout);
+                    assertEquals(sent, true, "the terminal input pump must run before SSH exits");
+                    assertEquals(child.stdin.writableEnded, false, "parent must not supply stdin EOF");
+                    return result;
+                } finally {
+                    clearTimeout(timer);
+                    if (child.exitCode === null && child.signalCode === null) {
+                        child.kill("SIGTERM");
+                        await new Promise<void>((resolve) => {
+                            const killTimer = setTimeout(() => child.kill("SIGKILL"), 6000);
+                            child.once("close", () => {
+                                clearTimeout(killTimer);
+                                resolve();
+                            });
+                        });
+                    }
+                    child.stdin.destroy();
+                }
             },
         });
     } finally {
@@ -217,6 +351,7 @@ test("source remote help works without a generated identity and connection expla
             "src/shared/linux-process-group.ts",
             "src/shared/captured-process.ts",
             "src/shared/socket-listener.ts",
+            "src/shared/stdin-stream.ts",
             "src/shared/remote/runtime.js",
             "src/shared/remote/target.ts",
             "src/shared/remote/control.ts",
@@ -322,3 +457,12 @@ async function exists(path: string): Promise<boolean> {
         () => false,
     );
 }
+
+test("remote CLI exits after authenticated SSH closes while terminal stdin remains open", async () => {
+    await withRemoteFixture(async ({ runWithOpenStdin, sshLog }) => {
+        const result = await runWithOpenStdin();
+        assertEquals(result.code, 0, result.stderr);
+        assertStringIncludes(result.stdout, "REMOTE_EXIT_AFTER_INPUT");
+        assertEquals(await fsReadFile(sshLog + ".ready", "utf8"), "authenticated");
+    }, true);
+});

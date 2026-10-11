@@ -1,3 +1,4 @@
+import { recoverWindowsRename } from "../native-file-replace-windows.ts";
 import fs from "node:fs/promises";
 import { link, open, opendir } from "node:fs/promises";
 import { mkdir as fsMkdir, readFile as fsReadFile, rm as fsRm, stat as fsStat } from "node:fs/promises";
@@ -35,10 +36,12 @@ export async function ensureWorkRecordsDir(cwd) {
 
 /** @param {string} title */
 export function slugifyWorkRecordTitle(title) {
-    return String(title || "work-record")
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "") || "work-record";
+    return (
+        String(title || "work-record")
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "") || "work-record"
+    );
 }
 
 /**
@@ -106,7 +109,7 @@ export async function listWorkRecords(cwd, options = {}) {
         }
     }
     const records = [];
-    for await (const entry of (await opendir(dir))) {
+    for await (const entry of await opendir(dir)) {
         if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
         records.push(await readWorkRecord(cwd, entry.name));
     }
@@ -273,7 +276,11 @@ export async function replaceWorkRecord(cwd, currentRecord, markdown) {
         await file.sync();
         await file.close();
         file = undefined;
-        await fs.rename(tempPath, currentPath);
+        try {
+            await fs.rename(tempPath, currentPath);
+        } catch (error) {
+            if (!(error instanceof Error && recoverWindowsRename(error, tempPath, currentPath))) throw error;
+        }
         await syncDirectory(expectedDir);
     } catch (error) {
         if (file) await file.close();

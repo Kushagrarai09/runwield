@@ -1,3 +1,4 @@
+import { recoverWindowsRename } from "./native-file-replace-windows.ts";
 import { rename as fsRename } from "node:fs/promises";
 import { mkdir as fsMkdir, readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promises";
 import { dirname, join, relative } from "@std/path";
@@ -30,7 +31,10 @@ export type MoveEpicArtifactResult = {
 };
 
 function splitPlanName(planName: string): string[] {
-    return String(planName || "").split("/").map((segment) => segment.trim()).filter(Boolean);
+    return String(planName || "")
+        .split("/")
+        .map((segment) => segment.trim())
+        .filter(Boolean);
 }
 
 function assertSafePlanName(planName: string, label: string): string[] {
@@ -64,9 +68,7 @@ export function isEpicArtifactPlanPath(path: string): boolean {
 
 export function assertNotReservedEpicArtifactPlanName(planName: string): void {
     if (!isEpicArtifactPlanName(planName)) return;
-    throw new Error(
-        `${planName} is reserved for an Epic Artifact. Choose a different child Plan name and call again.`,
-    );
+    throw new Error(`${planName} is reserved for an Epic Artifact. Choose a different child Plan name and call again.`);
 }
 
 export function getEpicArtifactPath(projectRoot: string, epicPlanName: string, fileName: string): string {
@@ -130,7 +132,11 @@ async function writeAtomic(path: string, text: string): Promise<void> {
     await fsMkdir(dirname(path), { recursive: true });
     const tmp = `${path}.${crypto.randomUUID()}.tmp`;
     await fsWriteFile(tmp, text);
-    await fsRename(tmp, path);
+    try {
+        await fsRename(tmp, path);
+    } catch (error) {
+        if (!(error instanceof Error && recoverWindowsRename(error, tmp, path))) throw error;
+    }
 }
 
 export async function appendEpicManualQaSection(
@@ -162,7 +168,8 @@ export async function appendEpicManualQaSection(
         throw new Error(`Manual QA artifact appears malformed: ${relativePath}`);
     }
 
-    const header = `# Manual QA for ${args.epicPlanName}\n\n` +
+    const header =
+        `# Manual QA for ${args.epicPlanName}\n\n` +
         "This checklist is advisory. It does not change RunWield verification status.\n";
     const section = [
         sectionStartMarker(args.childPlanName),
@@ -195,7 +202,7 @@ async function moveFileIfPresent(
 ): Promise<MoveEpicArtifactResult | null> {
     const text = await readTextIfExists(fromPath);
     if (text === null) return null;
-    if (await readTextIfExists(toPath) !== null) {
+    if ((await readTextIfExists(toPath)) !== null) {
         throw new Error(`Epic Artifact already exists: ${projectRelativePath(projectRoot, toPath)}`);
     }
     await fsMkdir(dirname(toPath), { recursive: true });

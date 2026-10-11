@@ -1,7 +1,7 @@
 import process from "node:process";
 import { getCwd } from "../../constants.js";
 import { type NativeProcess, spawnNativeProcess } from "../../shared/foreground-process.ts";
-import { readStreamInto } from "../../shared/socket-listener.ts";
+import { readableStdin } from "../../shared/stdin-stream.ts";
 import { readFile as fsReadFile, rm as fsRm } from "node:fs/promises";
 /* CLI-only remote connection. SSH supplies authentication, host verification and
  * terminal transport. No project or personal context is opened on the laptop. */
@@ -13,7 +13,8 @@ import { VERSION } from "../../shared/version.js";
 import { downloadReleaseRuntime } from "../../shared/remote/release-artifact.ts";
 import { parseRemoteModelProof, type RemoteModelProof } from "../../shared/remote/model-proof-config.ts";
 
-export const REMOTE_USAGE = "Usage: wld remote <ssh-host>[:<remote-directory>]\n" +
+export const REMOTE_USAGE =
+    "Usage: wld remote <ssh-host>[:<remote-directory>]\n" +
     "Open an existing remote Linux directory (defaults to the remote home). Laptop ~/.wld is mounted at remote ~/.wld.\n" +
     "Released launchers use their exact VERSION-tagged GNU/Linux asset; development builds require a matching local artifact.\n" +
     "This connection cannot accept a user turn or open a saved Session.";
@@ -46,7 +47,8 @@ export function parseRemoteDestination(value: string): { host: string; path: str
 /** Never join or resolve a remote locator through laptop path functions. */
 function remoteExecutable(buildId: string, target: string, checksum: string): string {
     if (
-        !/^[a-f0-9]{64}$/.test(buildId) || !/^[a-f0-9]{64}$/.test(checksum) ||
+        !/^[a-f0-9]{64}$/.test(buildId) ||
+        !/^[a-f0-9]{64}$/.test(checksum) ||
         !["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"].includes(target)
     ) {
         throw new Error("Invalid remote runtime identity");
@@ -56,7 +58,7 @@ function remoteExecutable(buildId: string, target: string, checksum: string): st
 
 async function writeTerminal(bytes: Uint8Array): Promise<void> {
     await new Promise<void>((resolve, reject) => {
-        process.stdout.write(bytes, (error) => error ? reject(error) : resolve());
+        process.stdout.write(bytes, (error) => (error ? reject(error) : resolve()));
     });
 }
 
@@ -74,7 +76,9 @@ async function stopOwnedSsh(child: NativeProcess, settled: () => boolean): Promi
         } catch {
             try {
                 child.kill("SIGKILL");
-            } catch { /* Exited. */ }
+            } catch {
+                /* Exited. */
+            }
         }
     }
     await child.status;
@@ -126,16 +130,21 @@ async function waitForReady(
     throw new Error("Remote supervisor did not reach readiness");
 }
 
-async function sendPrivateHeader(host: string, socket: string, signal: AbortSignal, header: {
-    credential: string;
-    port: number;
-    buildId: string;
-    protocol: number;
-    view: { host: string; cwd: string; status: string; trust: string; readiness: string };
-    mount: MountHeader;
-    remoteHome: string;
-    modelProof?: RemoteModelProof;
-}): Promise<void> {
+async function sendPrivateHeader(
+    host: string,
+    socket: string,
+    signal: AbortSignal,
+    header: {
+        credential: string;
+        port: number;
+        buildId: string;
+        protocol: number;
+        view: { host: string; cwd: string; status: string; trust: string; readiness: string };
+        mount: MountHeader;
+        remoteHome: string;
+        modelProof?: RemoteModelProof;
+    },
+): Promise<void> {
     const child = spawnNativeProcess("ssh", {
         cwd: getCwd(),
         args: ["-T", "--", host, DELIVER_HEADER],
@@ -160,7 +169,9 @@ async function sendPrivateHeader(host: string, socket: string, signal: AbortSign
     } catch (error) {
         try {
             child.kill();
-        } catch { /* Already exited. */ }
+        } catch {
+            /* Already exited. */
+        }
         await output.catch(() => undefined);
         throw error;
     }
@@ -180,7 +191,9 @@ export async function runRemoteCommand(args: string[]): Promise<void> {
     try {
         identity = await import("../../shared/build-identity.js");
     } catch (error) {
-        const missingIdentity = error instanceof Error && error.message.includes("build-identity.js") &&
+        const missingIdentity =
+            error instanceof Error &&
+            error.message.includes("build-identity.js") &&
             (error instanceof TypeError ||
                 ("code" in error && ["ERR_MODULE_NOT_FOUND", "MODULE_NOT_FOUND"].includes(String(error.code))));
         if (!missingIdentity) throw error;
@@ -203,11 +216,16 @@ export async function runRemoteCommand(args: string[]): Promise<void> {
         const suffix = triple === "x86_64-unknown-linux-gnu" ? "linux-x64" : "linux-arm64";
         // Released launchers never substitute a development or latest asset.
         const release = VERSION.startsWith("v")
-            ? await downloadReleaseRuntime(VERSION, suffix, {
-                buildId: BUILD_ID,
-                protocol: REMOTE_PROTOCOL_VERSION,
-                version: VERSION,
-            }, setupAbort.signal)
+            ? await downloadReleaseRuntime(
+                  VERSION,
+                  suffix,
+                  {
+                      buildId: BUILD_ID,
+                      protocol: REMOTE_PROTOCOL_VERSION,
+                      version: VERSION,
+                  },
+                  setupAbort.signal,
+              )
             : null;
         const artifact = release?.artifact ?? join(dirname(process.execPath), `wld-${triple}`);
         try {
@@ -237,7 +255,7 @@ export async function runRemoteCommand(args: string[]): Promise<void> {
     let child: NativeProcess | undefined;
     let exited = false;
     let raw = false;
-    let inputStarted = false;
+    let inputReader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     let interrupted = false;
     const connectionAbort = new AbortController();
     const onInterrupt = () => {
@@ -246,14 +264,18 @@ export async function runRemoteCommand(args: string[]): Promise<void> {
         service.requestShutdown();
         try {
             child?.kill("SIGTERM");
-        } catch { /* Already exited. */ }
+        } catch {
+            /* Already exited. */
+        }
     };
     process.on("SIGINT", onInterrupt);
     process.on("SIGTERM", onInterrupt);
     try {
-        const command = `exec ${
-            remoteExecutable(BUILD_ID, triple, metadata.sha256)
-        } --remote-supervisor ${service.port}`;
+        const command = `exec ${remoteExecutable(
+            BUILD_ID,
+            triple,
+            metadata.sha256,
+        )} --remote-supervisor ${service.port}`;
         child = spawnNativeProcess("ssh", {
             cwd: getCwd(),
             args: [
@@ -317,7 +339,9 @@ export async function runRemoteCommand(args: string[]): Promise<void> {
                 outputDetail += new TextDecoder().decode(value);
             }
             output.releaseLock();
-            const detail = `${outputDetail}\n${await stderr}`.trim().replaceAll(service.credential, "[redacted]")
+            const detail = `${outputDetail}\n${await stderr}`
+                .trim()
+                .replaceAll(service.credential, "[redacted]")
                 .replaceAll(sftp.header.sftpSecret, "[redacted]");
             throw new Error(`Remote connection did not become ready: ${detail || "remote supervisor exited"}`);
         }
@@ -326,16 +350,18 @@ export async function runRemoteCommand(args: string[]): Promise<void> {
             process.stdin.setRawMode(true);
             raw = true;
         }
-        inputStarted = true;
+        const terminalInput = readableStdin().getReader();
+        inputReader = terminalInput;
         const input = (async () => {
             try {
                 while (!exited && !interrupted) {
-                    const bytes = new Uint8Array(4096);
-                    const count = await readStreamInto(process.stdin, bytes);
-                    if (count === null) break;
-                    await writer.write(bytes.subarray(0, count));
+                    const { done, value } = await terminalInput.read();
+                    if (done) break;
+                    await writer.write(value);
                 }
-            } catch { /* Terminal or SSH closed. */ }
+            } catch {
+                /* Terminal or SSH closed. */
+            }
             if (!exited) {
                 interrupted = true;
                 service.requestShutdown();
@@ -372,7 +398,7 @@ export async function runRemoteCommand(args: string[]): Promise<void> {
         service.requestShutdown();
         if (child) {
             await stopOwnedSsh(child, () => exited).catch(() =>
-                console.error("Remote SSH exit could not be confirmed")
+                console.error("Remote SSH exit could not be confirmed"),
             );
         }
         await service.close();
@@ -380,6 +406,9 @@ export async function runRemoteCommand(args: string[]): Promise<void> {
         if (raw) process.stdin.setRawMode(false);
         // A pending terminal read otherwise keeps the launcher alive after
         // SSH and the remote TUI have both exited.
-        if (inputStarted) process.stdin.destroy();
+        if (inputReader) {
+            await inputReader.cancel().catch(() => {});
+            inputReader.releaseLock();
+        }
     }
 }

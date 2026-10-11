@@ -335,7 +335,7 @@ test("review guide and widget APIs require token and serve explainer state", asy
     const { job } = await launch.json();
 
     let guide;
-    for (let attempt = 0; attempt < 100; attempt += 1) {
+    for (let attempt = 0; attempt < 500; attempt += 1) {
         guide = await app(
             new Request(`http://localhost/api/guide/${job.id}`, {
                 headers: { "x-runwield-review-token": token },
@@ -526,7 +526,7 @@ test("default review guide usage frames update a running job and remain after co
             const { job } = await launch.json();
 
             let runningJob = null;
-            for (let attempt = 0; attempt < 100; attempt += 1) {
+            for (let attempt = 0; attempt < 500; attempt += 1) {
                 const jobsResponse = await reviewAgentApi(
                     new Request("http://localhost/api/agents/jobs"),
                     new URL("http://localhost/api/agents/jobs"),

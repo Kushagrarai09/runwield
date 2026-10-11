@@ -1,3 +1,4 @@
+import { realpath as fsRealpath } from "node:fs/promises";
 import { delimiter } from "node:path";
 import { writeRuntimeExecutableFixture } from "../testing/runtime-executable-fixture.ts";
 import {
@@ -707,7 +708,10 @@ test("Codex adapter uses official RPC, configured model/effort and exact referen
         assertEquals(thread?.params?.sandbox, "read-only");
         const turn = calls.find((call) => call.method === "turn/start");
         assertEquals(turn?.params?.effort, "low");
-        assertStringIncludes(turn?.params?.input?.[0].text || "", join(f.cwd, "source.png"));
+        assertStringIncludes(
+            turn?.params?.input?.[0].text || "",
+            `referenced_image_paths=${JSON.stringify([await fsRealpath(join(f.cwd, "source.png"))])}`,
+        );
         assertEquals(f.requests.length, 0);
     }));
 

@@ -1,3 +1,4 @@
+import { recoverWindowsRename } from "../native-file-replace-windows.ts";
 import { renameSync as fsRenameSync } from "node:fs";
 import { chmodSync as fsChmodSync } from "node:fs";
 import { writeFileSync as fsWriteFileSync } from "node:fs";
@@ -113,16 +114,17 @@ export function acknowledgeActivationProtocol(
     const databaseEpoch = getOwnerCoordinationDatabaseEpoch(database.handle);
     if (!databaseEpoch) throw new Error("Owner database is missing an activation protocol epoch");
     const markerPath = getActivationProtocolMarkerPath(database.path);
-    const body = JSON.stringify(
-        {
-            markerSchema: 1,
-            protocolVersion: SESSION_ACTIVATION_PROTOCOL_VERSION,
-            databaseEpoch,
-            acknowledgedAt: options.now ? options.now() : new Date().toISOString(),
-        },
-        null,
-        2,
-    ) + "\n";
+    const body =
+        JSON.stringify(
+            {
+                markerSchema: 1,
+                protocolVersion: SESSION_ACTIVATION_PROTOCOL_VERSION,
+                databaseEpoch,
+                acknowledgedAt: options.now ? options.now() : new Date().toISOString(),
+            },
+            null,
+            2,
+        ) + "\n";
     fsMkdirSync(dirname(markerPath), { recursive: true, mode: 0o700 });
     const temporaryPath = `${markerPath}.${crypto.randomUUID()}.tmp`;
     fsWriteFileSync(temporaryPath, body, { mode: 0o600 });
@@ -131,7 +133,11 @@ export function acknowledgeActivationProtocol(
     } catch {
         // Best effort on filesystems without chmod.
     }
-    fsRenameSync(temporaryPath, markerPath);
+    try {
+        fsRenameSync(temporaryPath, markerPath);
+    } catch (error) {
+        if (!(error instanceof Error && recoverWindowsRename(error, temporaryPath, markerPath))) throw error;
+    }
     return getActivationProtocolStatus(database);
 }
 

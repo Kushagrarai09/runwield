@@ -1,4 +1,5 @@
 /** Preserve open readers when replacing a file on Bun/Windows. */
+import { platform, versions } from "node:process";
 import { Buffer } from "node:buffer";
 import { createRequire } from "node:module";
 import { toNamespacedPath } from "node:path";
@@ -66,4 +67,15 @@ export function tryReplaceWindowsFileSync(source: string, destination: string): 
     } finally {
         api.CloseHandle(handle);
     }
+}
+
+/** Recover only Bun/Windows access-denied rename failures without changing other errors. */
+export function recoverWindowsRename(error: Error, source: string, destination: string): boolean {
+    return Boolean(
+        platform === "win32" &&
+        versions.bun &&
+        "code" in error &&
+        error.code === "EPERM" &&
+        tryReplaceWindowsFileSync(source, destination),
+    );
 }

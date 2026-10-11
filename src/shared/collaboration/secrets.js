@@ -1,3 +1,4 @@
+import { recoverWindowsRename } from "../native-file-replace-windows.ts";
 import { rename as fsRename } from "node:fs/promises";
 import {
     chmod as fsChmod,
@@ -114,15 +115,25 @@ export async function writeSecretStore(location, document) {
         await fsWriteFile(tempPath, content, { mode: 0o600 });
         try {
             await fsChmod(tempPath, 0o600);
-        } catch { /* best effort */ }
-        await fsRename(tempPath, path);
+        } catch {
+            /* best effort */
+        }
+        try {
+            await fsRename(tempPath, path);
+        } catch (error) {
+            if (!(error instanceof Error && recoverWindowsRename(error, tempPath, path))) throw error;
+        }
         try {
             await fsChmod(path, 0o600);
-        } catch { /* best effort */ }
+        } catch {
+            /* best effort */
+        }
     } catch (error) {
         try {
             await fsRm(tempPath);
-        } catch { /* ignore cleanup */ }
+        } catch {
+            /* ignore cleanup */
+        }
         throw new Error(`Unable to write collaboration secret store: ${redactSecrets(error)}`);
     }
 }
@@ -174,14 +185,17 @@ function isCompatibleSecretRecord(record, planId, spaceId) {
 function assertCompatiblePullSecretMatches(matches, expected) {
     const normalizedExpected = expected ? normalizeLocalSecretRecord(expected) : undefined;
     const records = normalizedExpected
-        ? [...matches.map((match) => ({ label: `${match.path}:${match.key}`, record: match.record })), {
-            label: "incoming maintainer URL",
-            record: normalizedExpected,
-        }]
+        ? [
+              ...matches.map((match) => ({ label: `${match.path}:${match.key}`, record: match.record })),
+              {
+                  label: "incoming maintainer URL",
+                  record: normalizedExpected,
+              },
+          ]
         : matches.map((match) => ({ label: `${match.path}:${match.key}`, record: match.record }));
     for (const field of ["contentKey", "maintainerCapability"]) {
-        const baseline = records.find((entry) =>
-            /** @type {Record<string, string | undefined>} */ (entry.record)[field]
+        const baseline = records.find(
+            (entry) => /** @type {Record<string, string | undefined>} */ (entry.record)[field],
         );
         if (!baseline) continue;
         const expectedValue = /** @type {Record<string, string | undefined>} */ (baseline.record)[field];
@@ -253,7 +267,7 @@ export async function resolvePullSecretRecord(paths, planId, spaceId) {
  */
 export async function resolveCompatibleSecretRecord(paths, planId, spaceId) {
     const matches = (await collectPullSecretMatches(paths, planId, spaceId)).filter((match) =>
-        isCompatibleSecretRecord(match.record, planId, spaceId)
+        isCompatibleSecretRecord(match.record, planId, spaceId),
     );
     assertCompatiblePullSecretMatches(matches);
     return matches[0] || null;

@@ -81,10 +81,11 @@ test("agent handler completes a real root turn and requests user attention", asy
 
         assertEquals(result, { kind: "complete" });
         assertEquals(
-            events.some((event) =>
-                event.type === RuntimeEventTypes.ATTENTION_REQUESTED &&
-                event.reason === "agentStopped" &&
-                event.agentName === "guide"
+            events.some(
+                (event) =>
+                    event.type === RuntimeEventTypes.ATTENTION_REQUESTED &&
+                    event.reason === "agentStopped" &&
+                    event.agentName === "guide",
             ),
             true,
         );
@@ -230,15 +231,19 @@ test("agent handler routes a real triage tool outcome through Operator completio
     await withRuntimeCommandFixture("agent-handler-operation-", async ({ projectRoot, setModelMessages }) => {
         const events: CapturedRuntimeEvent[] = [];
         setModelMessages([
-            fauxAssistantMessage(fauxToolCall("triage_report", {
-                routingIntent: "OPERATION",
-                complexity: "LOW",
-                summary: "Inspect the fixture state without changing code.",
-                sessionName: "Inspect fixture state",
-            })),
-            fauxAssistantMessage(fauxToolCall("task_completed", {
-                message: "- Inspected the isolated fixture state.",
-            })),
+            fauxAssistantMessage(
+                fauxToolCall("triage_report", {
+                    routingIntent: "OPERATION",
+                    complexity: "LOW",
+                    summary: "Inspect the fixture state without changing code.",
+                    sessionName: "Inspect fixture state",
+                }),
+            ),
+            fauxAssistantMessage(
+                fauxToolCall("task_completed", {
+                    message: "- Inspected the isolated fixture state.",
+                }),
+            ),
         ]);
         const fixture = await activateHandler(projectRoot, "router", events);
 
@@ -251,9 +256,9 @@ test("agent handler routes a real triage tool outcome through Operator completio
             true,
         );
         assertEquals(
-            events.some((event) =>
-                event.type === RuntimeEventTypes.ASSISTANT_TEXT_DELTA &&
-                event.workflowMessage === "task_completed"
+            events.some(
+                (event) =>
+                    event.type === RuntimeEventTypes.ASSISTANT_TEXT_DELTA && event.workflowMessage === "task_completed",
             ),
             true,
         );
@@ -392,9 +397,9 @@ test("sequential QUICK_FIX completions each run Mechanical Validation", async ()
         setModelResponse("Continuing QUICK_FIX work.");
         await setCustomSetting(
             "verification_command",
-            `'${process.execPath.replaceAll("'", "'\"'\"'")}' ${
-                process.versions.deno ? "eval" : "--eval"
-            } 'process.exit(0)'`,
+            process.platform === "win32"
+                ? `"${process.execPath}" ${process.versions.deno ? "eval" : "--eval"} "process.exit(0)"`
+                : `'${process.execPath.replaceAll("'", "'\"'\"'")}' ${process.versions.deno ? "eval" : "--eval"} 'process.exit(0)'`,
             "project",
             projectRoot,
         );
@@ -437,8 +442,8 @@ test("sequential QUICK_FIX completions each run Mechanical Validation", async ()
         );
         await fixture.handler("second completion", [], fixture.sessionManager);
 
-        const validationRuns = events.filter((event) =>
-            event.type === RuntimeEventTypes.TOOL_START && event.toolName === "bash"
+        const validationRuns = events.filter(
+            (event) => event.type === RuntimeEventTypes.TOOL_START && event.toolName === "bash",
         );
         assertEquals(validationRuns.length, 2);
         assertEquals(fixture.hostedSession.getActiveExecutionWorkflow()?.triageMeta?.classification, "QUICK_FIX");

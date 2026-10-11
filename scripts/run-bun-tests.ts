@@ -56,6 +56,12 @@ async function isolatedEnvironment(home: string): Promise<Record<string, string>
             childEnv.TMPDIR,
         ].map((path) => mkdir(path, { recursive: true })),
     );
+    if (platform === "win32") {
+        // Git for Windows requires this opt-in for nested disposable worktrees.
+        // Pin it to this private file so Golden HOME changes cannot read host config.
+        childEnv.GIT_CONFIG_GLOBAL = join(home, ".gitconfig");
+        await writeFile(childEnv.GIT_CONFIG_GLOBAL, "[core]\n\tlongpaths = true\n");
+    }
     return childEnv;
 }
 

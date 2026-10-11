@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { getCwd } from "../../constants.js";
 import process from "node:process";
 import { readFile as fsReadFile, rm as fsRm, stat as fsStat, writeFile as fsWriteFile } from "node:fs/promises";
@@ -79,7 +80,7 @@ for (const autoMerge of [false, true]) {
                 }
                 // The original primary Plan is untracked, and primary user work is dirty.
                 // Edit the primary body after execution starts. Publication must not replace it.
-                const primaryPath = `${root}/docs/plans/Full Delivery Name.md`;
+                const primaryPath = join(root, "docs", "plans", "Full Delivery Name.md");
                 await fsWriteFile(primaryPath, (await fsReadFile(primaryPath, "utf8")) + "\nNewer user notes.\n");
                 const primaryPlan = await fsReadFile(primaryPath, "utf8");
                 await fsWriteFile(`${root}/unrelated.txt`, "user changes must survive\n");

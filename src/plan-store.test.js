@@ -3,6 +3,7 @@ import { hostname } from "node:os";
 import { testWithFsPermissions } from "./testing/file-test.ts";
 import { realpathSync as fsRealpathSync } from "node:fs";
 import {
+    open as fsOpen,
     lstat as fsLstat,
     mkdir as fsMkdir,
     readFile as fsReadFile,
@@ -3260,6 +3261,33 @@ test("legacy done-enough Epic remains deliberately closed without invented verif
         assert(inspected.kind === "loaded");
         assertEquals(inspected.attrs.status, "closed_without_verification");
         assertEquals((await listPlans(root))[0].attrs.status, "closed_without_verification");
+    } finally {
+        await fsRm(root, { recursive: true });
+    }
+});
+
+test("Plan replacement preserves open readers and publishes the complete new Plan", async () => {
+    const root = await makeTempDirectory({ prefix: "plan-open-reader-" });
+    try {
+        await savePlan(root, "open-reader", "# Original body\n", { status: "draft", classification: "PLANNED_CHANGE" });
+        const initial = await loadPlan(root, "open-reader");
+        assert(initial);
+        const reader = await fsOpen(initial.path, "r");
+        try {
+            await updatePlanFrontMatter(
+                root,
+                "open-reader",
+                { status: "feedback" },
+                {},
+                { expectedRevision: initial.revision },
+            );
+            assertEquals(await reader.readFile("utf8"), initial.markdown);
+            const replaced = await loadPlan(root, "open-reader");
+            assertEquals(replaced?.attrs.status, "feedback");
+            assertEquals(replaced?.body, initial.body);
+        } finally {
+            await reader.close();
+        }
     } finally {
         await fsRm(root, { recursive: true });
     }

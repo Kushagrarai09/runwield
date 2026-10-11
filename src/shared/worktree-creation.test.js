@@ -454,3 +454,26 @@ test("createTestWorktreeAttempt records supplied target branch independent of cu
         await fsRm(worktreeRoot, { recursive: true }).catch(() => {});
     }
 });
+
+test("disposable Git configuration supports deeply nested execution worktrees", async () => {
+    const projectRoot = await makeRepo();
+    const parent = await fsMkdtemp(join(tmpdir(), "runwield-long-worktree-"));
+    let attempt;
+    try {
+        if (process.platform === "win32") {
+            assertEquals((await git(projectRoot, ["config", "--get", "core.longpaths"])).trim(), "true");
+        }
+        const worktreeRoot = join(parent, "nested-" + "a".repeat(100), "nested-" + "b".repeat(100));
+        attempt = await createTestWorktreeAttempt({ projectRoot, planName: "deep-plan", worktreeRoot });
+        assertEquals(attempt.path.length > 260, true);
+        assertEquals(
+            await fsReadFile(join(attempt.path, "README.md"), "utf8"),
+            await fsReadFile(join(projectRoot, "README.md"), "utf8"),
+        );
+        assertEquals((await git(attempt.path, ["status", "--porcelain"])).trim(), "");
+    } finally {
+        if (attempt) await removeWorktreeGitArtifacts({ projectRoot, path: attempt.path, force: true });
+        await fsRm(projectRoot, { recursive: true });
+        await fsRm(parent, { recursive: true });
+    }
+});

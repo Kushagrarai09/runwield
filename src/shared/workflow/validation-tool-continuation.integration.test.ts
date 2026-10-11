@@ -247,7 +247,10 @@ test("verified Epic-child publication leaves the removed worktree before continu
                 () =>
                     fauxAssistantMessage(
                         fauxToolCall("bash", {
-                            command: `${process.platform === "win32" ? "pwd -W" : "pwd"} && git branch --show-current && cat published-marker.txt`,
+                            command:
+                                process.platform === "win32"
+                                    ? "cd && git branch --show-current && type published-marker.txt"
+                                    : "pwd && git branch --show-current && cat published-marker.txt",
                         }),
                     ),
                 () => fauxAssistantMessage(fauxText("Tool checked.")),
@@ -260,7 +263,7 @@ test("verified Epic-child publication leaves the removed worktree before continu
             const shellOutput =
                 events.find((event) => event.type === "tool_end" && event.output?.includes("from worktree"))?.output ||
                 "";
-            assertStringIncludes(shellOutput, canonicalProjectRoot.replaceAll("\\", "/"));
+            assertStringIncludes(shellOutput.replaceAll("\\", "/"), canonicalProjectRoot.replaceAll("\\", "/"));
             assertStringIncludes(shellOutput, "main");
             assertStringIncludes(shellOutput, "from worktree");
             const continuation = result.epicContinuation;

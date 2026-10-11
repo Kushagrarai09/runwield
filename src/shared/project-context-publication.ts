@@ -1,3 +1,4 @@
+import { recoverWindowsRename } from "./native-file-replace-windows.ts";
 import { rename as fsRename } from "node:fs/promises";
 import { captureForegroundProcess } from "./captured-process.ts";
 import process from "node:process";
@@ -91,10 +92,11 @@ export async function prepareProjectContextPublication(
         const indexed = index ? await git(root, ["cat-file", "blob", index.oid]) : null;
         if (content === headContent && indexed === headContent) continue;
         const incoming = await readProjectContextRevision(root, candidate, path);
-        const owned = path === ".gitignore"
-            ? isRunWieldOwnedGitignoreChange(headContent ?? "", content)
-            : await isOwnedProjectContext(root, path) ||
-                await isUnchangedTransferredSource(root, executionRoot, path);
+        const owned =
+            path === ".gitignore"
+                ? isRunWieldOwnedGitignoreChange(headContent ?? "", content)
+                : (await isOwnedProjectContext(root, path)) ||
+                  (await isUnchangedTransferredSource(root, executionRoot, path));
         if (!owned) {
             // Git may overwrite ignored untracked files without reporting a conflict.
             // Protect these known paths explicitly before any merge preparation.
@@ -115,11 +117,15 @@ export async function prepareProjectContextPublication(
     await fsMkdir(dirname(path), { recursive: true });
     const temporary = `${path}.${crypto.randomUUID()}.tmp`;
     await fsWriteFile(temporary, JSON.stringify(journal) + "\n", { mode: 0o600 });
-    await fsRename(temporary, path);
+    try {
+        await fsRename(temporary, path);
+    } catch (error) {
+        if (!(error instanceof Error && recoverWindowsRename(error, temporary, path))) throw error;
+    }
     for (const file of files) {
         // Recheck before changing anything, so concurrent edits stay untouched.
         if (
-            await readProjectContextFile(root, file.path) !== file.content ||
+            (await readProjectContextFile(root, file.path)) !== file.content ||
             JSON.stringify(await indexEntry(root, file.path)) !== JSON.stringify(file.index)
         ) {
             throw new Error(`Project file changed while preparing publication: ${file.path}`);

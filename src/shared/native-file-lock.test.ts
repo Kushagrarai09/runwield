@@ -1,7 +1,18 @@
 import { equal, match, ok, throws } from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+    existsSync,
+    mkdtempSync,
+    readFileSync,
+    rmSync,
+    statSync,
+    unlinkSync,
+    utimesSync,
+    writeFileSync,
+} from "node:fs";
+import { open } from "node:fs/promises";
+import { readLockFileSnapshot, removeLockFileIfSnapshotMatches } from "./lock-file-snapshot.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execPath, platform, versions } from "node:process";
@@ -99,9 +110,9 @@ test("missing and invalid lock paths fail instead of reporting contention", () =
 for (const termination of ["close", "crash"]) {
     test(`native lock is released after child ${termination}`, async () => {
         const f = fixture();
-        const source = `import { openNativeFileLock } from ${
-            JSON.stringify(new URL("./native-file-lock.ts", import.meta.url).href)
-        };
+        const source = `import { openNativeFileLock } from ${JSON.stringify(
+            new URL("./native-file-lock.ts", import.meta.url).href,
+        )};
 const lock = openNativeFileLock(${JSON.stringify(f.path)});
 if (!lock.tryLockSync(true)) throw new Error("Failed to own lock");
 console.log("held");
@@ -168,6 +179,54 @@ test("exclusive lock creation and descriptor writes preserve complete metadata",
     throws(() => owner.readSnapshotSync());
 });
 
+test("closed native and Node lock writers retire matching snapshots across timestamp boundaries", async () => {
+    const f = fixture();
+    try {
+        for (const writer of ["native", "node"]) {
+            for (let iteration = 0; iteration < 64; iteration++) {
+                const text = JSON.stringify({ token: `${writer}-${iteration}`, pid: process.pid });
+                if (writer === "native") {
+                    const owner = openNativeFileLock(f.path, "exclusive");
+                    try {
+                        owner.lockSync(true);
+                        owner.replaceTextSync(text);
+                    } finally {
+                        owner.close();
+                    }
+                } else {
+                    const owner = await open(f.path, "wx");
+                    try {
+                        await owner.writeFile(text);
+                        await owner.sync();
+                    } finally {
+                        await owner.close();
+                    }
+                }
+                if (iteration >= 32) {
+                    const seconds = 1_700_000_000 + (iteration - 32) / 10_000;
+                    utimesSync(f.path, seconds, seconds);
+                }
+                const snapshot = await readLockFileSnapshot(f.path);
+                ok(snapshot);
+                const reader = openNativeFileLock(f.path, false);
+                const nativeSnapshot = reader.readSnapshotSync();
+                reader.close();
+                const stat = statSync(f.path);
+                const mtimeNs = statSync(f.path, { bigint: true }).mtimeNs.toString();
+                const removed = await removeLockFileIfSnapshotMatches(f.path, snapshot);
+                equal(
+                    removed,
+                    true,
+                    JSON.stringify({ writer, iteration, snapshot, nativeSnapshot, mtimeMs: stat.mtimeMs, mtimeNs }),
+                );
+                equal(existsSync(f.path), false);
+            }
+        }
+    } finally {
+        f.close();
+    }
+});
+
 test("async native lock waits without blocking the owner from releasing", async () => {
     const f = fixture();
     const owner = openNativeFileLock(f.path);
@@ -175,7 +234,7 @@ test("async native lock waits without blocking the owner from releasing", async 
     let acquired = false;
     try {
         owner.lockSync(true);
-        const waiting = waiter.lock(true).then(() => acquired = true);
+        const waiting = waiter.lock(true).then(() => (acquired = true));
         await new Promise((resolve) => setTimeout(resolve, 30));
         equal(acquired, false);
         owner.unlockSync();

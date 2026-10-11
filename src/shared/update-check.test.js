@@ -1,4 +1,4 @@
-import { mkdtemp as fsMkdtemp, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
+import { readFile as fsReadFile, mkdtemp as fsMkdtemp, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
 import { test } from "node:test";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -106,14 +106,22 @@ test("refresh fetches GitHub latest and ignores cache write failures", async () 
         calls.push(String(url));
         return Promise.resolve(new Response(JSON.stringify({ tag_name: "v3.0.0" }), { status: 200 }));
     };
-    const result = await refreshUpdateCheckCache(
-        { currentVersion: "v2.0.0", cachePath: "/dev/null/update-check.json" },
-        updatePorts(/** @type {import("./fetch-request.ts").FetchRequest} */ (fetchImpl)),
-    );
-    assertEquals(calls, [LATEST_RELEASE_API_URL]);
-    assertEquals(result.available, true);
-    assertEquals(result.latestVersion, "v3.0.0");
-    assertEquals(result.checkedAt, 10);
+    const root = await fsMkdtemp(join(tmpdir(), "runwield-cache-write-failure-"));
+    try {
+        const regularFile = join(root, "not-a-directory");
+        await fsWriteFile(regularFile, "preserved");
+        const result = await refreshUpdateCheckCache(
+            { currentVersion: "v2.0.0", cachePath: join(regularFile, "update-check.json") },
+            updatePorts(/** @type {import("./fetch-request.ts").FetchRequest} */ (fetchImpl)),
+        );
+        assertEquals(calls, [LATEST_RELEASE_API_URL]);
+        assertEquals(result.available, true);
+        assertEquals(result.latestVersion, "v3.0.0");
+        assertEquals(result.checkedAt, 10);
+        assertEquals(await fsReadFile(regularFile, "utf8"), "preserved");
+    } finally {
+        await fsRm(root, { recursive: true });
+    }
 });
 
 test("latest API rejects malformed release data", async () => {

@@ -1,3 +1,4 @@
+import { isMissingExecutableError } from "./foreground-process.ts";
 import { captureForegroundProcess } from "./captured-process.ts";
 import {
     lstat as fsLstat,
@@ -69,7 +70,7 @@ async function runGitResult(cwd, args) {
         const decoder = new TextDecoder();
         return { code, stdout: decoder.decode(stdout), stderr: decoder.decode(stderr) };
     } catch (error) {
-        if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+        if (error instanceof Error && isMissingExecutableError(error)) {
             return { code: 127, stdout: "", stderr: "The git executable was not found." };
         }
         throw error;

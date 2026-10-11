@@ -1,3 +1,4 @@
+import { isMissingExecutableError } from "../foreground-process.ts";
 import { open } from "node:fs/promises";
 import { captureForegroundProcess } from "../captured-process.ts";
 import { readFile as fsReadFile, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
@@ -45,7 +46,7 @@ async function runGit(cwd: string, args: string[], env: Record<string, string> =
             env,
         });
     } catch (error) {
-        if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+        if (error instanceof Error && isMissingExecutableError(error)) {
             throw new GitRepositoryRequiredError(
                 `Git operation requires a Git repository: git ${args.join(" ")}. The git executable was not found.`,
                 { cwd, operation: `git ${args.join(" ")}`, state: "git_missing" },
@@ -90,9 +91,7 @@ export async function listCommitsTouchingPathsSince(
     since: string | undefined,
     paths: string[],
 ): Promise<GitCommitSummary[]> {
-    const pathspecs = (Array.isArray(paths) ? paths : [])
-        .map((path) => String(path || "").trim())
-        .filter(Boolean);
+    const pathspecs = (Array.isArray(paths) ? paths : []).map((path) => String(path || "").trim()).filter(Boolean);
     if (!since || pathspecs.length === 0) return [];
     await assertGitRepository(cwd, "Checking affected path commit history");
 
@@ -106,10 +105,14 @@ export async function listCommitsTouchingPathsSince(
         ...pathspecs,
     ]);
 
-    return output.trim().split("\n").filter(Boolean).map((line) => {
-        const [hash = "", date = "", ...subjectParts] = line.split("\x1f");
-        return { hash, date, subject: subjectParts.join("\x1f") };
-    });
+    return output
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => {
+            const [hash = "", date = "", ...subjectParts] = line.split("\x1f");
+            return { hash, date, subject: subjectParts.join("\x1f") };
+        });
 }
 
 /**

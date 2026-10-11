@@ -46,6 +46,12 @@ export function captureScriptProcess(
             signal: options.signal,
         });
         let failure: Error | undefined;
+        let killTimer: ReturnType<typeof setTimeout> | undefined;
+        const forceAbortedExit = () => {
+            killTimer ??= setTimeout(() => child.kill("SIGKILL"), 1000);
+        };
+        options.signal?.addEventListener("abort", forceAbortedExit, { once: true });
+        if (options.signal?.aborted) forceAbortedExit();
         if (options.input !== undefined) {
             child.stdin?.on("error", (error: NodeJS.ErrnoException) => {
                 if (error.code !== "EPIPE") {
@@ -63,6 +69,8 @@ export function captureScriptProcess(
             failure = error;
         });
         child.on("close", (code, signal) => {
+            clearTimeout(killTimer);
+            options.signal?.removeEventListener("abort", forceAbortedExit);
             if (failure) reject(failure);
             else {
                 resolve({

@@ -124,10 +124,14 @@ async function createSandboxEnv(sandboxRoot, name, denoDir) {
             fsCopyFile(join(REPO_ROOT, "src", "snip-filters", fileName), join(snipFiltersDir, fileName)),
         ),
     );
+    if (process.platform === "win32") {
+        await fsWriteFile(join(home, ".gitconfig"), "[core]\n\tlongpaths = true\n");
+    }
     // WLD_TEST_SANDBOX_HOME is the marker src/constants.js refuses to run without.
     return {
         HOME: home,
         USERPROFILE: home,
+        ...(process.platform === "win32" ? { GIT_CONFIG_GLOBAL: join(home, ".gitconfig") } : {}),
         APPDATA: join(home, "AppData", "Roaming"),
         LOCALAPPDATA: join(home, "AppData", "Local"),
         ProgramData: join(home, "ProgramData"),

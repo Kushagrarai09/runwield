@@ -1,3 +1,4 @@
+import { recoverWindowsRename } from "./shared/native-file-replace-windows.ts";
 import fs from "node:fs/promises";
 import { open as fsOpen } from "node:fs/promises";
 import { openNativeFileLock } from "./shared/native-file-lock.ts";
@@ -1636,7 +1637,11 @@ export async function atomicWriteTextFile(path, content) {
         await file.sync();
         await file.close();
         file = undefined;
-        await fs.rename(tmp, path);
+        try {
+            await fs.rename(tmp, path);
+        } catch (error) {
+            if (!(error instanceof Error && recoverWindowsRename(error, tmp, path))) throw error;
+        }
         await syncDirectory(dirname(path));
     } catch (error) {
         if (file) await file.close();

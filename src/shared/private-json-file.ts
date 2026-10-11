@@ -1,8 +1,7 @@
 /** Private directories and durable JSON replacement using portable filesystem APIs. */
 import { chmodSync, closeSync, fsyncSync, mkdirSync, openSync, renameSync, writeSync } from "node:fs";
 import { dirname } from "node:path";
-import { platform, versions } from "node:process";
-import { tryReplaceWindowsFileSync } from "./native-file-replace-windows.ts";
+import { recoverWindowsRename } from "./native-file-replace-windows.ts";
 import { randomUUID } from "node:crypto";
 
 export function ensurePrivateDir(path: string): void {
@@ -49,15 +48,7 @@ export function writeJsonAtomically<Value>(path: string, value: Value): void {
     try {
         renameSync(temporaryPath, path);
     } catch (error) {
-        if (!(
-            platform === "win32" &&
-            versions.bun &&
-            error instanceof Error &&
-            "code" in error &&
-            error.code === "EPERM" &&
-            tryReplaceWindowsFileSync(temporaryPath, path)
-        ))
-            throw error;
+        if (!(error instanceof Error && recoverWindowsRename(error, temporaryPath, path))) throw error;
     }
     syncParent(path);
 }

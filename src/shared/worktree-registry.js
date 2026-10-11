@@ -1,3 +1,4 @@
+import { recoverWindowsRename } from "./native-file-replace-windows.ts";
 import { open as fsOpen } from "node:fs/promises";
 import { captureForegroundProcess } from "./captured-process.ts";
 import { realpathSync as fsRealpathSync } from "node:fs";
@@ -97,12 +98,14 @@ function registryRecoveryActions(planName) {
             command: `${CLI_BIN} plans doctor --repair`,
         },
         ...(planName
-            ? [{
-                label: "Choose which attempt survives",
-                description:
-                    "Plan Recovery lists the attempts for this Plan so you can continue, retry, merge, or abandon one.",
-                command: `${CLI_BIN} load-plan ${planName}`,
-            }]
+            ? [
+                  {
+                      label: "Choose which attempt survives",
+                      description:
+                          "Plan Recovery lists the attempts for this Plan so you can continue, retry, merge, or abandon one.",
+                      command: `${CLI_BIN} load-plan ${planName}`,
+                  },
+              ]
             : []),
     ];
 }
@@ -243,11 +246,14 @@ async function migrateLegacyRegistryEntries(projectRoot, entries, resources) {
         // `wld plans doctor` can show both attempts and a human decides which
         // survives.
         const wouldDuplicateLiveAttempt = Boolean(
-            plan?.attrs.planId && NONTERMINAL_STATUSES.has(entry.status) &&
-                entries.some((other) =>
-                    other.id !== entry.id && other.planId === plan.attrs.planId &&
-                    NONTERMINAL_STATUSES.has(other.status)
-                ),
+            plan?.attrs.planId &&
+            NONTERMINAL_STATUSES.has(entry.status) &&
+            entries.some(
+                (other) =>
+                    other.id !== entry.id &&
+                    other.planId === plan.attrs.planId &&
+                    NONTERMINAL_STATUSES.has(other.status),
+            ),
         );
         if (plan?.attrs.planId && !wouldDuplicateLiveAttempt) {
             entry.planId = plan.attrs.planId;
@@ -262,8 +268,8 @@ async function migrateLegacyRegistryEntries(projectRoot, entries, resources) {
             reason: wouldDuplicateLiveAttempt
                 ? "duplicate_live_attempt_for_plan"
                 : namedPlans.length > 1
-                ? "ambiguous_plan_name"
-                : "plan_not_found_or_missing_plan_id",
+                  ? "ambiguous_plan_name"
+                  : "plan_not_found_or_missing_plan_id",
             candidates: namedPlans.map((candidate) => candidate.name),
             recordedAt: new Date().toISOString(),
         });
@@ -314,9 +320,10 @@ async function readRegistry(projectRoot, options = {}) {
             );
         }
         const entries = inspected.entries;
-        const migrated = options.migrate === false || !Array.isArray(options.planResources)
-            ? false
-            : await migrateLegacyRegistryEntries(projectRoot, entries, options.planResources);
+        const migrated =
+            options.migrate === false || !Array.isArray(options.planResources)
+                ? false
+                : await migrateLegacyRegistryEntries(projectRoot, entries, options.planResources);
         // Reading is deliberately permissive. Two unfinished attempts for one Plan
         // make *that Plan's* lookups ambiguous; they say nothing about any other
         // Plan, and refusing every read over it made one damaged record disable every
@@ -334,7 +341,7 @@ async function readRegistry(projectRoot, options = {}) {
         }
         return entries;
     } catch (error) {
-        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return [];
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return [];
         throw error;
     }
 }
@@ -361,9 +368,12 @@ function assertNoDuplicateNonterminalAttempt(entries, candidate) {
     if (!NONTERMINAL_STATUSES.has(candidate.status)) return;
     if (!candidate.planId) return;
     const key = registryPlanKey(candidate);
-    const duplicate = entries.find((entry) =>
-        entry.id !== candidate.id && entry.planId && registryPlanKey(entry) === key &&
-        NONTERMINAL_STATUSES.has(entry.status)
+    const duplicate = entries.find(
+        (entry) =>
+            entry.id !== candidate.id &&
+            entry.planId &&
+            registryPlanKey(entry) === key &&
+            NONTERMINAL_STATUSES.has(entry.status),
     );
     if (duplicate) throw duplicateLiveAttemptError(candidate.planName, [duplicate, candidate]);
 }
@@ -385,7 +395,11 @@ async function writeRegistry(projectRoot, entries) {
         } finally {
             await file.close();
         }
-        await fsRename(tmp, path);
+        try {
+            await fsRename(tmp, path);
+        } catch (error) {
+            if (!(error instanceof Error && recoverWindowsRename(error, tmp, path))) throw error;
+        }
         // Windows cannot fsync a directory; the file was flushed before atomic rename.
         if (platform !== "win32") {
             const dir = await fsOpen(dirname(path), "r");
@@ -447,7 +461,7 @@ export async function withWorktreeRegistryLockAtPath(lockPath, fn) {
             if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
             const snapshot = await readLockFileSnapshot(lockPath);
             if (!snapshot) continue;
-            if (await isStaleLock(snapshot) && await removeLockFileIfSnapshotMatches(lockPath, snapshot)) {
+            if ((await isStaleLock(snapshot)) && (await removeLockFileIfSnapshotMatches(lockPath, snapshot))) {
                 continue;
             }
             if (Date.now() > deadline) throw new Error(`Timed out waiting for worktree registry lock: ${lockPath}`);
@@ -493,7 +507,7 @@ export async function inspectWorktreeRegistryAtPath(registryPath) {
     try {
         text = await fsReadFile(registryPath, "utf8");
     } catch (error) {
-        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) {
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") {
             return { version: 2, entries: [], integrityIssues };
         }
         return {
@@ -614,9 +628,9 @@ export async function inspectWorktreeRegistryAtPath(registryPath) {
         if (live.length > 1) {
             integrityIssues.push({
                 kind: "duplicate_live_attempt",
-                message: `Plan ${live[0].planName} (${planId}) has ${live.length} unfinished attempts: ${
-                    live.map((entry) => `${entry.id} (${entry.status})`).join(", ")
-                }.`,
+                message: `Plan ${live[0].planName} (${planId}) has ${live.length} unfinished attempts: ${live
+                    .map((entry) => `${entry.id} (${entry.status})`)
+                    .join(", ")}.`,
                 ids: live.map((entry) => entry.id),
             });
         }
@@ -625,9 +639,9 @@ export async function inspectWorktreeRegistryAtPath(registryPath) {
         if (live.length > 1) {
             integrityIssues.push({
                 kind: "duplicate_live_attempt",
-                message: `Plan ${planName} has ${live.length} unfinished legacy attempts: ${
-                    live.map((entry) => `${entry.id} (${entry.status})`).join(", ")
-                }.`,
+                message: `Plan ${planName} has ${live.length} unfinished legacy attempts: ${live
+                    .map((entry) => `${entry.id} (${entry.status})`)
+                    .join(", ")}.`,
                 ids: live.map((entry) => entry.id),
             });
         }
@@ -660,14 +674,14 @@ export async function listEntries(projectRoot, options = {}) {
     return await withProjectRuntimeReadScope(async () => {
         const inspection = options.migrate === false ? null : await inspectWorktreeRegistry(projectRoot);
         const needsIdentityMigration = inspection?.entries.some((entry) => !entry.planId);
-        const planResources = inspection && needsIdentityMigration
-            ? await inspectPlanIdentityDocuments(resolvePrimaryCheckoutRoot(projectRoot), inspection.entries).catch(
-                () => [],
-            )
-            : undefined;
-        return await withWorktreeRegistryLock(
-            projectRoot,
-            () => readRegistry(projectRoot, { ...options, planResources }),
+        const planResources =
+            inspection && needsIdentityMigration
+                ? await inspectPlanIdentityDocuments(resolvePrimaryCheckoutRoot(projectRoot), inspection.entries).catch(
+                      () => [],
+                  )
+                : undefined;
+        return await withWorktreeRegistryLock(projectRoot, () =>
+            readRegistry(projectRoot, { ...options, planResources }),
         );
     });
 }
@@ -716,14 +730,18 @@ export async function updateEntry(projectRoot, id, updates) {
         ];
         for (const key of immutableKeys) {
             if (
-                Object.hasOwn(updates, key) && /** @type {Record<string, unknown>} */
+                Object.hasOwn(updates, key) &&
+                /** @type {Record<string, unknown>} */
                 (updates)[key] !== /** @type {Record<string, unknown>} */ (entries[index])[key]
             ) {
                 throw new Error(`Worktree registry identity field cannot be updated: ${key}`);
             }
         }
         entries[index] = { ...entries[index], ...updates, updatedAt: updates.updatedAt || new Date().toISOString() };
-        assertNoDuplicateNonterminalAttempt(entries.filter((entry) => entry.id !== id), entries[index]);
+        assertNoDuplicateNonterminalAttempt(
+            entries.filter((entry) => entry.id !== id),
+            entries[index],
+        );
         await writeRegistry(projectRoot, entries);
         return entries[index];
     });
@@ -785,8 +803,11 @@ export async function renameRestoredPlanEntry(projectRoot, id, expectedName, nex
             );
         }
         if (
-            entries.some((candidate) =>
-                candidate.id !== id && candidate.planName === nextName && NONTERMINAL_STATUSES.has(candidate.status)
+            entries.some(
+                (candidate) =>
+                    candidate.id !== id &&
+                    candidate.planName === nextName &&
+                    NONTERMINAL_STATUSES.has(candidate.status),
             )
         ) {
             throw new Error(
@@ -880,13 +901,25 @@ export async function retirePublicationForRevalidation(projectRoot, id, expected
  * @returns {Array<{ path: string, branch: string }>}
  */
 function parseGitWorktreeRecords(porcelainText) {
-    return porcelainText.trim().split("\n\n").filter(Boolean).map((record) => {
-        const lines = record.split("\n");
-        return {
-            path: lines.find((line) => line.startsWith("worktree "))?.slice("worktree ".length).trim() || "",
-            branch: lines.find((line) => line.startsWith("branch "))?.slice("branch ".length).trim() || "",
-        };
-    });
+    return porcelainText
+        .trim()
+        .split("\n\n")
+        .filter(Boolean)
+        .map((record) => {
+            const lines = record.split("\n");
+            return {
+                path:
+                    lines
+                        .find((line) => line.startsWith("worktree "))
+                        ?.slice("worktree ".length)
+                        .trim() || "",
+                branch:
+                    lines
+                        .find((line) => line.startsWith("branch "))
+                        ?.slice("branch ".length)
+                        .trim() || "",
+            };
+        });
 }
 
 /**
@@ -925,8 +958,9 @@ export async function restoreEntryFromPlanEvidence(projectRoot, evidence) {
             } catch {
                 // Keep the recorded path; the equality will fail.
             }
-            return (record.path === evidence.path || recordRealPath === evidenceRealPath) &&
-                record.branch === expectedRef;
+            return (
+                (record.path === evidence.path || recordRealPath === evidenceRealPath) && record.branch === expectedRef
+            );
         });
         if (!match) {
             return { restored: false, reason: `Git does not show ${evidence.path} attached to ${evidence.branch}.` };
@@ -947,7 +981,8 @@ export async function restoreEntryFromPlanEvidence(projectRoot, evidence) {
             planId: evidence.planId,
             baseBranch: evidence.baseBranch,
             baseRef: evidence.baseRef || `refs/heads/${evidence.baseBranch}`,
-            baseCommit: evidence.baseCommit ||
+            baseCommit:
+                evidence.baseCommit ||
                 (await runGit(projectRoot, ["rev-parse", `refs/heads/${evidence.baseBranch}`])).trim(),
             ...(evidence.baseTree ? { baseTree: evidence.baseTree } : {}),
             ...(evidence.executionBaselineTree ? { executionBaselineTree: evidence.executionBaselineTree } : {}),
@@ -1001,7 +1036,10 @@ export async function reconcileEntryGitLocation(projectRoot, id, location) {
             branch: location.branch,
             updatedAt: new Date().toISOString(),
         };
-        assertNoDuplicateNonterminalAttempt(entries.filter((entry) => entry.id !== id), entries[index]);
+        assertNoDuplicateNonterminalAttempt(
+            entries.filter((entry) => entry.id !== id),
+            entries[index],
+        );
         await writeRegistry(projectRoot, entries);
         return entries[index];
     });
@@ -1124,8 +1162,8 @@ export async function pruneEntry(projectRoot, id) {
  */
 export async function findByPlanName(projectRoot, planName) {
     const entries = await listEntries(projectRoot);
-    const legacyMatches = entries.filter((entry) =>
-        !entry.planId && entry.planName === planName && NONTERMINAL_STATUSES.has(entry.status)
+    const legacyMatches = entries.filter(
+        (entry) => !entry.planId && entry.planName === planName && NONTERMINAL_STATUSES.has(entry.status),
     );
     if (legacyMatches.length > 1) throw duplicateLiveAttemptError(planName, legacyMatches);
     return legacyMatches[0] || null;
@@ -1141,8 +1179,8 @@ export async function findByPlanName(projectRoot, planName) {
  */
 export async function findActiveByPlanName(projectRoot, planName, options = {}) {
     const entries = await listEntries(projectRoot, options);
-    const matches = entries.filter((entry) =>
-        entry.planName === planName && entry.status !== "planning" && NONTERMINAL_STATUSES.has(entry.status)
+    const matches = entries.filter(
+        (entry) => entry.planName === planName && entry.status !== "planning" && NONTERMINAL_STATUSES.has(entry.status),
     );
     if (matches.length > 1) throw duplicateLiveAttemptError(planName, matches);
     return matches[0] || null;
@@ -1164,8 +1202,8 @@ export async function findByPlanIds(projectRoot, planIds) {
     const entries = await listEntries(projectRoot);
     const matches = new Map();
     for (const planId of planIds) {
-        const live = entries.filter((entry) =>
-            entry.planId === planId && entry.status !== "planning" && NONTERMINAL_STATUSES.has(entry.status)
+        const live = entries.filter(
+            (entry) => entry.planId === planId && entry.status !== "planning" && NONTERMINAL_STATUSES.has(entry.status),
         );
         // Never hide two active attempts for one Plan behind a batch lookup.
         if (live.length > 1) throw duplicateLiveAttemptError(live[0].planName, live);
@@ -1259,8 +1297,8 @@ export async function pruneStaleEntries(projectRoot) {
             try {
                 const stat = await fsStat(entry.path);
                 const realPath = await fsRealpath(entry.path);
-                const isRegisteredGitWorktree = !gitWorktreePaths ||
-                    gitWorktreePaths.has(entry.path) || gitWorktreePaths.has(realPath);
+                const isRegisteredGitWorktree =
+                    !gitWorktreePaths || gitWorktreePaths.has(entry.path) || gitWorktreePaths.has(realPath);
                 if (stat.isDirectory() && isRegisteredGitWorktree) kept.push(entry);
                 else stale.push(entry);
             } catch {

@@ -938,3 +938,28 @@ independent of platform process-kill latency. Five affected files pass Bun and D
 (5.9 seconds), types/lint pass, and both independent review axes approve. Removing the
 terminal gate makes the new deterministic buffered-output regression fail; restoring it
 passes. Native SFTP startup and buffered-output behavior await the next Windows run.
+
+
+### Integrated qualification and final review follow-up
+
+Merged upstream `b2fed1a1` into the feature branch, retaining the owner's WinGet pause and
+updated singular/plural integration-note wording. No release or runtime cutover occurred.
+At `210968ca4`, ordinary PR CI and both native Windows package jobs pass; Windows x64
+source is 628/649 files. The proper Git-backed Linux checkout at integrated `edecfdfd7`
+passed 648/649; its remaining malformed-Plan Golden failure was traced to an unhandled
+background autocomplete rejection and corrected without suppressing command errors.
+
+Final complete-diff review identified and corrected bounded-process cancellation,
+Windows recovery-path matching, Deno remote stdin cancellation, Snip TOML escaping,
+missing-executable error classification and native fixture assumptions. Windows durable
+file replacements now reuse the existing EPERM-only atomic fallback across Plan,
+registry, controller, Work Record, layout/recovery, collaboration and activation stores.
+Open-reader regressions retain the old handle's bytes and verify complete new contents.
+Golden evidence now retains the validation error JSONL before disposable HOME cleanup.
+Native confirmation of these corrections remains pending.
+
+Native Windows qualification requires Git for Windows with `core.longpaths=true` for
+nested worktrees. Each isolated runner writes that setting only in its disposable Git
+configuration and pins `GIT_CONFIG_GLOBAL` to that file across Golden HOME changes.
+The user's Git settings are untouched. A real >260-character worktree fixture verifies
+this prerequisite; results do not claim support with Git's long-path opt-in disabled.

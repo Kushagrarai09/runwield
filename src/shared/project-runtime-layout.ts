@@ -1,3 +1,4 @@
+import { recoverWindowsRename } from "./native-file-replace-windows.ts";
 import fsPromises from "node:fs/promises";
 import { open as fsOpen, rmdir as fsRmdir } from "node:fs/promises";
 import { type NativeFileLock, openNativeFileLock } from "./native-file-lock.ts";
@@ -2013,7 +2014,11 @@ async function atomicWriteJson(path: string, value: MigrationJournal | LayoutMar
         } finally {
             await file.close();
         }
-        await fsPromises.rename(temporary, path);
+        try {
+            await fsPromises.rename(temporary, path);
+        } catch (error) {
+            if (!(error instanceof Error && recoverWindowsRename(error, temporary, path))) throw error;
+        }
         await syncDirectory(dirname(path));
     } finally {
         await fsPromises.rm(temporary).catch((error) => {

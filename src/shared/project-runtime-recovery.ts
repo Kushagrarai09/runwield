@@ -1,3 +1,4 @@
+import { recoverWindowsRename } from "./native-file-replace-windows.ts";
 import { platform } from "node:process";
 import fsPromises from "node:fs/promises";
 import { open as fsOpen } from "node:fs/promises";
@@ -28,10 +29,13 @@ export async function inspectReturningRegistry(source: string, destination: stri
     const additions: WorktreeRegistryEntry[] = [];
     for (const entry of legacy.entries) {
         if (current.entries.some((saved) => saved.id === entry.id)) continue;
-        const collision = current.entries.find((saved) =>
-            saved.path === entry.path || saved.branch === entry.branch ||
-            (saved.status !== "abandoned" && entry.status !== "abandoned" &&
-                ((saved.planId && saved.planId === entry.planId) || saved.planName === entry.planName))
+        const collision = current.entries.find(
+            (saved) =>
+                saved.path === entry.path ||
+                saved.branch === entry.branch ||
+                (saved.status !== "abandoned" &&
+                    entry.status !== "abandoned" &&
+                    ((saved.planId && saved.planId === entry.planId) || saved.planName === entry.planName)),
         );
         if (collision) {
             throw new Error(`Two saved attempts refer to Plan ${entry.planName}. Both copies have been kept.`);
@@ -45,7 +49,7 @@ async function info(path: string): Promise<Stats | null> {
     try {
         return await fsLstat(path);
     } catch (error) {
-        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return null;
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
         throw error;
     }
 }
@@ -91,7 +95,11 @@ async function writeAtomic(path: string, bytes: Uint8Array, onlyIfMissing = fals
                 if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
             }
         } else {
-            await fsPromises.rename(temporary, path);
+            try {
+                await fsPromises.rename(temporary, path);
+            } catch (error) {
+                if (!(error instanceof Error && recoverWindowsRename(error, temporary, path))) throw error;
+            }
         }
         await syncDirectory(dirname(path));
     } finally {
@@ -117,8 +125,10 @@ async function preserve(path: string, bytes: Uint8Array, archiveRoot: string): P
 function parseController(bytes: Uint8Array): ControllerRecord | null {
     try {
         const record: ControllerRecord = JSON.parse(new TextDecoder().decode(bytes));
-        return record?.version === 1 && Number.isInteger(record.revision) && record.state &&
-                typeof record.planName === "string"
+        return record?.version === 1 &&
+            Number.isInteger(record.revision) &&
+            record.state &&
+            typeof record.planName === "string"
             ? record
             : null;
     } catch {
@@ -135,9 +145,14 @@ function recoverCompletionReport(currentBytes: Uint8Array, legacyBytes: Uint8Arr
     const current = parseController(currentBytes);
     const legacy = parseController(legacyBytes);
     if (
-        !current || !legacy || current.planId !== legacy.planId || current.planName !== legacy.planName ||
-        Object.hasOwn(current.state, "executionReport") || !legacy.state.executionReport
-    ) return currentBytes;
+        !current ||
+        !legacy ||
+        current.planId !== legacy.planId ||
+        current.planName !== legacy.planName ||
+        Object.hasOwn(current.state, "executionReport") ||
+        !legacy.state.executionReport
+    )
+        return currentBytes;
     const recovered: ControllerRecord = {
         ...current,
         revision: current.revision + 1,

@@ -226,7 +226,9 @@ async function runRecovery(
 }
 
 async function fileExists(path: string): Promise<boolean> {
-    return await fsStat(path).then(() => true).catch(() => false);
+    return await fsStat(path)
+        .then(() => true)
+        .catch(() => false);
 }
 
 async function writeTransitionRecord(
@@ -252,19 +254,17 @@ async function writeUnresolvedTransitionRecord(
     await fsMkdir(journalDir, { recursive: true });
     await fsWriteFile(
         `${journalDir}/${transitionId}.json`,
-        `${
-            JSON.stringify(
-                {
-                    transitionId,
-                    planName,
-                    operation: "recovery_reset",
-                    state: "interrupted",
-                    beforeFacts: { plan: { revision: "stale-frontmatter-revision" } },
-                },
-                null,
-                2,
-            )
-        }\n`,
+        `${JSON.stringify(
+            {
+                transitionId,
+                planName,
+                operation: "recovery_reset",
+                state: "interrupted",
+                beforeFacts: { plan: { revision: "stale-frontmatter-revision" } },
+            },
+            null,
+            2,
+        )}\n`,
     );
 }
 
@@ -372,7 +372,10 @@ test("Plan Recovery menu outcomes re-prompt without fallthrough", async () => {
     const proofContext = makeActionContext(proofProject.projectRoot, proofProject.plan, proofUi);
     proofContext.unresolvedRecords = [{ transitionId: "proof-record", operation: "reset", reason: "pending" }];
     assertEquals(await settleRecoveryRecords(proofContext), { kind: "menu" });
-    assertEquals(proofUi.messages.some((message) => message.includes("Fixed 1 old Plan stop")), true);
+    assertEquals(
+        proofUi.messages.some((message) => message.includes("Fixed 1 old Plan stop")),
+        true,
+    );
     assertEquals(proofContext.unresolvedRecords.length, 0);
 
     const declineProject = await makeRealRecoveryProject();
@@ -400,7 +403,10 @@ test("Plan Recovery menu outcomes re-prompt without fallthrough", async () => {
         { transitionId: "attested-record", operation: "reset", reason: "pending" },
     ];
     assertEquals(await settleRecoveryRecords(attestationContext), { kind: "menu" });
-    assertEquals(attestationUi.messages.some((message) => message.includes("Closed on your word")), true);
+    assertEquals(
+        attestationUi.messages.some((message) => message.includes("Closed on your word")),
+        true,
+    );
     assertEquals(attestationContext.unresolvedRecords.length, 0);
 
     const inspect = await runRecovery(["inspect", null], {
@@ -417,20 +423,27 @@ test("Plan Recovery menu outcomes re-prompt without fallthrough", async () => {
 
     const resetPreflight = await runRecovery(["reset", null]);
     assertEquals(resetPreflight.result, "handled");
-    assertEquals(resetPreflight.ui.messages.some((message) => message.includes("No test base is saved")), true);
+    assertEquals(
+        resetPreflight.ui.messages.some((message) => message.includes("No test base is saved")),
+        true,
+    );
     assertEquals(resetPreflight.ui.prompts.length, 2);
 
     const validateBlocked = await runRecovery(["validate", null], { status: "implemented" });
     assertEquals(validateBlocked.result, "handled");
     assertEquals(validateBlocked.ui.prompts.length, 1);
 
-    const continueBlocked = await runRecovery(["continue", null], {
-        executionMode: "worktree",
-        executionBaselineTree: "baseline-tree",
-    }, (options) => {
-        options.ports.probeGitRepository = () =>
-            Promise.resolve({ ok: false, state: "not_git", cwd: options.projectRoot });
-    });
+    const continueBlocked = await runRecovery(
+        ["continue", null],
+        {
+            executionMode: "worktree",
+            executionBaselineTree: "baseline-tree",
+        },
+        (options) => {
+            options.ports.probeGitRepository = () =>
+                Promise.resolve({ ok: false, state: "not_git", cwd: options.projectRoot });
+        },
+    );
     assertEquals(continueBlocked.result, "handled");
     assertEquals(continueBlocked.ui.prompts.length, 2);
 
@@ -538,7 +551,10 @@ test("follow-up recovery keeps the menu available when the recorded worktree is 
     });
     assertEquals(result.result, "handled");
     assertEquals(result.ui.prompts.length, 2);
-    assertEquals(result.ui.messages.some((message) => message.includes("Saved worktree info is missing")), true);
+    assertEquals(
+        result.ui.messages.some((message) => message.includes("Saved worktree info is missing")),
+        true,
+    );
 });
 
 test("continuing an in-progress worktree keeps its Plan authoritative and rebuilds missing attempt data", async () => {
@@ -594,38 +610,36 @@ test("continuing an in-progress worktree keeps its Plan authoritative and rebuil
         await fsMkdir(recoveryDirectory, { recursive: true });
         await fsWriteFile(
             recoveryPath,
-            `${
-                JSON.stringify(
-                    {
-                        version: 1,
-                        transitionId: "interrupted-execution-setup",
-                        operation: "execution_preparation",
-                        planName: project.plan.planName,
-                        state: "needs_recovery",
-                        resources: [
-                            { kind: "plan", id: project.plan.planName },
-                            { kind: "attempt", id: attempt.worktreeId },
-                        ],
-                        completedEffects: [
-                            {
-                                effect: "git_worktree_reused",
-                                proof: {
-                                    worktreeId: attempt.worktreeId,
-                                    path: worktreePath,
-                                    branch: attempt.worktreeBranch,
-                                },
+            `${JSON.stringify(
+                {
+                    version: 1,
+                    transitionId: "interrupted-execution-setup",
+                    operation: "execution_preparation",
+                    planName: project.plan.planName,
+                    state: "needs_recovery",
+                    resources: [
+                        { kind: "plan", id: project.plan.planName },
+                        { kind: "attempt", id: attempt.worktreeId },
+                    ],
+                    completedEffects: [
+                        {
+                            effect: "git_worktree_reused",
+                            proof: {
+                                worktreeId: attempt.worktreeId,
+                                path: worktreePath,
+                                branch: attempt.worktreeBranch,
                             },
-                            {
-                                effect: "worktree_registry_updated",
-                                proof: { worktreeId: attempt.worktreeId, status: "active" },
-                            },
-                            { effect: "plan_event_recorded", proof: { planName: project.plan.planName } },
-                        ],
-                    },
-                    null,
-                    2,
-                )
-            }\n`,
+                        },
+                        {
+                            effect: "worktree_registry_updated",
+                            proof: { worktreeId: attempt.worktreeId, status: "active" },
+                        },
+                        { effect: "plan_event_recorded", proof: { planName: project.plan.planName } },
+                    ],
+                },
+                null,
+                2,
+            )}\n`,
         );
         project.plan.attrs = primaryAttrs;
         let executeCalls = 0;
@@ -638,7 +652,12 @@ test("continuing an in-progress worktree keeps its Plan authoritative and rebuil
 
         assertEquals(await handlePlanRecovery(options), "handled");
         assertEquals(executeCalls, 1);
-        assertEquals(await fsStat(recoveryPath).then(() => true).catch(() => false), false);
+        assertEquals(
+            await fsStat(recoveryPath)
+                .then(() => true)
+                .catch(() => false),
+            false,
+        );
         assertEquals((await loadPlan(project.projectRoot, project.plan.planName))?.attrs.status, "ready_for_work");
         assertEquals((await loadPlan(worktreePath, project.plan.planName))?.attrs.status, "ready_for_work");
         assertEquals((await findWorktreeRegistryEntryById(project.projectRoot, attempt.worktreeId))?.status, "active");
@@ -774,7 +793,10 @@ test("Plan Recovery actions preserve live context", async () => {
     inspectedStatusPath = inspectContext.worktreeContext?.path || "";
     assertEquals(inspectContext.worktreeContext?.path, "/tmp/refreshed-worktree");
     assertEquals(inspectedStatusPath, "/tmp/refreshed-worktree");
-    assertEquals(inspectUi.messages.some((message) => message.includes("last run stopped")), true);
+    assertEquals(
+        inspectUi.messages.some((message) => message.includes("last run stopped")),
+        true,
+    );
 
     const inspect = await runRecovery(["inspect", null], {
         worktreeId: "worktree-1",
@@ -833,7 +855,10 @@ test("Plan Recovery actions preserve live context", async () => {
     });
     assertEquals(abandonedController?.state.documentWorktreeId, undefined);
     const primaryPath = getStoredPlanPath(abandonedProjectRoot, abandonSuccess.plan.planName);
-    assertEquals((await listPlans(abandonedProjectRoot)).map((plan) => plan.path), [primaryPath]);
+    assertEquals(
+        (await listPlans(abandonedProjectRoot)).map((plan) => plan.path),
+        [primaryPath],
+    );
     assertEquals(
         (await resolvePlanWithPrimaryRecovery(abandonedProjectRoot, abandonSuccess.plan.planName)).plan.path,
         primaryPath,
@@ -944,14 +969,17 @@ test("discarded execution refreshes the surviving Plan before reopening review",
 });
 
 test("unregistered legacy recovery offers User Verification for implemented plans with lost worktrees", async () => {
-    const project = await makeRealRecoveryProject({
-        status: "implemented",
-        executionMode: "worktree",
-        worktreeId: "lost-worktree",
-        worktreePath: `${await fsMkdtemp(join(tmpdir(), "runwield-fixture-"))}/gone`,
-        worktreeBranch: "rw/gone",
-        worktreeBaseBranch: "main",
-    }, { legacyUnregisteredRecovery: true });
+    const project = await makeRealRecoveryProject(
+        {
+            status: "implemented",
+            executionMode: "worktree",
+            worktreeId: "lost-worktree",
+            worktreePath: `${await fsMkdtemp(join(tmpdir(), "runwield-fixture-"))}/gone`,
+            worktreeBranch: "rw/gone",
+            worktreeBaseBranch: "main",
+        },
+        { legacyUnregisteredRecovery: true },
+    );
     assertEquals(await findWorktreeRegistryEntryById(project.projectRoot, "lost-worktree"), null);
     const ui = makeUi(["user_verify"], ["Accepted from staging check."]);
     const options = makeOptions(project.plan, ui);
@@ -972,13 +1000,16 @@ test("unregistered legacy recovery offers User Verification for implemented plan
 });
 
 test("unregistered legacy recovery omits User Verification for failed plans with lost worktrees", async () => {
-    const project = await makeRealRecoveryProject({
-        executionMode: "worktree",
-        worktreeId: "lost-worktree",
-        worktreePath: `${await fsMkdtemp(join(tmpdir(), "runwield-fixture-"))}/gone`,
-        worktreeBranch: "rw/gone",
-        worktreeBaseBranch: "main",
-    }, { legacyUnregisteredRecovery: true });
+    const project = await makeRealRecoveryProject(
+        {
+            executionMode: "worktree",
+            worktreeId: "lost-worktree",
+            worktreePath: `${await fsMkdtemp(join(tmpdir(), "runwield-fixture-"))}/gone`,
+            worktreeBranch: "rw/gone",
+            worktreeBaseBranch: "main",
+        },
+        { legacyUnregisteredRecovery: true },
+    );
     assertEquals(await findWorktreeRegistryEntryById(project.projectRoot, "lost-worktree"), null);
     const ui = makeUi(["stop_lost"]);
     const options = makeOptions(project.plan, ui);
@@ -1055,11 +1086,11 @@ test("recovery cancel at the first menu leaves unrelated repairable state untouc
     await fsMkdir(dirname(registryPath), { recursive: true });
     await fsWriteFile(
         registryPath,
-        `${
-            JSON.stringify(
-                {
-                    version: 2,
-                    entries: [{
+        `${JSON.stringify(
+            {
+                version: 2,
+                entries: [
+                    {
                         id: "unrelated-worktree",
                         planName: "unrelated-plan",
                         path: `${project.projectRoot}/unrelated-worktree`,
@@ -1071,12 +1102,12 @@ test("recovery cancel at the first menu leaves unrelated repairable state untouc
                         status: "active",
                         createdAt: "2026-01-01T00:00:00.000Z",
                         updatedAt: "2026-01-01T00:00:00.000Z",
-                    }],
-                },
-                null,
-                2,
-            )
-        }\n`,
+                    },
+                ],
+            },
+            null,
+            2,
+        )}\n`,
     );
     const registryBefore = await fsReadFile(registryPath);
 
@@ -1112,17 +1143,7 @@ test("recovery cancel at the first menu leaves unrelated repairable state untouc
     } catch (error) {
         if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     }
-    for (
-        const forbidden of [
-            "for-each-ref",
-            "clone",
-            "fetch",
-            "merge-base",
-            "rev-list",
-            "--contains",
-            "show-ref",
-        ]
-    ) {
+    for (const forbidden of ["for-each-ref", "clone", "fetch", "merge-base", "rev-list", "--contains", "show-ref"]) {
         assertEquals(
             trace.includes(forbidden),
             false,
@@ -1150,13 +1171,9 @@ test("recovery abandon: deletes unchanged branch from Plan base commit when regi
         await runGit(root, ["branch", branch, baseCommit]);
         const beforeUpdate = await loadPlan(root, project.plan.planName);
         if (!beforeUpdate) throw new Error("fixture Plan missing");
-        await updatePlanFrontMatter(
-            root,
-            project.plan.planName,
-            { status: "failed" },
-            beforeUpdate.attrs,
-            { expectedRevision: beforeUpdate.revision },
-        );
+        await updatePlanFrontMatter(root, project.plan.planName, { status: "failed" }, beforeUpdate.attrs, {
+            expectedRevision: beforeUpdate.revision,
+        });
         await writeControllerState(
             root,
             { planName: project.plan.planName, planId: "plan-1" },
@@ -1197,13 +1214,9 @@ test("held reset keep: restores abandoned rescue record when registry is missing
         await runGit(root, ["worktree", "add", "-b", branch, path, baseCommit]);
         const beforeUpdate = await loadPlan(root, project.plan.planName);
         if (!beforeUpdate) throw new Error("fixture Plan missing");
-        await updatePlanFrontMatter(
-            root,
-            project.plan.planName,
-            { status: "on_hold" },
-            beforeUpdate.attrs,
-            { expectedRevision: beforeUpdate.revision },
-        );
+        await updatePlanFrontMatter(root, project.plan.planName, { status: "on_hold" }, beforeUpdate.attrs, {
+            expectedRevision: beforeUpdate.revision,
+        });
         await writeControllerState(
             root,
             { planName: project.plan.planName, planId: "plan-1" },
@@ -1230,7 +1243,12 @@ test("held reset keep: restores abandoned rescue record when registry is missing
         const record = await findWorktreeRegistryEntryById(root, "held-keep-attempt");
         assertEquals(record?.status, "abandoned");
         assertEquals(record?.path, path);
-        assertEquals(await fsStat(path).then(() => true).catch(() => false), true);
+        assertEquals(
+            await fsStat(path)
+                .then(() => true)
+                .catch(() => false),
+            true,
+        );
     } finally {
         await runGit(root, ["worktree", "remove", "--force", path]).catch(() => Promise.resolve());
         await fsRm(root, { recursive: true });
@@ -1239,18 +1257,16 @@ test("held reset keep: restores abandoned rescue record when registry is missing
 });
 
 for (const action of ["abandon", "held_reset", "recreate"]) {
-    for (
-        const scenario of [
-            "primary_path",
-            "primary_branch",
-            "wrong_checkout",
-            "unchanged",
-            "branch_only",
-            "unique_commit",
-            "missing_plan_id",
-            "invalid_base",
-        ]
-    ) {
+    for (const scenario of [
+        "primary_path",
+        "primary_branch",
+        "wrong_checkout",
+        "unchanged",
+        "branch_only",
+        "unique_commit",
+        "missing_plan_id",
+        "invalid_base",
+    ]) {
         if (action !== "recreate" && ["missing_plan_id", "invalid_base"].includes(scenario)) continue;
         if (action === "recreate" && ["unchanged", "branch_only", "unique_commit"].includes(scenario)) continue;
         test(`recovery ${action}: ${scenario} preserves the developer checkout and reports actual cleanup`, async () => {
@@ -1306,10 +1322,14 @@ for (const action of ["abandon", "held_reset", "recreate"]) {
                     createdAt: "2026-09-08T00:00:00Z",
                     updatedAt: "2026-09-08T00:00:00Z",
                 });
-                await writeControllerState(root, { planName: project.plan.planName, planId: "plan-1" }, {
-                    executionMode: "worktree",
-                    documentWorktreeId: "discard-attempt",
-                });
+                await writeControllerState(
+                    root,
+                    { planName: project.plan.planName, planId: "plan-1" },
+                    {
+                        executionMode: "worktree",
+                        documentWorktreeId: "discard-attempt",
+                    },
+                );
                 const plan = await loadPlan(root, project.plan.planName);
                 if (!plan) throw new Error("fixture Plan missing");
                 const ui = makeUi(action === "held_reset" ? ["reset_delete", "confirm"] : ["confirm"]);
@@ -1349,14 +1369,22 @@ for (const action of ["abandon", "held_reset", "recreate"]) {
                 if (succeeded) {
                     assertEquals(afterRecord?.status, "abandoned");
                     assertEquals(afterController?.state.documentWorktreeId, undefined);
-                    assertEquals(await fsStat(path).then(() => true).catch(() => false), false);
+                    assertEquals(
+                        await fsStat(path)
+                            .then(() => true)
+                            .catch(() => false),
+                        false,
+                    );
                     if (scenario === "unique_commit") {
                         assertEquals(await runGit(root, ["show", `${branch}:unique.txt`]), "rescue this commit");
                         assertEquals(
                             ui.messages.some((message) => message.includes(branch) && message.includes("rescue")),
                             true,
                         );
-                        assertEquals(ui.messages.some((message) => message.includes("branch were deleted")), false);
+                        assertEquals(
+                            ui.messages.some((message) => message.includes("branch were deleted")),
+                            false,
+                        );
                     } else assertEquals(await runGit(root, ["branch", "--list", branch]), "");
                 } else {
                     assertEquals(afterRecord, beforeRecord);
@@ -1373,3 +1401,30 @@ for (const action of ["abandon", "held_reset", "recreate"]) {
         });
     }
 }
+
+test("recovery preserves a surviving attached HEAD when the checkout and branch are gone", async () => {
+    const root = await fsMkdtemp(join(tmpdir(), "runwield-attached-head-"));
+    const worktreePath = join(root, "checkout");
+    const branch = "rw/surviving-head";
+    const project = await makeRealRecoveryProject({
+        executionMode: "worktree",
+        worktreeId: "surviving-head",
+        worktreePath,
+        worktreeBranch: branch,
+        worktreeBaseBranch: "main",
+    });
+    try {
+        await runGit(project.projectRoot, ["worktree", "add", "--detach", worktreePath, "HEAD"]);
+        await fsRm(worktreePath, { recursive: true });
+        // Git retains the attached checkout's detached HEAD, although the directory
+        // and the Plan's recorded branch are both absent. Windows porcelain uses
+        // forward slashes while worktreePath has native backslashes.
+        const ui = makeUi(["cancel"]);
+        assertEquals(await handlePlanRecovery(makeOptions(project.plan, ui, project.projectRoot)), "handled");
+        assertEquals(ui.prompts[0].includes("inspect"), true);
+        assertEquals(ui.prompts[0].includes("stop_lost"), false);
+    } finally {
+        await fsRm(project.projectRoot, { recursive: true });
+        await fsRm(root, { recursive: true });
+    }
+});

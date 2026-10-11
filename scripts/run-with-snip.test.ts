@@ -35,7 +35,10 @@ async function writeSnipFixture(root: string, stdout: string, stderr: string, co
                   binary,
               ]
             : ["compile", "-A", "--no-check", "--output", binary, source];
-        const result = await captureScriptProcess(process.execPath, { args, cwd: root });
+        const result = await captureScriptProcess(process.execPath, {
+            args,
+            cwd: root,
+        });
         assertEquals(result.code, 0, new TextDecoder().decode(result.stderr));
         return;
     }
@@ -97,21 +100,23 @@ test("runWithSnip stores only Deno failure diagnostics", async () => {
     }
 });
 
-test("a timed-out test stops its process and reports the timeout", async () => {
+test("a timed-out test reaps a SIGTERM-resistant process and reports the timeout", async () => {
     const pidPath = await makeTempFile({ prefix: "runwield-test-timeout-" });
     let failureLogPath = "";
     try {
+        const startedAt = performance.now();
         const result = await runBoundedTest(
             runtimeSourceArgs([
                 "eval",
                 `import { writeFileSync } from "node:fs"; writeFileSync(${JSON.stringify(
                     pidPath,
-                )}, String(process.pid)); setInterval(() => {}, 1000);`,
+                )}, String(process.pid)); if (process.platform !== "win32") process.on("SIGTERM", () => {}); setInterval(() => {}, 1000);`,
             ]),
             { failureLabel: "tests", timeoutMs: 500, command: process.execPath },
         );
         failureLogPath = result.failureLogPath || "";
         assertEquals(result.code, 124);
+        assertEquals(performance.now() - startedAt < 10_000, true);
         assertStringIncludes(result.stderr, "tests timed out");
         assertStringIncludes(await fsReadFile(failureLogPath, "utf8"), "exceeded 0.5s");
         const pid = Number(await fsReadFile(pidPath, "utf8"));
@@ -149,5 +154,20 @@ test("quiet Snip commands preserve failures from real subprocesses", async () =>
         assertStringIncludes(failure.stderr, failure.failureLogPath!);
     } finally {
         if (failure.failureLogPath) await fsRm(failure.failureLogPath);
+    }
+});
+
+test("Snip filter verification accepts actual temporary paths requiring TOML escaping", async () => {
+    const prefix = process.platform === "win32" ? "snip config-" : String.raw`snip \" quote-`;
+    const root = await fsMkdtemp(join(tmpdir(), prefix));
+    try {
+        const result = await captureScriptProcess(process.execPath, {
+            args: runtimeSourceArgs(["run", "-A", "scripts/check-snip-filters.ts"]),
+            env: { ...process.env, TMPDIR: root, TEMP: root, TMP: root },
+        });
+        assertEquals(result.code, 0, new TextDecoder().decode(result.stderr));
+        assertStringIncludes(new TextDecoder().decode(result.stdout), "Snip verified all generic Deno filters.");
+    } finally {
+        await fsRm(root, { recursive: true });
     }
 });
