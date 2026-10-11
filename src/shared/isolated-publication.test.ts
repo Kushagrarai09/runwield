@@ -41,11 +41,12 @@ for (const change of ["formatting", "definition", "body", "staged", "committed"]
             await git(worktree.path, ["add", path]);
             await git(worktree.path, ["commit", "-m", "Seal formatted Plan"]);
             const sealedCommit = await git(worktree.path, ["rev-parse", "HEAD"]);
-            const current = change === "definition"
-                ? sealed.replace("src/a.ts", "src/b.ts")
-                : change === "body"
-                ? sealed.replace("# Validated", "# Changed intent")
-                : sealed.replace("    -", "  -");
+            const current =
+                change === "definition"
+                    ? sealed.replace("src/a.ts", "src/b.ts")
+                    : change === "body"
+                      ? sealed.replace("# Validated", "# Changed intent")
+                      : sealed.replace("    -", "  -");
             await fsWriteFile(`${worktree.path}/${path}`, current);
             if (change === "staged" || change === "committed") await git(worktree.path, ["add", path]);
             if (change === "committed") await git(worktree.path, ["commit", "-m", "User Plan edit"]);
@@ -120,10 +121,7 @@ test("publication without a remote safely advances the local target branch", asy
         assertEquals(await fsReadFile(`${projectRoot}/AGENTS.md`, "utf8"), "repository guidance\n");
         assert((await fsLstat(`${projectRoot}/CLAUDE.md`)).isSymbolicLink());
         assertEquals(await fsReadlink(`${projectRoot}/CLAUDE.md`), "AGENTS.md");
-        assertEquals(
-            (await git(projectRoot, ["ls-tree", "main", "CLAUDE.md"])).split(/\s+/)[0],
-            "120000",
-        );
+        assertEquals((await git(projectRoot, ["ls-tree", "main", "CLAUDE.md"])).split(/\s+/)[0], "120000");
         assertEquals(await fsReadFile(`${projectRoot}/untracked-user-note.txt`, "utf8"), "preserve me\n");
         assertEquals(
             await fsReadFile(`${projectRoot}/.gitignore`, "utf8"),
@@ -271,7 +269,7 @@ test("remote publication refuses runtime history even when the final tree is cle
                 planName: "runtime-history",
                 sealedExecutionCommit: sealedCommit,
                 allowedPlanPaths: [],
-            })
+            }),
         );
 
         assert(failure instanceof IsolatedPublicationError);
@@ -324,7 +322,7 @@ test("remote publication refuses runtime history from a merged side branch", asy
                 planName: "runtime-side-history",
                 sealedExecutionCommit: sealedCommit,
                 allowedPlanPaths: [],
-            })
+            }),
         );
 
         assert(failure instanceof IsolatedPublicationError);
@@ -374,7 +372,7 @@ test("saved publication copy refuses deleted runtime history before automatic me
         const savedHeadBefore = await git(publicationRoot, ["rev-parse", "HEAD"]);
         const remoteHeadBefore = (await git(projectRoot, ["ls-remote", "origin", "refs/heads/main"])).split(/\s+/)[0];
 
-        const failure = await assertRejects(() =>
+        const failure = (await assertRejects(() =>
             publishExecutionWorktreeIsolated({
                 projectRoot,
                 executionCwd: worktree!.path,
@@ -384,8 +382,8 @@ test("saved publication copy refuses deleted runtime history before automatic me
                 sealedExecutionCommit: sealedCommit,
                 allowedPlanPaths: [],
                 publicationRoot,
-            })
-        ) as IsolatedPublicationError;
+            }),
+        )) as IsolatedPublicationError;
 
         assertEquals(failure.mergeFailureKind, "runwield_runtime_tracked");
         assertStringIncludes(failure.message, ".wld/internal/saved.json");
@@ -515,8 +513,7 @@ test("a remote policy rejection is typed as fatal and leaves the execution branc
         await git(worktree.path, ["add", "implementation.txt"]);
         await git(worktree.path, ["commit", "-m", "Validated retryable candidate"]);
         const sealedCommit = await git(worktree.path, ["rev-parse", "HEAD"]);
-        const remoteHeadBefore = (await git(projectRoot, ["ls-remote", "origin", "refs/heads/main"]))
-            .split(/\s+/)[0];
+        const remoteHeadBefore = (await git(projectRoot, ["ls-remote", "origin", "refs/heads/main"])).split(/\s+/)[0];
         const hookPath = `${remoteRoot}/hooks/pre-receive`;
         await fsWriteFile(
             hookPath,
@@ -533,7 +530,7 @@ test("a remote policy rejection is typed as fatal and leaves the execution branc
                 planName: "retryable-delivery",
                 sealedExecutionCommit: sealedCommit,
                 allowedPlanPaths: [],
-            })
+            }),
         );
         assert(failure instanceof IsolatedPublicationError);
         assertEquals(failure.mergeFailureKind, "policy_violation");
@@ -541,8 +538,7 @@ test("a remote policy rejection is typed as fatal and leaves the execution branc
         assert((await fsStat(worktree.path)).isDirectory());
         assertEquals(await git(worktree.path, ["rev-parse", "HEAD"]), sealedCommit);
         assertEquals(await git(projectRoot, ["rev-parse", worktree.branch]), sealedCommit);
-        const remoteHeadAfter = (await git(projectRoot, ["ls-remote", "origin", "refs/heads/main"]))
-            .split(/\s+/)[0];
+        const remoteHeadAfter = (await git(projectRoot, ["ls-remote", "origin", "refs/heads/main"])).split(/\s+/)[0];
         assertEquals(remoteHeadAfter, remoteHeadBefore);
     } finally {
         if (worktree) {
@@ -581,7 +577,7 @@ test("force-with-lease rejection is typed as a target race", async () => {
                 planName: "lease-race",
                 sealedExecutionCommit: sealedCommit,
                 allowedPlanPaths: [],
-            })
+            }),
         );
 
         assert(failure instanceof IsolatedPublicationError);
@@ -623,7 +619,7 @@ test("unreachable upstream is typed as transient without changing the primary ch
                 planName: "remote-down",
                 sealedExecutionCommit: sealedCommit,
                 allowedPlanPaths: [],
-            })
+            }),
         );
 
         assert(failure instanceof IsolatedPublicationError);
@@ -672,7 +668,10 @@ test("saved publication clone remains usable after an upstream outage during pre
         const failure = await assertRejects(publish, IsolatedPublicationError);
         assertEquals(failure.mergeFailureKind, "remote_unavailable");
         assertEquals(await git(publicationRoot, ["status", "--porcelain"]), "");
-        assertEquals(await fsReadFile(`${publicationRoot}/README.md`, "utf8"), primaryReadme);
+        assertEquals(
+            (await fsReadFile(`${publicationRoot}/README.md`, "utf8")).replaceAll("\r\n", "\n"),
+            primaryReadme.replaceAll("\r\n", "\n"),
+        );
         await fsRename(offlineRemote, remoteRoot);
 
         const published = await publish();
@@ -791,16 +790,19 @@ test("local publication retains blocking filenames for the recovery prompt", asy
         await fsWriteFile(`${projectRoot}/README.md`, "user work that must be preserved\n");
         const head = await git(projectRoot, ["rev-parse", "HEAD"]);
         const sealedExecutionCommit = await git(worktree.path, ["rev-parse", "HEAD"]);
-        const error = await assertRejects(() =>
-            publishExecutionWorktreeIsolated({
-                projectRoot,
-                sealedExecutionCommit,
-                executionCwd: worktree.path,
-                executionBranch: worktree.branch,
-                targetBranch: "main",
-                planName: "p",
-                allowedPlanPaths: [],
-            }), IsolatedPublicationError);
+        const error = await assertRejects(
+            () =>
+                publishExecutionWorktreeIsolated({
+                    projectRoot,
+                    sealedExecutionCommit,
+                    executionCwd: worktree.path,
+                    executionBranch: worktree.branch,
+                    targetBranch: "main",
+                    planName: "p",
+                    allowedPlanPaths: [],
+                }),
+            IsolatedPublicationError,
+        );
         assertEquals(normalizePublicationFailure(error).blockingPaths, ["README.md"]);
         assertEquals(await fsReadFile(`${projectRoot}/README.md`, "utf8"), "user work that must be preserved\n");
         assertEquals(await git(projectRoot, ["rev-parse", "HEAD"]), head);

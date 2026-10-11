@@ -67,79 +67,76 @@ async function withSlashFixture(
     options: SlashFixtureOptions,
     run: (fixture: SlashFixture, projectRoot: string) => Promise<void>,
 ): Promise<void> {
-    await withRuntimeCommandFixture(
-        "runwield-slash-dispatch-",
-        async ({ projectRoot, setModelResponse }) => {
-            await writeCatalogFixtures(projectRoot, options);
-            setModelResponse("Fixture turn complete.");
-            const runtime = createSessionRuntime();
-            const created = await runtime.createInteractiveSession({ cwd: projectRoot, mode: "new" });
-            await runtime.renameSession(created.sessionId, "Slash fixture");
-            const messages: string[] = [];
-            const submittedRequests: string[] = [];
-            runtime.subscribeSessionEvents(created.sessionId, (event) => {
-                if (event.type === RuntimeEventTypes.USER_MESSAGE) submittedRequests.push(event.text);
-            });
+    await withRuntimeCommandFixture("runwield-slash-dispatch-", async ({ projectRoot, setModelResponse }) => {
+        await writeCatalogFixtures(projectRoot, options);
+        setModelResponse("Fixture turn complete.");
+        const runtime = createSessionRuntime();
+        const created = await runtime.createInteractiveSession({ cwd: projectRoot, mode: "new" });
+        await runtime.renameSession(created.sessionId, "Slash fixture");
+        const messages: string[] = [];
+        const submittedRequests: string[] = [];
+        runtime.subscribeSessionEvents(created.sessionId, (event) => {
+            if (event.type === RuntimeEventTypes.USER_MESSAGE) submittedRequests.push(event.text);
+        });
 
-            const templates = await runtime.listSessionPromptTemplates(created.sessionId);
-            const promptTemplateByName = new Map(templates.map((template) => [template.name, template]));
-            const skills = (await runtime.listSessionSkills(created.sessionId)).map((skill): SkillMeta => ({
-                name: skill.name,
-                description: skill.description,
-                path: skill.path,
-                source: skill.source,
-                disableModelInvocation: skill.disableModelInvocation,
-            }));
-            const uiAPI: SlashContext["uiAPI"] = {
-                abortActivePrompt: () => {},
-                appendSystemMessage: (message) => messages.push(message),
-                appendAgentMessageStart: () => ({ appendText: () => {} }),
-                requestRender: () => {},
-                promptSelect: () => Promise.resolve(options.selectedAgent ?? null),
-                promptText: () => Promise.resolve(null),
-                showModelSelector: () => {},
-            };
-            const editor: SlashContext["editor"] = {
-                disableSubmit: false,
-                setText: () => {},
-                setAutocompleteProvider: () => {},
-                handleInput: () => {},
-            };
-            const tui: SlashContext["tui"] = {
-                requestRender: () => {},
-                setFocus: () => {},
-            };
-            const context = (userRequest: string): SlashContext => ({
-                userRequest,
-                savedImages: [],
-                sessionId: created.sessionId,
-                sessionRuntime: runtime,
-                uiAPI,
-                editor,
-                tui,
-                sessionStartedAt: new Date().toISOString(),
-                originalHandleInput: () => {},
-                initCommandAvailable: true,
-                promptTemplateByName,
-                skills,
-                chatPromptAgentName: "operator",
-                resolveTemplateModel: () => ({ ok: false }),
-                dispatchExpandedUserRequest: async (text, images) => {
-                    await runtime.promptUserTurn(created.sessionId, {
-                        initialRequest: text,
-                        initialImages: images,
-                    });
-                },
-                generationGuard: createGenerationGuard(),
-            });
+        const templates = await runtime.listSessionPromptTemplates(created.sessionId);
+        const promptTemplateByName = new Map(templates.map((template) => [template.name, template]));
+        const skills = (await runtime.listSessionSkills(created.sessionId)).map((skill): SkillMeta => ({
+            name: skill.name,
+            description: skill.description,
+            path: skill.path,
+            source: skill.source,
+            disableModelInvocation: skill.disableModelInvocation,
+        }));
+        const uiAPI: SlashContext["uiAPI"] = {
+            abortActivePrompt: () => {},
+            appendSystemMessage: (message) => messages.push(message),
+            appendAgentMessageStart: () => ({ appendText: () => {} }),
+            requestRender: () => {},
+            promptSelect: () => Promise.resolve(options.selectedAgent ?? null),
+            promptText: () => Promise.resolve(null),
+            showModelSelector: () => {},
+        };
+        const editor: SlashContext["editor"] = {
+            disableSubmit: false,
+            setText: () => {},
+            setAutocompleteProvider: () => {},
+            handleInput: () => {},
+        };
+        const tui: SlashContext["tui"] = {
+            requestRender: () => {},
+            setFocus: () => {},
+        };
+        const context = (userRequest: string): SlashContext => ({
+            userRequest,
+            savedImages: [],
+            sessionId: created.sessionId,
+            sessionRuntime: runtime,
+            uiAPI,
+            editor,
+            tui,
+            sessionStartedAt: new Date().toISOString(),
+            originalHandleInput: () => {},
+            initCommandAvailable: true,
+            promptTemplateByName,
+            skills,
+            chatPromptAgentName: "operator",
+            resolveTemplateModel: () => ({ ok: false }),
+            dispatchExpandedUserRequest: async (text, images) => {
+                await runtime.promptUserTurn(created.sessionId, {
+                    initialRequest: text,
+                    initialImages: images,
+                });
+            },
+            generationGuard: createGenerationGuard(),
+        });
 
-            try {
-                await run({ context, messages, runtime, sessionId: created.sessionId, submittedRequests }, projectRoot);
-            } finally {
-                runtime.closeAllSessions();
-            }
-        },
-    );
+        try {
+            await run({ context, messages, runtime, sessionId: created.sessionId, submittedRequests }, projectRoot);
+        } finally {
+            runtime.closeAllSessions();
+        }
+    });
 }
 
 test("TUI picker cancellation and unavailable init persist truthful command lifecycles", async () => {
@@ -150,14 +147,20 @@ test("TUI picker cancellation and unavailable init persist truthful command life
         unavailable.initCommandAvailable = false;
         assertEquals(await handleSlashCommand(unavailable), true);
         await drainWorkflowMetrics();
-        const rows = (await fsReadFile(getWorkflowMetricsFilePath(projectRoot), "utf8")).trim().split("\n")
-            .map((line) => JSON.parse(line)).filter((row) => row.category === "command");
-        assertEquals(rows.map((row) => [row.command, row.event, row.phase, row.outcome]), [
-            ["agent", "command_started", "opened", undefined],
-            ["agent", "command_finished", "finish", "canceled"],
-            ["init", "command_started", "start", undefined],
-            ["init", "command_finished", "rejected", "rejected"],
-        ]);
+        const rows = (await fsReadFile(getWorkflowMetricsFilePath(projectRoot), "utf8"))
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line))
+            .filter((row) => row.category === "command");
+        assertEquals(
+            rows.map((row) => [row.command, row.event, row.phase, row.outcome]),
+            [
+                ["agent", "command_started", "opened", undefined],
+                ["agent", "command_finished", "finish", "canceled"],
+                ["init", "command_started", "start", undefined],
+                ["init", "command_finished", "rejected", "rejected"],
+            ],
+        );
         assertEquals(rows[0].commandId, rows[1].commandId);
         assertEquals(rows[2].commandId, rows[3].commandId);
     });
@@ -168,13 +171,19 @@ test("TUI picker selection records failure after dispatch when Agent cannot swit
         await setCustomSetting("workflowMetrics", true, "project", projectRoot);
         assertEquals(await handleSlashCommand(context("/agent")), true);
         await drainWorkflowMetrics();
-        const rows = (await fsReadFile(getWorkflowMetricsFilePath(projectRoot), "utf8")).trim().split("\n")
-            .map((line) => JSON.parse(line)).filter((row) => row.category === "command");
-        assertEquals(rows.map((row) => [row.event, row.phase, row.outcome]), [
-            ["command_started", "opened", undefined],
-            ["command_dispatched", "dispatched", undefined],
-            ["command_finished", "finish", "failed"],
-        ]);
+        const rows = (await fsReadFile(getWorkflowMetricsFilePath(projectRoot), "utf8"))
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line))
+            .filter((row) => row.category === "command");
+        assertEquals(
+            rows.map((row) => [row.event, row.phase, row.outcome]),
+            [
+                ["command_started", "opened", undefined],
+                ["command_dispatched", "dispatched", undefined],
+                ["command_finished", "finish", "failed"],
+            ],
+        );
         assertEquals(new Set(rows.map((row) => row.commandId)).size, 1);
     });
 });
@@ -182,8 +191,11 @@ test("TUI picker selection records failure after dispatch when Agent cannot swit
 test("TUI caught export write error settles the built-in as failed", async () => {
     await withSlashFixture({}, async ({ context }, projectRoot) => {
         await setCustomSetting("workflowMetrics", true, "project", projectRoot);
-        await handleSlashCommand(context("/export /nonexistent-runwield-directory/session.jsonl"));
-        const rows = (await fsReadFile(getWorkflowMetricsFilePath(projectRoot), "utf8")).trim().split("\n")
+        await fsWriteFile(join(projectRoot, "not-a-directory"), "Preserve this file");
+        await handleSlashCommand(context("/export not-a-directory/session.jsonl"));
+        const rows = (await fsReadFile(getWorkflowMetricsFilePath(projectRoot), "utf8"))
+            .trim()
+            .split("\n")
             .map((line) => JSON.parse(line));
         assertEquals(rows.find((row) => row.event === "command_finished")?.outcome, "failed");
     });
@@ -264,9 +276,15 @@ test("handleSlashCommand shows expanded prompt template text from the Core runti
         assertEquals(await handleSlashCommand(context("/review focus on tests")), true);
         assertEquals(submittedRequests, ["Review the fixture carefully.\n\nfocus on tests"]);
         await drainWorkflowMetrics();
-        const rows = (await fsReadFile(getWorkflowMetricsFilePath(projectRoot), "utf8")).trim().split("\n")
-            .map((line) => JSON.parse(line)).filter((row) => row.category === "command" && row.command === "review");
-        assertEquals(rows.map((row) => row.event), ["command_started", "command_finished"]);
+        const rows = (await fsReadFile(getWorkflowMetricsFilePath(projectRoot), "utf8"))
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line))
+            .filter((row) => row.category === "command" && row.command === "review");
+        assertEquals(
+            rows.map((row) => row.event),
+            ["command_started", "command_finished"],
+        );
         assertEquals(new Set(rows.map((row) => row.commandId)).size, 1);
         assertEquals(rows[0].sourceSurface, "tui");
         assertEquals(JSON.stringify(rows).includes("focus on tests"), false);
@@ -295,11 +313,15 @@ test("handleSlashCommand submits skill slash text through the active runtime", a
         assertEquals(await handleSlashCommand(context("/skill:diagnose-fixture inspect the failure")), true);
         assertEquals(submittedRequests, ["/skill:diagnose-fixture inspect the failure"]);
         await drainWorkflowMetrics();
-        const rows = (await fsReadFile(getWorkflowMetricsFilePath(projectRoot), "utf8")).trim().split("\n")
-            .map((line) => JSON.parse(line)).filter((row) =>
-                row.category === "command" && row.command === "diagnose-fixture"
-            );
-        assertEquals(rows.map((row) => row.event), ["command_started", "command_finished"]);
+        const rows = (await fsReadFile(getWorkflowMetricsFilePath(projectRoot), "utf8"))
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line))
+            .filter((row) => row.category === "command" && row.command === "diagnose-fixture");
+        assertEquals(
+            rows.map((row) => row.event),
+            ["command_started", "command_finished"],
+        );
         assertEquals(new Set(rows.map((row) => row.commandId)).size, 1);
         assertEquals(JSON.stringify(rows).includes("inspect the failure"), false);
     });

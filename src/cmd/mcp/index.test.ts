@@ -83,15 +83,16 @@ test("wld mcp agy-cli --setup asks on stderr and installs after yes", async () =
         const binDir = join(home, "bin");
         try {
             await fsMkdir(binDir, { recursive: true });
-            const wldPath = join(binDir, "wld");
-            await fsWriteFile(wldPath, new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 0x00]));
+            const wldPath = join(binDir, process.platform === "win32" ? "wld.exe" : "wld");
+            await fsWriteFile(
+                wldPath,
+                process.platform === "win32"
+                    ? new Uint8Array([0x4d, 0x5a, 0, 0])
+                    : new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 0x00]),
+            );
             await fsChmod(wldPath, 0o755);
 
-            const result = await runCli(
-                ["mcp", "agy-cli", "--setup"],
-                { HOME: home, PATH: binDir },
-                "yes\n",
-            );
+            const result = await runCli(["mcp", "agy-cli", "--setup"], { HOME: home, PATH: binDir }, "yes\n");
 
             assertEquals(result.code, 0);
             assertEquals(result.stdout, "");

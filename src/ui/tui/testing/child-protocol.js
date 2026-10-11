@@ -1,3 +1,4 @@
+import { getCwd } from "../../../constants.js";
 import { rmSync as fsRmSync } from "node:fs";
 import { mkdtemp as fsMkdtemp, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -33,7 +34,11 @@ const REPO_ROOT = fromFileUrl(new URL("../../../..", import.meta.url));
 
 /** @param {string} stdout */
 function parseLastJsonLine(stdout) {
-    const line = stdout.trim().split("\n").toReversed().find((candidate) => candidate.includes("{"));
+    const line = stdout
+        .trim()
+        .split("\n")
+        .toReversed()
+        .find((candidate) => candidate.includes("{"));
     if (!line) return null;
     try {
         return JSON.parse(line.slice(line.indexOf("{")));
@@ -103,39 +108,49 @@ export async function runGoldenScenarioChildProcess(request) {
     // `compilerOptions.types` graph, and the `"vite/client"` entry pulls
     // npm:vite + dependencies — a large registry download on cold caches that
     // stalls scenario startup. The repo type gate is `deno task check`.
-    const result = await runGoldenChild([
-        "run",
-        ...(process.versions.deno ? ["-A", "--no-check", "--node-modules-dir=manual"] : ["--no-install"]),
-        fromFileUrl(import.meta.url),
-        CHILD_FLAG,
-        payload,
-    ], { cwd: REPO_ROOT, timeoutMs: request.timeoutMs || 5000, awaitReadyMarker: true });
+    const result = await runGoldenChild(
+        [
+            "run",
+            ...(process.versions.deno ? ["-A", "--no-check", "--node-modules-dir=manual"] : ["--no-install"]),
+            fromFileUrl(import.meta.url),
+            CHILD_FLAG,
+            payload,
+        ],
+        { cwd: REPO_ROOT, timeoutMs: request.timeoutMs || 5000, awaitReadyMarker: true },
+    );
     const childPayload = parseLastJsonLine(result.stdout);
     // A scenario that declares `expectedCleanExit` terminates the child through
     // the real `/quit` (`Deno.exit(0)`) before its post-composition result is
     // printed; the pre-exit report it logged is the terminal success signal, and
     // the child's exit code 0 is the proof the quit path ran for real.
-    const expectedCleanExit = childPayload && typeof childPayload === "object" &&
+    const expectedCleanExit =
+        childPayload &&
+        typeof childPayload === "object" &&
         /** @type {{ expectedCleanExit?: unknown }} */ (childPayload).expectedCleanExit === true;
     // Backstop for a child that never got to tear itself down: one wedged past
     // the grace window, or crashed before its own cleanup. The child announces
     // its environment root on startup precisely so this path can find it.
     if (!request.keepArtifacts) await removeChildEnvironmentRoot(childPayload);
-    const childReportedFailure = childPayload && typeof childPayload === "object" && "ok" in childPayload &&
-        !/** @type {{ ok?: unknown }} */ (childPayload).ok;
+    const childReportedFailure =
+        childPayload &&
+        typeof childPayload === "object" &&
+        "ok" in childPayload &&
+        !(/** @type {{ ok?: unknown }} */ (childPayload).ok);
     // A success report does not excuse a hung process or unfinished teardown.
     // The scenario must both satisfy its assertions and exit successfully.
     if (childReportedFailure || !result.success || result.timedOut) {
         const artifactDir = await writeChildFailureArtifact(normalizedRequest, result, childPayload);
-        const childArtifact = childPayload && typeof childPayload === "object" && "artifactDir" in childPayload
-            ? `; childArtifactDir=${String(/** @type {{ artifactDir?: unknown }} */ (childPayload).artifactDir || "")}`
-            : "";
+        const childArtifact =
+            childPayload && typeof childPayload === "object" && "artifactDir" in childPayload
+                ? `; childArtifactDir=${String(/** @type {{ artifactDir?: unknown }} */ (childPayload).artifactDir || "")}`
+                : "";
         // The child's own `error` is the unmet expectation; stderr is whatever the
         // composed TUI happened to warn about on the way (a theme notice, say).
         // Reporting stderr first buried every real failure behind unrelated noise.
-        const childError = childPayload && typeof childPayload === "object" && "error" in childPayload
-            ? String(/** @type {{ error?: unknown }} */ (childPayload).error || "")
-            : "";
+        const childError =
+            childPayload && typeof childPayload === "object" && "error" in childPayload
+                ? String(/** @type {{ error?: unknown }} */ (childPayload).error || "")
+                : "";
         const error = new Error(
             `Golden child failed${result.timedOut ? " (timeout)" : ""}; artifactDir=${artifactDir}${childArtifact}: ${
                 childError || result.stderr || result.stdout
@@ -148,10 +163,10 @@ export async function runGoldenScenarioChildProcess(request) {
     if (expectedCleanExit) {
         // The child could not clean up after itself (Deno.exit skips its finally
         // blocks); reclaim its heartbeat artifact root here.
-        const heartbeatArtifactDir = typeof childPayload === "object" && childPayload !== null &&
-                "heartbeatArtifactDir" in childPayload
-            ? /** @type {{ heartbeatArtifactDir?: unknown }} */ (childPayload).heartbeatArtifactDir
-            : null;
+        const heartbeatArtifactDir =
+            typeof childPayload === "object" && childPayload !== null && "heartbeatArtifactDir" in childPayload
+                ? /** @type {{ heartbeatArtifactDir?: unknown }} */ (childPayload).heartbeatArtifactDir
+                : null;
         if (!request.keepArtifacts && typeof heartbeatArtifactDir === "string") {
             await fsRm(heartbeatArtifactDir, { recursive: true }).catch(() => {});
         }
@@ -173,6 +188,7 @@ export async function runGoldenScenarioChildProcess(request) {
 
 /** @param {GoldenChildScenarioRequest} request */
 async function runChild(request) {
+    const previousCwd = getCwd();
     const env = await createGoldenIsolatedEnvironment({
         keep: request.keepArtifacts,
         initDone: request.initDone,
@@ -197,13 +213,15 @@ async function runChild(request) {
             2,
         ),
     );
-    console.log(JSON.stringify({
-        ok: false,
-        heartbeat: true,
-        artifactDir: timeoutArtifactDir,
-        heartbeatArtifactDir: timeoutArtifactDir,
-        env: { root: env.root, projectRoot: env.projectRoot },
-    }));
+    console.log(
+        JSON.stringify({
+            ok: false,
+            heartbeat: true,
+            artifactDir: timeoutArtifactDir,
+            heartbeatArtifactDir: timeoutArtifactDir,
+            env: { root: env.root, projectRoot: env.projectRoot },
+        }),
+    );
     // The runner signals a timed-out child rather than killing it outright, so
     // this handler is the only chance to reclaim the isolated environment. Deno
     // signal handlers run synchronously, so unlink synchronously instead of
@@ -212,6 +230,7 @@ async function runChild(request) {
     const handleTermination = () => {
         if (!request.keepArtifacts) {
             try {
+                process.chdir(previousCwd);
                 fsRmSync(env.root, { recursive: true });
             } catch {
                 // Best effort; the parent sweeps the environment as a backstop.
@@ -250,16 +269,18 @@ async function runChild(request) {
             await fsRm(timeoutArtifactDir, { recursive: true }).catch(() => {});
             console.log(JSON.stringify({ ok: true, result, env: { root: env.root, projectRoot: env.projectRoot } }));
         } catch (error) {
-            console.log(JSON.stringify({
-                ok: false,
-                error: error instanceof Error ? error.message : String(error),
-                artifactDir: /** @type {{ artifactDir?: unknown }} */ (error || {}).artifactDir || null,
-                // Scenario artifacts nest inside this directory, so it is the root a
-                // caller has to remove to reclaim everything the run retained.
-                // `artifactDir` alone names a child of it and leaves the parent behind.
-                heartbeatArtifactDir: timeoutArtifactDir,
-                env: { root: env.root, projectRoot: env.projectRoot },
-            }));
+            console.log(
+                JSON.stringify({
+                    ok: false,
+                    error: error instanceof Error ? error.message : String(error),
+                    artifactDir: /** @type {{ artifactDir?: unknown }} */ (error || {}).artifactDir || null,
+                    // Scenario artifacts nest inside this directory, so it is the root a
+                    // caller has to remove to reclaim everything the run retained.
+                    // `artifactDir` alone names a child of it and leaves the parent behind.
+                    heartbeatArtifactDir: timeoutArtifactDir,
+                    env: { root: env.root, projectRoot: env.projectRoot },
+                }),
+            );
             process.exitCode = 1;
             return;
         }
@@ -267,6 +288,7 @@ async function runChild(request) {
         // A registered signal listener holds the event loop open, so this has to
         // come off before the child can exit on its own.
         process.off("SIGTERM", handleTermination);
+        process.chdir(previousCwd);
         await env.cleanup();
     }
 }

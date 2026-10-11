@@ -1,9 +1,10 @@
 import { delimiter } from "node:path";
-import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
+import { writeRuntimeExecutableFixture } from "../../testing/runtime-executable-fixture.ts";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import {
     chmod as fsChmod,
+    rm as fsRm,
     mkdir as fsMkdir,
     realpath as fsRealpath,
     stat as fsStat,
@@ -26,6 +27,9 @@ import {
 import { SessionHost } from "./session-host.ts";
 import { createSessionRuntime, SessionRuntime } from "./session-runtime.ts";
 
+const WLD_EXECUTABLE = process.platform === "win32" ? "wld.exe" : "wld";
+const AGY_EXECUTABLE = process.platform === "win32" ? "agy.exe" : "agy";
+
 const FIXTURE_MODEL = "runtime-command-fixture/fixture-model";
 const AGY_FLASH = "agy-cli/gemini-3.8-flash";
 
@@ -33,16 +37,15 @@ async function installAgyModelSelectionFixture(homeDir: string): Promise<string>
     const binDir = join(homeDir, "agy-bin");
     await fsMkdir(binDir, { recursive: true });
     // MCP setup inspects this binary header; the model-selection fixture never executes wld.
-    await fsWriteFile(join(binDir, "wld"), new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 0x00]));
-    await fsChmod(join(binDir, "wld"), 0o755);
-    const agyPath = fileURLToPath(new URL("./backends/agy-cli/testing/fake-agy-model-selection.ts", import.meta.url));
     await fsWriteFile(
-        join(binDir, "agy"),
-        `#!/bin/sh\nexec ${
-            [process.execPath, ...runtimeSourceArgs(["run", "-A", agyPath])].map(shellQuote).join(" ")
-        } "$@"\n`,
+        join(binDir, WLD_EXECUTABLE),
+        process.platform === "win32"
+            ? new Uint8Array([0x4d, 0x5a, 0, 0])
+            : new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 0x00]),
     );
-    await fsChmod(join(binDir, "agy"), 0o755);
+    await fsChmod(join(binDir, WLD_EXECUTABLE), 0o755);
+    const agyPath = fileURLToPath(new URL("./backends/agy-cli/testing/fake-agy-model-selection.ts", import.meta.url));
+    await writeRuntimeExecutableFixture(join(binDir, "agy"), agyPath);
     return binDir;
 }
 
@@ -51,7 +54,7 @@ async function pathExists(path: string): Promise<boolean> {
         await fsStat(path);
         return true;
     } catch (error) {
-        if ((error instanceof Error && "code" in error && error.code === "ENOENT")) return false;
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
         throw error;
     }
 }
@@ -67,41 +70,48 @@ test("approved Agy CLI models are registered and accepted by typed execution bac
 });
 
 test("unsupported Agy CLI selection is rejected before approval, agy launch, or global files", async () => {
-    await withRuntimeCommandFixture("runwield-agy-cli-unsupported-", async ({ homeDir, projectRoot }) => {
-        const messages: Array<{ text: string; isError: boolean }> = [];
-        const runtime = createSessionRuntime();
-        const agyLaunchLog = join(homeDir, "agy-launched.log");
-        const previousPath = process.env["PATH"] || "";
-        try {
-            const binDir = await installAgyModelSelectionFixture(homeDir);
-            await fsWriteFile(
-                join(binDir, "agy"),
-                `#!/bin/sh\necho launched >> ${JSON.stringify(agyLaunchLog)}\nexit 2\n`,
-            );
-            await fsChmod(join(binDir, "agy"), 0o755);
-            process.env["PATH"] = `${binDir}${delimiter}${previousPath}`;
-            const { sessionId } = await runtime.createInteractiveSession({ cwd: projectRoot, mode: "new" });
+    await withRuntimeCommandFixture(
+        "runwield-agy-cli-unsupported-",
+        async ({ homeDir, projectRoot }) => {
+            const messages: Array<{ text: string; isError: boolean }> = [];
+            const runtime = createSessionRuntime();
+            const agyLaunchLog = join(homeDir, "agy-launched.log");
+            const previousPath = process.env["PATH"] || "";
+            try {
+                const binDir = await installAgyModelSelectionFixture(homeDir);
+                await fsRm(join(binDir, AGY_EXECUTABLE));
+                const unexpectedSource = join(binDir, "unexpected-launch.ts");
+                await fsWriteFile(
+                    unexpectedSource,
+                    `import { appendFileSync } from "node:fs";
+appendFileSync(${JSON.stringify(agyLaunchLog)}, "launched\\n"); process.exit(2);`,
+                );
+                await writeRuntimeExecutableFixture(join(binDir, "agy"), unexpectedSource);
+                process.env["PATH"] = `${binDir}${delimiter}${previousPath}`;
+                const { sessionId } = await runtime.createInteractiveSession({ cwd: projectRoot, mode: "new" });
 
-            await runModelsCommand(["agy-cli/fixture-model"], {
-                uiAPI: {
-                    appendSystemMessage: (message, isError = false) => messages.push({ text: message, isError }),
-                    promptSelect: () => Promise.resolve(null),
-                },
-                sessionId,
-                sessionRuntime: runtime,
-            });
+                await runModelsCommand(["agy-cli/fixture-model"], {
+                    uiAPI: {
+                        appendSystemMessage: (message, isError = false) => messages.push({ text: message, isError }),
+                        promptSelect: () => Promise.resolve(null),
+                    },
+                    sessionId,
+                    sessionRuntime: runtime,
+                });
 
-            assertEquals(messages.length, 1);
-            assertEquals(messages[0].isError, true);
-            assertStringIncludes(messages[0].text, "Unsupported Antigravity CLI model");
-            assertEquals(runtime.getSessionSnapshot(sessionId)?.activeModel, { model: "", provider: "" });
-            assertEquals(await pathExists(agyLaunchLog), false);
-            assertEquals(await pathExists(join(homeDir, ".gemini")), false);
-        } finally {
-            process.env["PATH"] = previousPath;
-            runtime.closeAllSessions();
-        }
-    }, { providerState: "none" });
+                assertEquals(messages.length, 1);
+                assertEquals(messages[0].isError, true);
+                assertStringIncludes(messages[0].text, "Unsupported Antigravity CLI model");
+                assertEquals(runtime.getSessionSnapshot(sessionId)?.activeModel, { model: "", provider: "" });
+                assertEquals(await pathExists(agyLaunchLog), false);
+                assertEquals(await pathExists(join(homeDir, ".gemini")), false);
+            } finally {
+                process.env["PATH"] = previousPath;
+                runtime.closeAllSessions();
+            }
+        },
+        { providerState: "none" },
+    );
 });
 
 test("declined Agy MCP setup keeps the approved selected model without launching agy", async () => {
@@ -111,13 +121,16 @@ test("declined Agy MCP setup keeps the approved selected model without launching
         const previousPath = process.env["PATH"] || "";
         try {
             const binDir = await installAgyModelSelectionFixture(homeDir);
+            await fsRm(join(binDir, AGY_EXECUTABLE));
+            const unexpectedSource = join(binDir, "unexpected-launch.ts");
             await fsWriteFile(
-                join(binDir, "agy"),
-                `#!/bin/sh\necho launched >> ${JSON.stringify(agyLaunchLog)}\nexit 2\n`,
+                unexpectedSource,
+                `import { appendFileSync } from "node:fs";
+appendFileSync(${JSON.stringify(agyLaunchLog)}, "launched\\n"); process.exit(2);`,
             );
-            await fsChmod(join(binDir, "agy"), 0o755);
+            await writeRuntimeExecutableFixture(join(binDir, "agy"), unexpectedSource);
             process.env["PATH"] = `${binDir}${delimiter}${previousPath}`;
-            assertEquals(await resolveInstalledWldExecutable(), await fsRealpath(join(binDir, "wld")));
+            assertEquals(await resolveInstalledWldExecutable(), await fsRealpath(join(binDir, WLD_EXECUTABLE)));
 
             const sessionHost = new SessionHost();
             const hostedSession = sessionHost.createSession({ cwd: projectRoot });
@@ -210,7 +223,7 @@ test("explicit approved Agy CLI selection updates the active runtime Session mod
         try {
             const binDir = await installAgyModelSelectionFixture(homeDir);
             process.env["PATH"] = `${binDir}${delimiter}${previousPath}`;
-            assertEquals(await resolveInstalledWldExecutable(), await fsRealpath(join(binDir, "wld")));
+            assertEquals(await resolveInstalledWldExecutable(), await fsRealpath(join(binDir, WLD_EXECUTABLE)));
             await installAgyCliMcpSetup();
             const { sessionId } = await runtime.createInteractiveSession({ cwd: projectRoot, mode: "new" });
             await runModelsCommand([FIXTURE_MODEL], {
@@ -252,7 +265,3 @@ test("explicit approved Agy CLI selection updates the active runtime Session mod
         }
     });
 });
-
-function shellQuote(value: string): string {
-    return "'" + value.replaceAll("'", "'\"'\"'") + "'";
-}

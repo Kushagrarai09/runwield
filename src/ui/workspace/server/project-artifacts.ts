@@ -18,7 +18,7 @@ function markdownTitle(markdown, fallback) {
 export async function assertContainedProjectPath(root, path) {
     const canonicalRoot = await fsRealpath(root);
     const canonicalPath = await fsRealpath(path);
-    const contained = relative(canonicalRoot, canonicalPath);
+    const contained = relative(canonicalRoot, canonicalPath).replaceAll("\\", "/");
     if (isAbsolute(contained) || contained === ".." || contained.startsWith("../")) {
         throw new Error("Artifact identity leaves the Project.");
     }
@@ -49,7 +49,9 @@ export async function assertAuthorizedPlanPath(root, path, planName) {
 /** @param {string} root @param {string} relativePath */
 export async function readSafeProjectMarkdown(root, relativePath) {
     if (
-        !relativePath || relativePath.startsWith("/") || relativePath.split("/").includes("..") ||
+        !relativePath ||
+        relativePath.startsWith("/") ||
+        relativePath.split("/").includes("..") ||
         !relativePath.endsWith(".md")
     ) {
         throw new Error("Artifact identity is invalid.");
@@ -109,8 +111,8 @@ async function currentWorkRecords(root) {
 export async function readProjectArtifact(root, type, sourceId) {
     if (!PROJECT_ARTIFACT_TYPES.has(type)) throw new Error("Artifact type is not supported.");
     if (type === "work-record") {
-        const matches = (await currentWorkRecords(root)).filter((record) =>
-            record.attrs.recordId.toLowerCase() === sourceId.toLowerCase()
+        const matches = (await currentWorkRecords(root)).filter(
+            (record) => record.attrs.recordId.toLowerCase() === sourceId.toLowerCase(),
         );
         if (matches.length > 1) {
             throw new Error("Duplicate Work Record identity. Repair the Project before opening it.");

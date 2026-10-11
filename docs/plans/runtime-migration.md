@@ -809,7 +809,7 @@ Remote sentinel containment and architecture-policy checks now handle native pat
 Executable test fixtures now compile native Windows helpers instead of relying on shebang
 execution. Tests retain real Git, process and lifecycle behavior; no owned-code seam is added.
 POSIX mode/FIFO-specific checks are explicitly platform-scoped and do not establish Windows ACL
-privacy. Four disjoint source shards per architecture retain all 648 inventory files, with the
+privacy. Four disjoint source shards per architecture retain all 649 inventory files, with the
 normal bounded ten-minute file allowance, forty-minute source steps and sixty-minute jobs.
 No native source-suite pass is claimed before all shards complete.
 
@@ -852,3 +852,17 @@ Unicode-named file bytes at the advertised path; a wrong-path mutation fails tha
 Bun and Deno pass the transport file (seven active cases, two existing Linux kernel-mount cases
 skipped). Types and lint pass, and independent spec/standards review has no findings. Native
 Windows file access and the full source inventory remain pending.
+
+The complete x64 source baseline at `ce9105004` ran 649 unique files: 543 passed and
+106 failed. Failures include portable-fixture gaps as well as application defects; this is
+not a passing Windows source gate. The next reviewed correction batch fixes native Project
+artifact traversal checks, closes a failed remote-database initialization handle, and ends
+Git diff revision ranges with `--` to avoid Windows long-path ambiguity. Golden children
+leave their sandbox cwd before cleanup; native Agy/MCP fixtures, filesystem expectations,
+background commands, and export-failure fixtures preserve their existing behavior assertions.
+Source CI now builds Workspace assets before running the inventory.
+
+All 17 affected regression files pass on macOS Bun and in the separate Deno checkout
+(Deno: 87.0 seconds). Types pass across 1,303 entries; lint passes across 1,437 files.
+Independent Spec and Standards reviews approved all 17 changed code/workflow paths with
+zero findings. The next native Windows run must establish the actual platform result.

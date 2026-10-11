@@ -114,18 +114,20 @@ async function recordActiveAttempt(cwd, planName) {
         registryPath,
         JSON.stringify({
             version: 2,
-            entries: [{
-                id: "attempt-one",
-                planName,
-                path: cwd,
-                branch: "worktree/test",
-                baseBranch: "main",
-                baseRef: "refs/heads/main",
-                baseCommit: "a".repeat(40),
-                status: "active",
-                createdAt: "2026-01-01T00:00:00.000Z",
-                updatedAt: "2026-01-01T00:00:00.000Z",
-            }],
+            entries: [
+                {
+                    id: "attempt-one",
+                    planName,
+                    path: cwd,
+                    branch: "worktree/test",
+                    baseBranch: "main",
+                    baseRef: "refs/heads/main",
+                    baseCommit: "a".repeat(40),
+                    status: "active",
+                    createdAt: "2026-01-01T00:00:00.000Z",
+                    updatedAt: "2026-01-01T00:00:00.000Z",
+                },
+            ],
         }),
     );
 }
@@ -404,11 +406,7 @@ collaborationRecommendation: false
         reason: "invalid_execution_agent",
         error: "Invalid executionAgent: 123. Supported values are engineer and frontend-engineer.",
     });
-    assertThrows(
-        () => injectFrontMatter("# Bad\n", { executionAgent: 123 }),
-        Error,
-        "Invalid executionAgent: 123",
-    );
+    assertThrows(() => injectFrontMatter("# Bad\n", { executionAgent: 123 }), Error, "Invalid executionAgent: 123");
     assertThrows(
         () => injectFrontMatter("# Bad\n", { executionAgent: "frontend-engineer", collaborationRecommendation: false }),
         Error,
@@ -624,15 +622,11 @@ test("order front matter round trips and numeric strings normalize", () => {
     assertEquals(withOrder.includes("parentPlan:"), true);
     assertEquals(withOrder.indexOf("parentPlan:") < withOrder.indexOf("order:"), true);
 
-    const parsedString = parsePlanFrontMatter([
-        "---",
-        "classification: FEATURE",
-        "summary: child",
-        "parentPlan: epic-a",
-        'order: "4"',
-        "---",
-        "# Child",
-    ].join("\n"));
+    const parsedString = parsePlanFrontMatter(
+        ["---", "classification: FEATURE", "summary: child", "parentPlan: epic-a", 'order: "4"', "---", "# Child"].join(
+            "\n",
+        ),
+    );
     assertEquals(parsedString.attrs.order, 4);
 });
 
@@ -668,8 +662,14 @@ testWithFs(
                 idGenerator: () => ids.shift() || "fallback-id",
             });
 
-            assertEquals(resources.map((resource) => resource.planName), ["existing", "missing"]);
-            assertEquals(resources.map((resource) => resource.planId), ["existing-id", "new-id"]);
+            assertEquals(
+                resources.map((resource) => resource.planName),
+                ["existing", "missing"],
+            );
+            assertEquals(
+                resources.map((resource) => resource.planId),
+                ["existing-id", "new-id"],
+            );
         } finally {
             await fsRm(cwd, { recursive: true });
         }
@@ -803,10 +803,22 @@ test("groupPlanHierarchy groups Epics, nested children, standalone, and orphaned
     ];
 
     const grouped = groupPlanHierarchy(/** @type {any} */ (plans));
-    assertEquals(grouped.epics.map((plan) => plan.name), ["epic"]);
-    assertEquals((grouped.childrenByParent.get("epic") || []).map((plan) => plan.name), ["epic/child"]);
-    assertEquals(grouped.standalone.map((plan) => plan.name), ["solo"]);
-    assertEquals(grouped.orphanChildren.map((plan) => plan.name), ["orphan/child"]);
+    assertEquals(
+        grouped.epics.map((plan) => plan.name),
+        ["epic"],
+    );
+    assertEquals(
+        (grouped.childrenByParent.get("epic") || []).map((plan) => plan.name),
+        ["epic/child"],
+    );
+    assertEquals(
+        grouped.standalone.map((plan) => plan.name),
+        ["solo"],
+    );
+    assertEquals(
+        grouped.orphanChildren.map((plan) => plan.name),
+        ["orphan/child"],
+    );
     assertEquals(countChildPlanProgress(/** @type {any} */ (plans.slice(1, 4))), {
         verified: 1,
         userVerified: 0,
@@ -937,7 +949,7 @@ testWithFs("plan-store saves, loads, lists, and resolves project plans", async (
             },
         );
 
-        assertEquals(savedPath, `${getPlansDir(cwd)}/ship-tests.md`);
+        assertEquals(savedPath, join(getPlansDir(cwd), "ship-tests.md"));
 
         const loaded = await loadPlan(cwd, "ship-tests");
         assertEquals(loaded?.attrs.classification, "PROJECT");
@@ -945,7 +957,10 @@ testWithFs("plan-store saves, loads, lists, and resolves project plans", async (
         assertEquals(loaded?.body.trim(), "## Context\nCoverage push\n\n## Objective\nGrow coverage");
 
         const listed = await listPlans(cwd);
-        assertEquals(listed.map((plan) => plan.name), ["ship-tests"]);
+        assertEquals(
+            listed.map((plan) => plan.name),
+            ["ship-tests"],
+        );
         assertEquals(listed[0].attrs.summary, "Coverage push");
 
         const resolvedByName = await resolvePlan(cwd, "ship-tests");
@@ -966,9 +981,15 @@ testWithFs("savePlan refuses unversioned overwrites of existing canonical Plans"
         );
         const loaded = await loadPlan(cwd, "requires-cas");
         if (!loaded) throw new Error("Expected Plan to exist");
-        await savePlan(cwd, "requires-cas", "# Overwrite", { status: "draft" }, {
-            expectedRevision: loaded.revision,
-        });
+        await savePlan(
+            cwd,
+            "requires-cas",
+            "# Overwrite",
+            { status: "draft" },
+            {
+                expectedRevision: loaded.revision,
+            },
+        );
         assertEquals((await loadPlan(cwd, "requires-cas"))?.body.trim(), "# Overwrite");
     } finally {
         await fsRm(cwd, { recursive: true });
@@ -1013,22 +1034,25 @@ testWithFs("listPlans sorts by status, classification, then name", async () => {
             });
         }
 
-        assertEquals((await listPlans(cwd)).map((plan) => plan.name), [
-            "a-failed-project",
-            "z-failed-project",
-            "z-failed-feature",
-            "implemented-feature",
-            "ready-project",
-            "ready-feature",
-            "decompose-project",
-            "draft-feature",
-            "feedback-feature",
-            "approved-feature",
-            "in-progress-feature",
-            "verified-feature",
-            "closed-feature",
-            "held-feature",
-        ]);
+        assertEquals(
+            (await listPlans(cwd)).map((plan) => plan.name),
+            [
+                "a-failed-project",
+                "z-failed-project",
+                "z-failed-feature",
+                "implemented-feature",
+                "ready-project",
+                "ready-feature",
+                "decompose-project",
+                "draft-feature",
+                "feedback-feature",
+                "approved-feature",
+                "in-progress-feature",
+                "verified-feature",
+                "closed-feature",
+                "held-feature",
+            ],
+        );
     } finally {
         await fsRm(cwd, { recursive: true });
     }
@@ -1065,7 +1089,10 @@ testWithFs("plan-store preserves Epic and nested child metadata", async () => {
         assertEquals(child?.attrs.dependencies, ["feature0", "project-breakdown-epic/feature0"]);
 
         const listed = await listPlans(cwd);
-        assertEquals(listed.map((plan) => plan.name), ["project-breakdown-epic", "project-breakdown-epic/feature1"]);
+        assertEquals(
+            listed.map((plan) => plan.name),
+            ["project-breakdown-epic", "project-breakdown-epic/feature1"],
+        );
 
         const resolvedChild = await resolvePlan(cwd, "project-breakdown-epic/feature1");
         assertEquals(resolvedChild.planName, "project-breakdown-epic/feature1");
@@ -1075,7 +1102,10 @@ testWithFs("plan-store preserves Epic and nested child metadata", async () => {
         assertEquals(resolvedChildWithExtension.planName, "project-breakdown-epic/feature1");
 
         const children = await findPlansByParent(cwd, "project-breakdown-epic");
-        assertEquals(children.map((plan) => plan.name), ["project-breakdown-epic/feature1"]);
+        assertEquals(
+            children.map((plan) => plan.name),
+            ["project-breakdown-epic/feature1"],
+        );
     } finally {
         await fsRm(cwd, { recursive: true });
     }
@@ -1102,7 +1132,10 @@ testWithFs("listPlans hides archived plans", async () => {
         });
 
         const listed = await listPlans(cwd);
-        assertEquals(listed.map((plan) => plan.name), ["active-plan"]);
+        assertEquals(
+            listed.map((plan) => plan.name),
+            ["active-plan"],
+        );
 
         const explicitArchived = await loadPlan(cwd, "archived/old-plan");
         assertEquals(explicitArchived?.attrs.summary, "Hidden plan");
@@ -1128,8 +1161,14 @@ testWithFs("archivePlan moves verified nested plans with metadata and hides them
 
         assertEquals(archived.name, "epic/01-child");
         assertEquals(archived.relativePath, "docs/plans/archived/epic/01-child.md");
-        assertEquals((await listPlans(cwd)).map((plan) => plan.name), []);
-        assertEquals((await listArchivedPlans(cwd)).map((plan) => plan.name), ["epic/01-child"]);
+        assertEquals(
+            (await listPlans(cwd)).map((plan) => plan.name),
+            [],
+        );
+        assertEquals(
+            (await listArchivedPlans(cwd)).map((plan) => plan.name),
+            ["epic/01-child"],
+        );
 
         const loaded = await loadArchivedPlan(cwd, "epic/01-child");
         assertEquals(loaded?.attrs.status, "verified");
@@ -1197,14 +1236,23 @@ testWithFs("archivePlansByStatus archives matching parents with all children and
             now: "2026-07-04T00:00:00.000Z",
         });
 
-        assertEquals(result.matched.map((plan) => plan.name), ["epic", "epic/01-child", "standalone"]);
-        assertEquals(result.archived.map((plan) => plan.relativePath), [
-            "docs/plans/archived/epic.md",
-            "docs/plans/archived/epic/01-child.md",
-            "docs/plans/archived/standalone.md",
-        ]);
+        assertEquals(
+            result.matched.map((plan) => plan.name),
+            ["epic", "epic/01-child", "standalone"],
+        );
+        assertEquals(
+            result.archived.map((plan) => plan.relativePath),
+            [
+                "docs/plans/archived/epic.md",
+                "docs/plans/archived/epic/01-child.md",
+                "docs/plans/archived/standalone.md",
+            ],
+        );
         assertEquals(result.failed, []);
-        assertEquals((await listPlans(cwd)).map((plan) => plan.name), ["draft", "closed"]);
+        assertEquals(
+            (await listPlans(cwd)).map((plan) => plan.name),
+            ["draft", "closed"],
+        );
         const archivedChild = await loadArchivedPlan(cwd, "epic/01-child");
         assertEquals(archivedChild?.attrs.archivedAt, "2026-07-04T00:00:00.000Z");
         assertEquals(archivedChild?.attrs.archiveReason, "done");
@@ -1229,7 +1277,10 @@ testWithFs("archivePlansByStatus ignores children when parent status does not ma
         const result = await archivePlansByStatus(cwd, "verified", { now: "2026-07-04T00:00:00.000Z" });
 
         assertEquals(result, { matched: [], archived: [], failed: [] });
-        assertEquals((await listPlans(cwd)).map((plan) => plan.name), ["epic", "epic/01-child"]);
+        assertEquals(
+            (await listPlans(cwd)).map((plan) => plan.name),
+            ["epic", "epic/01-child"],
+        );
         assertEquals(await listArchivedPlans(cwd), []);
     } finally {
         await fsRm(cwd, { recursive: true });
@@ -1247,13 +1298,25 @@ testWithFs("archivePlansByStatus keeps archiving safe matches when other matches
 
         const result = await archivePlansByStatus(cwd, "verified", { now: "2026-07-04T00:00:00.000Z" });
 
-        assertEquals(result.matched.map((plan) => plan.name), ["blocked", "dup", "ok"]);
+        assertEquals(
+            result.matched.map((plan) => plan.name),
+            ["blocked", "dup", "ok"],
+        );
         assertEquals(result.archived, [{ name: "ok", relativePath: "docs/plans/archived/ok.md" }]);
-        assertEquals(result.failed.map((plan) => plan.name), ["blocked", "dup"]);
+        assertEquals(
+            result.failed.map((plan) => plan.name),
+            ["blocked", "dup"],
+        );
         assertStringIncludes(result.failed[0].message, "worktreeStatus active");
         assertStringIncludes(result.failed[1].message, "already exists");
-        assertEquals((await listPlans(cwd)).map((plan) => plan.name), ["blocked", "dup"]);
-        assertEquals((await listArchivedPlans(cwd)).map((plan) => plan.name), ["dup", "ok"]);
+        assertEquals(
+            (await listPlans(cwd)).map((plan) => plan.name),
+            ["blocked", "dup"],
+        );
+        assertEquals(
+            (await listArchivedPlans(cwd)).map((plan) => plan.name),
+            ["dup", "ok"],
+        );
     } finally {
         await fsRm(cwd, { recursive: true });
     }
@@ -1395,7 +1458,10 @@ testWithFs("archived listing skips malformed files while direct reads report par
         await fsWriteFile(`${getPlansDir(cwd)}/archived/bad.md`, "---\nsummary: [unterminated\n---\n# Bad\n");
 
         const listed = await listArchivedPlans(cwd);
-        assertEquals(listed.map((plan) => plan.name), ["good"]);
+        assertEquals(
+            listed.map((plan) => plan.name),
+            ["good"],
+        );
         await assertRejects(
             () => loadArchivedPlan(cwd, "bad"),
             Error,
@@ -1445,10 +1511,13 @@ testWithFs("saveChildFeaturePlans creates draft child FEATURE plans with order a
             },
         ]);
 
-        assertEquals(results.map((result) => ({ name: result.name, action: result.action })), [
-            { name: "project-breakdown-epic/01-preserve-epic-and-child-metadata", action: "created" },
-            { name: "project-breakdown-epic/02-load-child-features", action: "created" },
-        ]);
+        assertEquals(
+            results.map((result) => ({ name: result.name, action: result.action })),
+            [
+                { name: "project-breakdown-epic/01-preserve-epic-and-child-metadata", action: "created" },
+                { name: "project-breakdown-epic/02-load-child-features", action: "created" },
+            ],
+        );
         assertEquals(results[0].metadata, {
             classification: "PLANNED_CHANGE",
             status: "draft",
@@ -1535,12 +1604,10 @@ testWithFs("findPlansByParent sorts child plans by order before name", async () 
         await savePlan(cwd, "epic-sort/04-also-second", "# Also Second", { parentPlan: "epic-sort", order: 2 });
 
         const children = await findPlansByParent(cwd, "epic-sort");
-        assertEquals(children.map((child) => child.name), [
-            "epic-sort/02-second",
-            "epic-sort/04-also-second",
-            "epic-sort/03-third",
-            "epic-sort/01-legacy",
-        ]);
+        assertEquals(
+            children.map((child) => child.name),
+            ["epic-sort/02-second", "epic-sort/04-also-second", "epic-sort/03-third", "epic-sort/01-legacy"],
+        );
     } finally {
         await fsRm(cwd, { recursive: true });
     }
@@ -1559,11 +1626,13 @@ testWithFs("saveChildFeaturePlans updates existing drafts at stable child paths"
         };
         await saveChildFeaturePlans(cwd, "epic-a", [descriptor]);
 
-        const results = await saveChildFeaturePlans(cwd, "epic-a", [{
-            ...descriptor,
-            summary: "Updated summary",
-            content: "# Write Draft Plans\n\n## Context\nUpdated summary\n\nUpdated content",
-        }]);
+        const results = await saveChildFeaturePlans(cwd, "epic-a", [
+            {
+                ...descriptor,
+                summary: "Updated summary",
+                content: "# Write Draft Plans\n\n## Context\nUpdated summary\n\nUpdated content",
+            },
+        ]);
 
         assertEquals(results[0].action, "updated");
         const loaded = await loadPlan(cwd, "epic-a/01-write-draft-plans");
@@ -1603,14 +1672,16 @@ testWithFs("saveChildFeaturePlans rejects invalid child and parent names", async
         );
         await assertRejects(
             () =>
-                saveChildFeaturePlans(cwd, "epic-a", [{
-                    sequence: 1,
-                    title: "...",
-                    summary: "Bad child",
-                    affectedPaths: [],
-                    dependencies: [],
-                    content: "# Bad",
-                }]),
+                saveChildFeaturePlans(cwd, "epic-a", [
+                    {
+                        sequence: 1,
+                        title: "...",
+                        summary: "Bad child",
+                        affectedPaths: [],
+                        dependencies: [],
+                        content: "# Bad",
+                    },
+                ]),
             Error,
             "Child plan title must produce a valid plan name",
         );
@@ -1690,11 +1761,7 @@ testWithFs("plan-store updates preserve parent-child metadata and unknown front 
 testWithFs("plan-store rejects stored plan names that escape plans directory", async () => {
     const cwd = await makeTempDirectory({ prefix: "runwield-fixture-" });
     try {
-        await assertRejects(
-            () => savePlan(cwd, "../outside", "# Bad"),
-            Error,
-            "Plan name cannot escape docs/plans/",
-        );
+        await assertRejects(() => savePlan(cwd, "../outside", "# Bad"), Error, "Plan name cannot escape docs/plans/");
         await assertRejects(
             () => savePlan(cwd, "/tmp/outside", "# Bad"),
             Error,
@@ -1720,11 +1787,7 @@ testWithFs("plan-store resolves external plans and injects defaults when front m
         assertEquals(resolved.planName, "outside");
         assertEquals(resolved.attrs.origin, "external");
 
-        await assertRejects(
-            () => resolvePlan(cwd, "missing"),
-            Error,
-            "Plan not found: missing",
-        );
+        await assertRejects(() => resolvePlan(cwd, "missing"), Error, "Plan not found: missing");
     } finally {
         await fsRm(cwd, { recursive: true });
     }
@@ -1780,32 +1843,38 @@ test("delivery evidence front matter validates compact shapes and rejects malfor
     assertEquals(parsed.attrs.executionMode, "worktree");
     assertEquals(parsed.attrs.deliveryEvidence, worktreeEvidence);
 
-    const nonGit = parsePlanFrontMatter(injectFrontMatter("## Body", {
-        executionMode: "non_git_in_place",
-        deliveryEvidence: /** @type {any} */ ({
-            version: 1,
-            mode: "non_git_in_place",
-            projectRoot: "/tmp/must-not-survive",
-            validationCwd: "/tmp/must-not-survive",
-            validatedAt: "2026-07-24T00:00:00.000Z",
+    const nonGit = parsePlanFrontMatter(
+        injectFrontMatter("## Body", {
+            executionMode: "non_git_in_place",
+            deliveryEvidence: /** @type {any} */ ({
+                version: 1,
+                mode: "non_git_in_place",
+                projectRoot: "/tmp/must-not-survive",
+                validationCwd: "/tmp/must-not-survive",
+                validatedAt: "2026-07-24T00:00:00.000Z",
+            }),
         }),
-    }));
+    );
     assertEquals(nonGit.attrs.deliveryEvidence, { version: 1, mode: "non_git_in_place" });
 
-    const malformed = parsePlanFrontMatter(injectFrontMatter("## Body", {
-        deliveryEvidence: /** @type {any} */ ({ version: 1, mode: "worktree_merge", executionCommit: "not-a-sha" }),
-    }));
+    const malformed = parsePlanFrontMatter(
+        injectFrontMatter("## Body", {
+            deliveryEvidence: /** @type {any} */ ({ version: 1, mode: "worktree_merge", executionCommit: "not-a-sha" }),
+        }),
+    );
     assertEquals(malformed.attrs.deliveryEvidence, undefined);
 
-    const partialSha = parsePlanFrontMatter(injectFrontMatter("## Body", {
-        deliveryEvidence: /** @type {any} */ ({
-            version: 1,
-            mode: "worktree_merge",
-            executionCommit: "a".repeat(39),
-            targetBranch: "main",
-            targetHeadBeforeMerge: "b".repeat(40),
+    const partialSha = parsePlanFrontMatter(
+        injectFrontMatter("## Body", {
+            deliveryEvidence: /** @type {any} */ ({
+                version: 1,
+                mode: "worktree_merge",
+                executionCommit: "a".repeat(39),
+                targetBranch: "main",
+                targetHeadBeforeMerge: "b".repeat(40),
+            }),
         }),
-    }));
+    );
     assertEquals(partialSha.attrs.deliveryEvidence, undefined);
 
     const cleared = parsePlanFrontMatter(injectFrontMatter(markdown, { deliveryEvidence: null, executionMode: null }));
@@ -1999,12 +2068,17 @@ testWithFs("updatePlanFrontMatter fails closed on malformed front matter", async
         const malformed = await fsReadFile(join(plansDir, `healed.md`), "utf8");
         await assertRejects(
             () =>
-                updatePlanFrontMatter(cwd, "healed", { status: "feedback" }, {
-                    classification: "QUICK_FIX",
-                    complexity: "LOW",
-                    summary: "Recovered",
-                    affectedPaths: ["src/a.js"],
-                }),
+                updatePlanFrontMatter(
+                    cwd,
+                    "healed",
+                    { status: "feedback" },
+                    {
+                        classification: "QUICK_FIX",
+                        complexity: "LOW",
+                        summary: "Recovered",
+                        affectedPaths: ["src/a.js"],
+                    },
+                ),
             PlanFrontMatterParseError,
             "healed.md",
         );
@@ -2021,36 +2095,16 @@ testWithFs("updatePlanFrontMatter fails closed on malformed front matter", async
 });
 
 test("parsePlanFrontMatter normalizes legacy and invalid statuses", () => {
-    const completed = parsePlanFrontMatter([
-        "---",
-        'status: "completed"',
-        "---",
-        "body",
-    ].join("\n"));
+    const completed = parsePlanFrontMatter(["---", 'status: "completed"', "---", "body"].join("\n"));
     assertEquals(completed.attrs.status, "verified");
 
-    const inReview = parsePlanFrontMatter([
-        "---",
-        'status: "in_review"',
-        "---",
-        "body",
-    ].join("\n"));
+    const inReview = parsePlanFrontMatter(["---", 'status: "in_review"', "---", "body"].join("\n"));
     assertEquals(inReview.attrs.status, "feedback");
 
-    const readyForReview = parsePlanFrontMatter([
-        "---",
-        'status: "ready_for_review"',
-        "---",
-        "body",
-    ].join("\n"));
+    const readyForReview = parsePlanFrontMatter(["---", 'status: "ready_for_review"', "---", "body"].join("\n"));
     assertEquals(readyForReview.attrs.status, "implemented");
 
-    const invalid = parsePlanFrontMatter([
-        "---",
-        'status: "whatever"',
-        "---",
-        "body",
-    ].join("\n"));
+    const invalid = parsePlanFrontMatter(["---", 'status: "whatever"', "---", "body"].join("\n"));
     assertEquals(invalid.attrs.status, "draft");
 });
 
@@ -2186,8 +2240,14 @@ testWithFs(
                 idGenerator: () => ids.shift() || "unused",
             });
 
-            assertEquals(resources.map((resource) => resource.name), ["a", "b"]);
-            assertEquals(resources.map((resource) => resource.planId), ["existing", "generated"]);
+            assertEquals(
+                resources.map((resource) => resource.name),
+                ["a", "b"],
+            );
+            assertEquals(
+                resources.map((resource) => resource.planId),
+                ["existing", "generated"],
+            );
             assertEquals((await loadPlan(cwd, "archived/old"))?.attrs.planId, undefined);
         } finally {
             await fsRm(cwd, { recursive: true });
@@ -2229,15 +2289,22 @@ test("shared hierarchy helpers match Epic, child, orphan, standalone, and progre
     assertEquals(isEpicPlan(plans[0].attrs), true);
     assertEquals(isChildFeaturePlan(plans[1]), true);
     const grouped = groupPlanHierarchy(plans);
-    assertEquals(grouped.epics.map((plan) => plan.name), ["epic"]);
-    assertEquals((grouped.childrenByParent.get("epic") || []).map((plan) => plan.name), [
-        "epic/01-done",
-        "epic/02-active",
-        "epic/03-failed",
-        "epic/04-todo",
-    ]);
-    assertEquals(grouped.orphanChildren.map((plan) => plan.name), ["orphan/01-child"]);
-    assertEquals(grouped.standalone.map((plan) => plan.name), ["standalone"]);
+    assertEquals(
+        grouped.epics.map((plan) => plan.name),
+        ["epic"],
+    );
+    assertEquals(
+        (grouped.childrenByParent.get("epic") || []).map((plan) => plan.name),
+        ["epic/01-done", "epic/02-active", "epic/03-failed", "epic/04-todo"],
+    );
+    assertEquals(
+        grouped.orphanChildren.map((plan) => plan.name),
+        ["orphan/01-child"],
+    );
+    assertEquals(
+        grouped.standalone.map((plan) => plan.name),
+        ["standalone"],
+    );
     assertEquals(countChildPlanProgress(grouped.childrenByParent.get("epic") || []), {
         verified: 1,
         userVerified: 0,
@@ -2391,10 +2458,16 @@ testWithFs("locked shared plan writes require exact collaboration bypass", async
     );
     const before = await loadPlan(cwd, "locked");
     if (!before) throw new Error("Expected locked Plan to exist");
-    await savePlan(cwd, "locked", "## Plan\n\nChanged", {}, {
-        collaborationLockBypass: COLLABORATION_LOCK_BYPASS.pull,
-        expectedRevision: before.revision,
-    });
+    await savePlan(
+        cwd,
+        "locked",
+        "## Plan\n\nChanged",
+        {},
+        {
+            collaborationLockBypass: COLLABORATION_LOCK_BYPASS.pull,
+            expectedRevision: before.revision,
+        },
+    );
     const loaded = await loadPlan(cwd, "locked");
     if (!loaded) throw new Error("Expected locked Plan to exist");
     assertStringIncludes(loaded.body, "Changed");
@@ -2426,26 +2499,35 @@ testWithFs("malformed remote-canonical front matter variants reject recovery wri
 testWithFs("saveChildFeaturePlans rejects stale expected child revisions", async () => {
     const cwd = await makeTempDirectory({ prefix: "runwield-fixture-" });
     try {
-        await saveChildFeaturePlans(cwd, "epic", [{
-            title: "Child",
-            order: 1,
-            summary: "Original",
-            affectedPaths: [],
-            dependencies: [],
-            content: "# Original",
-        }]);
+        await saveChildFeaturePlans(cwd, "epic", [
+            {
+                title: "Child",
+                order: 1,
+                summary: "Original",
+                affectedPaths: [],
+                dependencies: [],
+                content: "# Original",
+            },
+        ]);
         const child = await loadPlan(cwd, "epic/01-child");
         await updatePlanFrontMatterForTest(cwd, "epic/01-child", { complexity: "HIGH" });
         await assertRejects(
             () =>
-                saveChildFeaturePlans(cwd, "epic", [{
-                    title: "Child",
-                    order: 1,
-                    summary: "Overwrite attempt",
-                    affectedPaths: [],
-                    dependencies: [],
-                    content: "# Overwrite",
-                }], { expectedRevisions: { "epic/01-child": child?.revision || "missing" } }),
+                saveChildFeaturePlans(
+                    cwd,
+                    "epic",
+                    [
+                        {
+                            title: "Child",
+                            order: 1,
+                            summary: "Overwrite attempt",
+                            affectedPaths: [],
+                            dependencies: [],
+                            content: "# Overwrite",
+                        },
+                    ],
+                    { expectedRevisions: { "epic/01-child": child?.revision || "missing" } },
+                ),
             StalePlanWriteError,
         );
         assertEquals((await loadPlan(cwd, "epic/01-child"))?.attrs.complexity, "HIGH");
@@ -2459,14 +2541,16 @@ testWithFs("saveChildFeaturePlans rejects overwriting locked child plans", async
     await savePlan(cwd, "epic/01-child", "## Child\n\nOriginal", lockedPlanFrontMatter());
     await assertRejects(
         () =>
-            saveChildFeaturePlans(cwd, "epic", [{
-                title: "Child",
-                summary: "Changed",
-                affectedPaths: [],
-                dependencies: [],
-                content: "## Child\n\nChanged",
-                order: 1,
-            }]),
+            saveChildFeaturePlans(cwd, "epic", [
+                {
+                    title: "Child",
+                    summary: "Changed",
+                    affectedPaths: [],
+                    dependencies: [],
+                    content: "## Child\n\nChanged",
+                    order: 1,
+                },
+            ]),
         SharedPlanLockError,
     );
     const loaded = await loadPlan(cwd, "epic/01-child");
@@ -2623,12 +2707,9 @@ testWithFs("clearPlanCollaborationMetadata removes lock metadata and preserves b
         lockedPlanFrontMatter({ status: "approved", summary: "Keep me", planId: "plan-1" }),
     );
 
-    const attrs = await clearPlanCollaborationMetadata(
-        cwd,
-        "locked",
-        COLLABORATION_LOCK_BYPASS.unshare,
-        { updatedAt: "2026-07-04T12:00:00.000Z" },
-    );
+    const attrs = await clearPlanCollaborationMetadata(cwd, "locked", COLLABORATION_LOCK_BYPASS.unshare, {
+        updatedAt: "2026-07-04T12:00:00.000Z",
+    });
     const loaded = await loadPlan(cwd, "locked");
     if (!loaded) throw new Error("Expected locked Plan to exist");
     const markdown = await fsReadFile(loaded.path, "utf8");
@@ -2748,35 +2829,43 @@ testWithFs(
         const cwd = await makeTempDirectory({ prefix: "runwield-fixture-" });
         try {
             await savePlan(cwd, "epic", "# Epic", { classification: "PROJECT", status: "approved" });
-            await saveChildFeaturePlans(cwd, "epic", [{
-                title: "Child",
-                order: 1,
-                summary: "Child",
-                affectedPaths: [],
-                dependencies: [],
-                tickets: [{ url: "https://example.com/tickets/CHILD-1" }],
-                content: "# Child",
-            }]);
-            await saveChildFeaturePlans(cwd, "epic", [{
-                title: "Child",
-                order: 1,
-                summary: "Updated",
-                affectedPaths: [],
-                dependencies: [],
-                content: "# Child updated",
-            }]);
-            assertEquals((await loadPlan(cwd, "epic/01-child"))?.attrs.tickets, [{
-                url: "https://example.com/tickets/CHILD-1",
-            }]);
-            await saveChildFeaturePlans(cwd, "epic", [{
-                title: "Child",
-                order: 1,
-                summary: "Cleared",
-                affectedPaths: [],
-                dependencies: [],
-                tickets: [],
-                content: "# Child cleared",
-            }]);
+            await saveChildFeaturePlans(cwd, "epic", [
+                {
+                    title: "Child",
+                    order: 1,
+                    summary: "Child",
+                    affectedPaths: [],
+                    dependencies: [],
+                    tickets: [{ url: "https://example.com/tickets/CHILD-1" }],
+                    content: "# Child",
+                },
+            ]);
+            await saveChildFeaturePlans(cwd, "epic", [
+                {
+                    title: "Child",
+                    order: 1,
+                    summary: "Updated",
+                    affectedPaths: [],
+                    dependencies: [],
+                    content: "# Child updated",
+                },
+            ]);
+            assertEquals((await loadPlan(cwd, "epic/01-child"))?.attrs.tickets, [
+                {
+                    url: "https://example.com/tickets/CHILD-1",
+                },
+            ]);
+            await saveChildFeaturePlans(cwd, "epic", [
+                {
+                    title: "Child",
+                    order: 1,
+                    summary: "Cleared",
+                    affectedPaths: [],
+                    dependencies: [],
+                    tickets: [],
+                    content: "# Child cleared",
+                },
+            ]);
             assertEquals((await loadPlan(cwd, "epic/01-child"))?.attrs.tickets, undefined);
         } finally {
             await fsRm(cwd, { recursive: true });
@@ -2877,12 +2966,18 @@ test("a plain markdown file in docs/plans/ is readable and is never claimed by a
         const loaded = await loadPlan(cwd, "random");
         assertEquals(loaded?.attrs.status, "draft", "parsing falls back to defaults");
         assertEquals(loaded?.hasFrontMatter, false, "but the file's un-onboarded state stays visible");
-        assertEquals((await listPlans(cwd)).map((plan) => plan.name), ["random"]);
+        assertEquals(
+            (await listPlans(cwd)).map((plan) => plan.name),
+            ["random"],
+        );
 
         // Listing is not consent. Backfilling identity here would let opening a Plan
         // Board or reading the worktree registry stamp metadata into the user's file.
         const resources = await listPlanResources(cwd);
-        assertEquals(resources.map((resource) => resource.name), ["random"]);
+        assertEquals(
+            resources.map((resource) => resource.name),
+            ["random"],
+        );
         assertEquals(resources[0].planId, "", "no identity is invented for an un-onboarded file");
         assertEquals(await fsReadFile(path, "utf8"), bare, "the user's file is byte-for-byte untouched");
     } finally {
@@ -2923,9 +3018,15 @@ test("onboardExternalPlan adopts a plain markdown Plan and preserves the body ex
 
         // Idempotent: loading a Plan twice must not rewrite metadata the lifecycle set.
         const onboarded = await loadPlan(cwd, "old");
-        await updatePlanFrontMatter(cwd, "old", { status: "approved" }, {}, {
-            expectedRevision: onboarded?.revision,
-        });
+        await updatePlanFrontMatter(
+            cwd,
+            "old",
+            { status: "approved" },
+            {},
+            {
+                expectedRevision: onboarded?.revision,
+            },
+        );
         const again = await onboardExternalPlan(cwd, "old");
         assertEquals(again.onboarded, false);
         assertEquals(again.resource.planId, adopted.resource.planId, "identity is stable");
@@ -2952,11 +3053,7 @@ test("a Plan lock left by a dead process is reclaimed immediately", async () => 
         const started = Date.now();
         const held = await withPlanLock(cwd, "demo", () => Promise.resolve("acquired"));
         assertEquals(held, "acquired");
-        assertEquals(
-            Date.now() - started < 5_000,
-            true,
-            "a dead holder must be reclaimed at once, not waited out",
-        );
+        assertEquals(Date.now() - started < 5_000, true, "a dead holder must be reclaimed at once, not waited out");
         await assertMissing(lockPath);
         await assertMissing(legacyLockPath);
     } finally {
@@ -3018,7 +3115,10 @@ test("legacy plans/ files are ignored, not migrated or accepted", async () => {
         const currentMarkdown = injectFrontMatter("# Current\n", { planId: "current-1" });
         await fsWriteFile(join(cwd, "docs", "plans", "current.md"), currentMarkdown);
         const listed = await listPlans(cwd);
-        assertEquals(listed.map((plan) => plan.name), ["current"]);
+        assertEquals(
+            listed.map((plan) => plan.name),
+            ["current"],
+        );
         const loaded = await loadPlan(cwd, "current");
         assertEquals(loaded?.attrs.planId, "current-1");
         // The canonical store path prefix resolves to the same file.
@@ -3039,10 +3139,16 @@ testWithFs("manual-qa Epic Artifact is excluded from Plan loading and listing", 
         assertEquals(await loadPlan(cwd, "docs/plans/epic/manual-qa.md"), null);
         assertEquals((await loadPlanStrict(cwd, "epic/manual-qa")).kind, "not_found");
         assertEquals((await loadPlanStrict(cwd, "docs/plans/epic/manual-qa.md")).kind, "not_found");
-        assertEquals((await listPlans(cwd)).some((plan) => plan.name === "epic/manual-qa"), false);
+        assertEquals(
+            (await listPlans(cwd)).some((plan) => plan.name === "epic/manual-qa"),
+            false,
+        );
 
         await fsWriteFile(join(cwd, "docs", "plans", "epic", "notes.md"), "not front matter");
-        assertEquals((await listPlans(cwd)).some((plan) => plan.name === "epic/notes"), true);
+        assertEquals(
+            (await listPlans(cwd)).some((plan) => plan.name === "epic/notes"),
+            true,
+        );
     } finally {
         await fsRm(cwd, { recursive: true });
     }

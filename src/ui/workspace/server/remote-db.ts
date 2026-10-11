@@ -15,9 +15,14 @@ export interface OpenRemoteDatabaseOptions {
 
 export function openRemoteDatabase(options: OpenRemoteDatabaseOptions = {}): RemoteDatabase {
     const db = new DatabaseSync(options.dbPath ?? ":memory:");
-    db.exec("PRAGMA foreign_keys = ON");
-    if (options.dbPath && options.dbPath !== ":memory:") db.exec("PRAGMA journal_mode = WAL");
-    runRemoteMigrations(db);
+    try {
+        db.exec("PRAGMA foreign_keys = ON");
+        if (options.dbPath && options.dbPath !== ":memory:") db.exec("PRAGMA journal_mode = WAL");
+        runRemoteMigrations(db);
+    } catch (error) {
+        db.close();
+        throw error;
+    }
     return {
         handle: db,
         close: () => db.close(),

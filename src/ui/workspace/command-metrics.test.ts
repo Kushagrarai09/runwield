@@ -15,7 +15,7 @@ import { drainWorkflowMetrics, getWorkflowMetricsFilePath } from "../../shared/w
 import { setCustomSetting } from "../../shared/settings.js";
 import { makeManagedSessionFixture } from "../../testing/managed-session-fixture.ts";
 import { encodeCwdForSessionDir } from "../../shared/session/root-session.js";
-import { join } from "@std/path";
+import { basename, join } from "@std/path";
 
 test("Owner command observations require authentication, catalog names, and a registered Project", async () => {
     await withWorkflowMetricsFixture(async ({ projectRoot }) => {
@@ -71,14 +71,16 @@ test("Owner command observations require authentication, catalog names, and a re
                 200,
             );
             assertEquals(
-                (await send({
-                    invocationId: "cmd-picker",
-                    command: "model",
-                    kind: "builtin",
-                    phase: "finish",
-                    outcome: "canceled",
-                    durationMs: 9,
-                })).status,
+                (
+                    await send({
+                        invocationId: "cmd-picker",
+                        command: "model",
+                        kind: "builtin",
+                        phase: "finish",
+                        outcome: "canceled",
+                        durationMs: 9,
+                    })
+                ).status,
                 200,
             );
             assertEquals(
@@ -92,40 +94,50 @@ test("Owner command observations require authentication, catalog names, and a re
                 200,
             );
             assertEquals(
-                (await send({
-                    invocationId: "cmd-selected",
-                    command: "agent",
-                    kind: "builtin",
-                    phase: "finish",
-                    outcome: "failed",
-                    dispatched: true,
-                    durationMs: 15,
-                })).status,
+                (
+                    await send({
+                        invocationId: "cmd-selected",
+                        command: "agent",
+                        kind: "builtin",
+                        phase: "finish",
+                        outcome: "failed",
+                        dispatched: true,
+                        durationMs: 15,
+                    })
+                ).status,
                 200,
             );
             assertEquals(
-                (await send({
-                    ...payload,
-                    command: "private submitted text",
-                    outcome: "rejected",
-                    invocationId: "cmd-unknown",
-                })).status,
+                (
+                    await send({
+                        ...payload,
+                        command: "private submitted text",
+                        outcome: "rejected",
+                        invocationId: "cmd-unknown",
+                    })
+                ).status,
                 200,
             );
             await drainWorkflowMetrics();
             const contents = await fsReadFile(getWorkflowMetricsFilePath(canonicalRoot), "utf8");
-            const records = contents.trim().split("\n").map((line) => JSON.parse(line));
+            const records = contents
+                .trim()
+                .split("\n")
+                .map((line) => JSON.parse(line));
             assertEquals(records.length, 7);
             assertEquals(records[0].command, "settings");
             assertEquals(records[0].durationMs, 12);
-            assertEquals(records.slice(1).map((row) => [row.event, row.phase, row.outcome]), [
-                ["command_started", "opened", undefined],
-                ["command_finished", "finish", "canceled"],
-                ["command_started", "opened", undefined],
-                ["command_dispatched", "dispatched", undefined],
-                ["command_finished", "finish", "failed"],
-                ["command_finished", "rejected", "rejected"],
-            ]);
+            assertEquals(
+                records.slice(1).map((row) => [row.event, row.phase, row.outcome]),
+                [
+                    ["command_started", "opened", undefined],
+                    ["command_finished", "finish", "canceled"],
+                    ["command_started", "opened", undefined],
+                    ["command_dispatched", "dispatched", undefined],
+                    ["command_finished", "finish", "failed"],
+                    ["command_finished", "rejected", "rejected"],
+                ],
+            );
             assertEquals(records[1].commandId, records[2].commandId);
             assertEquals(new Set(records.slice(3, 6).map((row) => row.commandId)).size, 1);
             assertEquals(records[5].seq, 2);
@@ -135,8 +147,11 @@ test("Owner command observations require authentication, catalog names, and a re
                 200,
             );
             await drainWorkflowMetrics();
-            const aliased = (await fsReadFile(getWorkflowMetricsFilePath(canonicalRoot), "utf8")).trim().split("\n")
-                .map((line) => JSON.parse(line)).at(-1);
+            const aliased = (await fsReadFile(getWorkflowMetricsFilePath(canonicalRoot), "utf8"))
+                .trim()
+                .split("\n")
+                .map((line) => JSON.parse(line))
+                .at(-1);
             assertEquals([aliased.command, aliased.alias], ["model", "models"]);
         } finally {
             store.close();
@@ -150,14 +165,9 @@ test("Owner rejects a real Session linked to another registered Project", async 
     const second = await makeManagedSessionFixture();
     const store = first.openStore();
     const otherProject = store.registerProject({ root: second.projectRoot, displayName: "Other Project" });
-    const otherDir = join(
-        first.home,
-        ".wld",
-        "sessions",
-        encodeCwdForSessionDir(await fsRealpath(second.projectRoot)),
-    );
+    const otherDir = join(first.home, ".wld", "sessions", encodeCwdForSessionDir(await fsRealpath(second.projectRoot)));
     await fsMkdir(otherDir, { recursive: true });
-    const transcriptPath = join(otherDir, second.transcriptPath.split("/").at(-1) ?? "");
+    const transcriptPath = join(otherDir, basename(second.transcriptPath));
     await fsCopyFile(second.transcriptPath, transcriptPath);
     const otherSession = await store.ensureSessionCatalogRecord({
         projectId: otherProject.projectId,
@@ -175,27 +185,24 @@ test("Owner rejects a real Session linked to another registered Project", async 
             csrfFactory: () => "csrf-cross",
         });
         const response = await app.handler()(
-            new Request(
-                `http://127.0.0.1:8787/api/owner/projects/${first.project.projectId}/command-metrics`,
-                {
-                    method: "POST",
-                    headers: {
-                        origin: "http://127.0.0.1:8787",
-                        "content-type": "application/json",
-                        cookie: `rw_owner_device=${device.credential}; rw_owner_csrf=${"csrf-cross"}`,
-                        "x-runwield-csrf": "csrf-cross",
-                    },
-                    body: JSON.stringify({
-                        invocationId: "cmd-cross-project",
-                        command: "settings",
-                        kind: "builtin",
-                        sessionId: otherSession.runwieldSessionId,
-                        phase: "finish",
-                        outcome: "succeeded",
-                        durationMs: 1,
-                    }),
+            new Request(`http://127.0.0.1:8787/api/owner/projects/${first.project.projectId}/command-metrics`, {
+                method: "POST",
+                headers: {
+                    origin: "http://127.0.0.1:8787",
+                    "content-type": "application/json",
+                    cookie: `rw_owner_device=${device.credential}; rw_owner_csrf=${"csrf-cross"}`,
+                    "x-runwield-csrf": "csrf-cross",
                 },
-            ),
+                body: JSON.stringify({
+                    invocationId: "cmd-cross-project",
+                    command: "settings",
+                    kind: "builtin",
+                    sessionId: otherSession.runwieldSessionId,
+                    phase: "finish",
+                    outcome: "succeeded",
+                    durationMs: 1,
+                }),
+            }),
         );
         assertEquals(response.status, 400);
     } finally {

@@ -78,7 +78,10 @@ async function runGitResult(cwd, args) {
 
 /** @param {string} value */
 export function slugify(value) {
-    const slug = value.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+    const slug = value
+        .toLowerCase()
+        .replace(/[^a-z0-9._-]+/g, "-")
+        .replace(/^-+|-+$/g, "");
     return slug.slice(0, 48) || "plan";
 }
 
@@ -107,7 +110,11 @@ async function isMergeInProgress(projectRoot) {
  * @returns {string[]}
  */
 function parseStatusPaths(statusText) {
-    return statusText.split("\n").filter(Boolean).map((line) => line.slice(3).trim()).filter(Boolean);
+    return statusText
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => line.slice(3).trim())
+        .filter(Boolean);
 }
 
 /**
@@ -115,7 +122,11 @@ function parseStatusPaths(statusText) {
  * @returns {string[]}
  */
 function parseNameOnlyPaths(diffText) {
-    return diffText.trim().split("\n").map((line) => line.trim()).filter(Boolean);
+    return diffText
+        .trim()
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
 }
 
 /**
@@ -160,8 +171,7 @@ function filterUserDirtyPaths(paths, allowed = new Set()) {
 
 /** @param {string} path */
 function isExecutionPreparationPath(path) {
-    return path === "docs/plans" || path.startsWith("docs/plans/") ||
-        isRunWieldOwnedRuntimePath(path);
+    return path === "docs/plans" || path.startsWith("docs/plans/") || isRunWieldOwnedRuntimePath(path);
 }
 
 /**
@@ -185,8 +195,10 @@ async function isPreparationChange(root, path, baseRef, targetRef) {
         if (!stat.isFile() || stat.isSymbolicLink()) return false;
         const after = await fsReadFile(join(root, path), "utf8");
         const staged = await runGitResult(root, ["show", ":.gitignore"]);
-        return isRunWieldOwnedGitignoreChange(before.stdout, after) &&
-            (staged.code === 0 ? isRunWieldOwnedGitignoreChange(before.stdout, staged.stdout) : before.code !== 0);
+        return (
+            isRunWieldOwnedGitignoreChange(before.stdout, after) &&
+            (staged.code === 0 ? isRunWieldOwnedGitignoreChange(before.stdout, staged.stdout) : before.code !== 0)
+        );
     } catch (error) {
         if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
         throw error;
@@ -212,15 +224,18 @@ export async function hasExecutionChangesSince({
     includeWorkingTree = false,
 }) {
     const committed = parseNameOnlyPaths(
-        await runGit(worktreePath, ["diff", "--name-only", `${baseRef}..${targetRef}`]),
+        await runGit(worktreePath, ["diff", "--name-only", `${baseRef}..${targetRef}`, "--"]),
     );
     const dirty = includeWorkingTree
         ? parseStatusPaths(await runGit(worktreePath, ["status", "--porcelain", "--untracked-files=all"]))
         : [];
-    const checks = [{ paths: committed, ref: targetRef }, { paths: dirty, ref: undefined }];
+    const checks = [
+        { paths: committed, ref: targetRef },
+        { paths: dirty, ref: undefined },
+    ];
     for (const { paths, ref } of checks) {
         for (const path of paths) {
-            if (!await isPreparationChange(worktreePath, path, ref ? baseRef : "HEAD", ref)) {
+            if (!(await isPreparationChange(worktreePath, path, ref ? baseRef : "HEAD", ref))) {
                 return true;
             }
         }
@@ -239,18 +254,14 @@ export async function hasExecutionChangesSince({
  * @param {string} [opts.targetRef]
  * @returns {Promise<boolean>}
  */
-export async function hasOnlyExecutionPreparationChangesSince({
-    worktreePath,
-    baseRef,
-    targetRef = "HEAD",
-}) {
+export async function hasOnlyExecutionPreparationChangesSince({ worktreePath, baseRef, targetRef = "HEAD" }) {
     const baseIsAncestor = await runGitResult(worktreePath, ["merge-base", "--is-ancestor", baseRef, targetRef]);
     if (baseIsAncestor.code !== 0) return false;
     const committed = parseNameOnlyPaths(
-        await runGit(worktreePath, ["diff", "--name-only", `${baseRef}..${targetRef}`]),
+        await runGit(worktreePath, ["diff", "--name-only", `${baseRef}..${targetRef}`, "--"]),
     );
     for (const path of committed) {
-        if (!await isPreparationChange(worktreePath, path, baseRef, targetRef)) {
+        if (!(await isPreparationChange(worktreePath, path, baseRef, targetRef))) {
             return false;
         }
     }
@@ -288,12 +299,16 @@ async function stageDirtyPathsExceptOwnedRuntime(worktreePath) {
  * @returns {{ path: string, branchRef: string }[]}
  */
 function parseWorktreeRecords(porcelainText) {
-    return porcelainText.trim().split("\n\n").filter(Boolean).map((record) => {
-        const lines = record.split("\n");
-        const worktreePath = lines.find((line) => line.startsWith("worktree "))?.slice("worktree ".length);
-        const branchRef = lines.find((line) => line.startsWith("branch "))?.slice("branch ".length);
-        return { path: worktreePath || "", branchRef: branchRef || "" };
-    });
+    return porcelainText
+        .trim()
+        .split("\n\n")
+        .filter(Boolean)
+        .map((record) => {
+            const lines = record.split("\n");
+            const worktreePath = lines.find((line) => line.startsWith("worktree "))?.slice("worktree ".length);
+            const branchRef = lines.find((line) => line.startsWith("branch "))?.slice("branch ".length);
+            return { path: worktreePath || "", branchRef: branchRef || "" };
+        });
 }
 
 /**
@@ -353,10 +368,11 @@ async function remoteBranchExists(projectRoot, branch) {
     const remoteResult = await runGitResult(projectRoot, ["remote", "get-url", "origin"]);
     if (remoteResult.code !== 0) return false;
 
-    const fetchResult = await runGitResult(
-        projectRoot,
-        ["fetch", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`],
-    );
+    const fetchResult = await runGitResult(projectRoot, [
+        "fetch",
+        "origin",
+        `+refs/heads/${branch}:refs/remotes/origin/${branch}`,
+    ]);
     if (fetchResult.code !== 0) {
         const message = fetchResult.stderr || fetchResult.stdout;
         if (message.includes("couldn't find remote ref")) {
@@ -374,7 +390,7 @@ async function remoteBranchExists(projectRoot, branch) {
  */
 async function createLocalBranchFromDefault(projectRoot, branch) {
     const defaultBranch = await resolveRepositoryDefaultBranch(projectRoot);
-    const defaultRef = await remoteBranchExists(projectRoot, defaultBranch)
+    const defaultRef = (await remoteBranchExists(projectRoot, defaultBranch))
         ? `refs/remotes/origin/${defaultBranch}`
         : `refs/heads/${defaultBranch}`;
     await runGit(projectRoot, ["branch", branch, defaultRef]);
@@ -392,15 +408,13 @@ export async function resolveRepositoryDefaultBranch(projectRoot) {
         const head = await runGitResult(projectRoot, ["ls-remote", "--symref", "origin", "HEAD"]);
         const branch = head.code === 0 ? head.stdout.match(/^ref: refs\/heads\/([^\t\n]+)\tHEAD/m)?.[1] : undefined;
         for (const candidate of [...new Set([branch, "main", "master"].filter(Boolean))]) {
-            if (candidate && await remoteBranchExists(projectRoot, candidate)) return candidate;
+            if (candidate && (await remoteBranchExists(projectRoot, candidate))) return candidate;
         }
     }
     const configured = await runGitResult(projectRoot, ["config", "--get", "init.defaultBranch"]);
-    for (
-        const branch of [
-            ...new Set([configured.code === 0 ? configured.stdout.trim() : "", "main", "master"].filter(Boolean)),
-        ]
-    ) {
+    for (const branch of [
+        ...new Set([configured.code === 0 ? configured.stdout.trim() : "", "main", "master"].filter(Boolean)),
+    ]) {
         if (await gitRefExists(projectRoot, `refs/heads/${branch}`)) return branch;
     }
     throw new Error("Repository default branch does not exist (main or master).");
@@ -483,11 +497,11 @@ export async function ensureTargetBranchRef(projectRoot, branch, sourceBranch) {
         sourceRef = `refs/remotes/origin/${target}`;
     } else if (sourceBranch) {
         const source = await resolveTargetBranchName(projectRoot, sourceBranch);
-        sourceRef = await remoteBranchExists(projectRoot, source)
+        sourceRef = (await remoteBranchExists(projectRoot, source))
             ? `refs/remotes/origin/${source}`
-            : !sourceBranch.startsWith("origin/") && await gitRefExists(projectRoot, `refs/heads/${source}`)
-            ? `refs/heads/${source}`
-            : undefined;
+            : !sourceBranch.startsWith("origin/") && (await gitRefExists(projectRoot, `refs/heads/${source}`))
+              ? `refs/heads/${source}`
+              : undefined;
         if (!sourceRef) throw new Error(`Source branch does not exist: ${sourceBranch}`);
     } else {
         await createLocalBranchFromDefault(projectRoot, target);
@@ -513,7 +527,7 @@ async function findCheckoutPathForBranch(projectRoot, branch) {
  * @returns {Promise<boolean>}
  */
 async function isSameFilesystemPath(a, b) {
-    return await canonicalWorktreePath(a) === await canonicalWorktreePath(b);
+    return (await canonicalWorktreePath(a)) === (await canonicalWorktreePath(b));
 }
 
 /** Resolve symlinked parents even when a recorded checkout has already disappeared. @param {string} path @returns {Promise<string>} */
@@ -544,7 +558,9 @@ async function canonicalWorktreePath(path) {
 
 /** @param {unknown} value */
 function normalizeCommitMessageLine(value) {
-    return String(value || "").replace(/\s+/g, " ").trim();
+    return String(value || "")
+        .replace(/\s+/g, " ")
+        .trim();
 }
 
 /** @param {string[]} stagedPaths */
@@ -571,12 +587,12 @@ function buildWorktreeCommitMessage({
     const normalizedDescription = normalizeCommitMessageLine(planDescription);
     const subject = normalizedPlanName
         ? normalizeCommitMessageLine(
-            phase === "preparation"
-                ? `Prepare ${normalizedPlanName} execution`
-                : phase === "publication"
-                ? `Finalize validated artifacts for ${normalizedPlanName}`
-                : `Complete ${normalizedPlanName}`,
-        )
+              phase === "preparation"
+                  ? `Prepare ${normalizedPlanName} execution`
+                  : phase === "publication"
+                    ? `Finalize validated artifacts for ${normalizedPlanName}`
+                    : `Complete ${normalizedPlanName}`,
+          )
         : "Commit execution worktree updates";
     const bodyLines = [];
     if (normalizedPlanName) bodyLines.push(`- Plan: ${normalizedPlanName}`);
@@ -619,23 +635,21 @@ async function commitDirtyWorktreeState(
         const dirtyPaths = await gitStatusPaths(worktreePath);
         const disallowedPaths = filterUserDirtyPaths(dirtyPaths, allowedPathSet);
         if (disallowedPaths.length > 0) {
-            const description = messageOptions.phase === "preparation"
-                ? "Execution worktree contains changes outside preparation Plan paths:"
-                : "Execution worktree changed after candidate sealing outside finalized Plan paths:";
-            throw new Error(
-                description + "\n" +
-                    disallowedPaths.map((path) => `  - ${path}`).join("\n"),
-            );
+            const description =
+                messageOptions.phase === "preparation"
+                    ? "Execution worktree contains changes outside preparation Plan paths:"
+                    : "Execution worktree changed after candidate sealing outside finalized Plan paths:";
+            throw new Error(description + "\n" + disallowedPaths.map((path) => `  - ${path}`).join("\n"));
         }
         const allowedPathNeedsOwnedExclusion = RUNWIELD_OWNED_RUNTIME_PATHS.some((ownedPath) =>
-            isAllowedDirtyPath(ownedPath, allowedPathSet)
+            isAllowedDirtyPath(ownedPath, allowedPathSet),
         );
         if (allowedPathNeedsOwnedExclusion) {
             await stageDirtyPathsExceptOwnedRuntime(worktreePath);
         } else {
             const forcedPaths = new Set();
             for (const path of await recordedProjectContextPaths(worktreePath)) {
-                if (allowedPathSet.has(path) && await isTransferredProjectContext(worktreePath, path)) {
+                if (allowedPathSet.has(path) && (await isTransferredProjectContext(worktreePath, path))) {
                     await runGit(worktreePath, ["add", "-f", "--", path]);
                     forcedPaths.add(path);
                 }
@@ -680,11 +694,9 @@ export async function checkpointExecutionPreparation({
     // active Epic family. Use the same preparation boundary as resume detection;
     // these files are the input baseline, never post-validation exceptions.
     const dirtyPreparationPaths = [];
-    for (const path of new Set([...await gitStatusPaths(worktreePath), ...PROJECT_CONTEXT_PATHS])) {
-        if (
-            !isRunWieldOwnedRuntimePath(path) &&
-            await isPreparationChange(worktreePath, path, "HEAD")
-        ) dirtyPreparationPaths.push(path);
+    for (const path of new Set([...(await gitStatusPaths(worktreePath)), ...PROJECT_CONTEXT_PATHS])) {
+        if (!isRunWieldOwnedRuntimePath(path) && (await isPreparationChange(worktreePath, path, "HEAD")))
+            dirtyPreparationPaths.push(path);
     }
     const preparationPaths = [...new Set([planRelativePath, ...relatedPlanPaths, ...dirtyPreparationPaths])];
     const headBefore = (await runGit(worktreePath, ["rev-parse", "HEAD"])).trim();
@@ -695,14 +707,15 @@ export async function checkpointExecutionPreparation({
             baseCommit,
             headBefore,
         ]);
-        const committedPaths = baseIsAncestor.code === 0
-            ? parseNameOnlyPaths(await runGit(worktreePath, ["diff", "--name-only", `${baseCommit}..${headBefore}`]))
-            : [];
+        const committedPaths =
+            baseIsAncestor.code === 0
+                ? parseNameOnlyPaths(
+                      await runGit(worktreePath, ["diff", "--name-only", `${baseCommit}..${headBefore}`, "--"]),
+                  )
+                : [];
         const unexpectedPaths = baseIsAncestor.code === 0 ? [] : ["branch history"];
         for (const path of committedPaths) {
-            if (
-                !await isPreparationChange(worktreePath, path, baseCommit, headBefore)
-            ) {
+            if (!(await isPreparationChange(worktreePath, path, baseCommit, headBefore))) {
                 unexpectedPaths.push(path);
             }
         }
@@ -712,12 +725,7 @@ export async function checkpointExecutionPreparation({
             );
         }
     }
-    await commitDirtyWorktreeState(
-        worktreePath,
-        branch,
-        { planName, phase: "preparation" },
-        preparationPaths,
-    );
+    await commitDirtyWorktreeState(worktreePath, branch, { planName, phase: "preparation" }, preparationPaths);
     const preparationCommit = (await runGit(worktreePath, ["rev-parse", "HEAD"])).trim();
     if (preparationCommit === baseCommit) {
         throw new Error(`Execution preparation for ${planName} did not create its required Plan commit.`);
@@ -730,8 +738,8 @@ export async function checkpointExecutionPreparation({
     if (committedPlan.code !== 0) {
         throw new Error(`Execution preparation commit ${preparationCommit} does not contain ${planRelativePath}.`);
     }
-    const remainingDirtyPaths = (await gitStatusPaths(worktreePath)).filter((path) =>
-        !isRunWieldOwnedRuntimePath(path)
+    const remainingDirtyPaths = (await gitStatusPaths(worktreePath)).filter(
+        (path) => !isRunWieldOwnedRuntimePath(path),
     );
     if (remainingDirtyPaths.length > 0) {
         throw new Error(`Execution worktree is dirty after preparation commit:\n${remainingDirtyPaths.join("\n")}`);
@@ -761,7 +769,7 @@ export async function checkpointExecutionPreparation({
 export async function assertPreMergeCandidateUnchanged({ worktreePath, sealedExecutionCommit, allowedPlanPaths }) {
     const allowed = new Set(allowedPlanPaths);
     const committed = parseNameOnlyPaths(
-        await runGit(worktreePath, ["diff", "--name-only", `${sealedExecutionCommit}..HEAD`]),
+        await runGit(worktreePath, ["diff", "--name-only", `${sealedExecutionCommit}..HEAD`, "--"]),
     );
     const dirty = await gitStatusPaths(worktreePath);
     const changed = [...new Set([...committed, ...dirty])];
@@ -799,8 +807,8 @@ export async function checkpointExecutionWorktree({
         [],
         mergeTargetRef,
     );
-    const remainingDirtyPaths = (await gitStatusPaths(worktreePath)).filter((path) =>
-        !isRunWieldOwnedRuntimePath(path)
+    const remainingDirtyPaths = (await gitStatusPaths(worktreePath)).filter(
+        (path) => !isRunWieldOwnedRuntimePath(path),
     );
     if (remainingDirtyPaths.length > 0) {
         throw new Error(`Execution worktree is dirty after checkpoint commit:\n${remainingDirtyPaths.join("\n")}`);
@@ -845,12 +853,7 @@ export async function assertPublicationCandidateContainsTarget(
     candidateCommit,
     targetBranch,
 ) {
-    const result = await runGitResult(projectRoot, [
-        "merge-base",
-        "--is-ancestor",
-        targetCommit,
-        candidateCommit,
-    ]);
+    const result = await runGitResult(projectRoot, ["merge-base", "--is-ancestor", targetCommit, candidateCommit]);
     if (result.code === 0) return;
     throw attachMergeRepairDetails(
         new Error(`Publication candidate would discard commits already on ${targetBranch}. Publication was stopped.`),
@@ -889,9 +892,15 @@ export async function validateWorktreeRecreation({ projectRoot, planName, planId
  * @param {{ projectRoot: string, planName: string, planId: string, baseRef?: string, baseBranch?: string, worktreeRoot?: string, attemptId?: string }} opts
  * @returns {Promise<import('./worktree-registry.js').WorktreeRegistryEntry>}
  */
-export async function createWorktreeGitArtifacts(
-    { projectRoot, planName, planId, baseRef = "HEAD", baseBranch, worktreeRoot, attemptId },
-) {
+export async function createWorktreeGitArtifacts({
+    projectRoot,
+    planName,
+    planId,
+    baseRef = "HEAD",
+    baseBranch,
+    worktreeRoot,
+    attemptId,
+}) {
     await assertGitRepository(projectRoot, "Creating an execution worktree");
     if (typeof planId !== "string" || !planId) {
         throw new Error(`Creating an execution worktree for ${planName} requires a stable planId.`);
@@ -904,7 +913,7 @@ export async function createWorktreeGitArtifacts(
     const parent = resolveWorktreeParent(projectRoot, worktreeRoot);
     const path = join(parent, `${repoName}-${slug}-${id}`);
     const now = new Date().toISOString();
-    const resolvedBaseBranch = baseBranch || await resolveCurrentCheckoutBranch(projectRoot) || "HEAD";
+    const resolvedBaseBranch = baseBranch || (await resolveCurrentCheckoutBranch(projectRoot)) || "HEAD";
     const baseCommit = (await runGit(projectRoot, ["rev-parse", baseRef])).trim();
     const baseTree = (await runGit(projectRoot, ["rev-parse", `${baseCommit}^{tree}`])).trim();
 
@@ -963,7 +972,7 @@ export async function settleWorktreeAttempt(projectRoot, entry) {
  * @param {{ projectRoot: string, path: string, branch?: string, baseTree?: string }} opts
  */
 export async function getWorktreeStatus({ path, branch, baseTree }) {
-    if (!await pathExists(path)) {
+    if (!(await pathExists(path))) {
         return { exists: false, clean: false, statusText: "missing", diff: "" };
     }
     await assertGitRepository(path, "Inspecting an execution worktree");
@@ -1020,20 +1029,13 @@ function attachMergeRepairDetails(error, details) {
  * @returns {Promise<string[]>}
  */
 async function restorePreservedPlanConflictPaths(cwd, branch, preservePlanPaths) {
-    if (preservePlanPaths.length === 0 || !await isMergeInProgress(cwd)) return [];
+    if (preservePlanPaths.length === 0 || !(await isMergeInProgress(cwd))) return [];
     const preserved = new Set(preservePlanPaths.map((path) => path.replaceAll("\\", "/")));
     const unresolvedPaths = parseNameOnlyPaths(await runGit(cwd, ["diff", "--name-only", "--diff-filter=U"]));
     const preservedUnresolvedPaths = unresolvedPaths.filter((path) => preserved.has(path.replaceAll("\\", "/")));
     if (preservedUnresolvedPaths.length === 0) return [];
 
-    await runGit(cwd, [
-        "restore",
-        "--staged",
-        "--worktree",
-        `--source=${branch}`,
-        "--",
-        ...preservedUnresolvedPaths,
-    ]);
+    await runGit(cwd, ["restore", "--staged", "--worktree", `--source=${branch}`, "--", ...preservedUnresolvedPaths]);
     await runGit(cwd, ["add", "--", ...preservedUnresolvedPaths]);
     return preservedUnresolvedPaths;
 }
@@ -1045,7 +1047,7 @@ async function restorePreservedPlanConflictPaths(cwd, branch, preservePlanPaths)
  * @returns {Promise<boolean>}
  */
 async function resolvePlanMergeConflicts(cwd, branch, preservePlanPaths) {
-    if (!await isMergeInProgress(cwd)) return false;
+    if (!(await isMergeInProgress(cwd))) return false;
     const unresolvedPaths = parseNameOnlyPaths(await runGit(cwd, ["diff", "--name-only", "--diff-filter=U"]));
     if (unresolvedPaths.length === 0) return false;
     if (unresolvedPaths.some((path) => !path.startsWith("docs/plans/") || !path.endsWith(".md"))) return false;
@@ -1081,10 +1083,10 @@ async function resolvePlanMergeConflicts(cwd, branch, preservePlanPaths) {
 async function assertNoOverlappingDirtyPaths(cwd, branch, allowedDirtyPaths) {
     const allowed = new Set(allowedDirtyPaths);
     const branchChangedPaths = new Set(
-        parseNulPaths(await runGit(cwd, ["diff", "--name-only", "-z", `HEAD...${branch}`])),
+        parseNulPaths(await runGit(cwd, ["diff", "--name-only", "-z", `HEAD...${branch}`, "--"])),
     );
     const blockingDirtyPaths = filterUserDirtyPaths(await gitStatusPaths(cwd), allowed).filter((path) =>
-        overlapsBranchChangedPath(path, branchChangedPaths)
+        overlapsBranchChangedPath(path, branchChangedPaths),
     );
     if (blockingDirtyPaths.length > 0) {
         // Not a conflict, and not something an Agent may fix: these are the user's own
@@ -1104,9 +1106,12 @@ async function assertNoOverlappingDirtyPaths(cwd, branch, allowedDirtyPaths) {
 /**
  * @param {{ projectRoot: string, branch: string, worktreePath?: string, allowedDirtyPaths?: string[], preservePlanPaths?: string[] }} opts
  */
-async function mergeExecutionWorktreeIntoCurrentCheckout(
-    { projectRoot, branch, allowedDirtyPaths = [], preservePlanPaths = [] },
-) {
+async function mergeExecutionWorktreeIntoCurrentCheckout({
+    projectRoot,
+    branch,
+    allowedDirtyPaths = [],
+    preservePlanPaths = [],
+}) {
     try {
         if (await isMergeInProgress(projectRoot)) {
             const currentHead = (await runGit(projectRoot, ["rev-parse", "HEAD"])).trim();
@@ -1189,7 +1194,7 @@ async function publishRepairedMergeWorktree(
     branch,
     preservePlanPaths = [],
 ) {
-    if (!await pathExists(mergeWorktreePath)) {
+    if (!(await pathExists(mergeWorktreePath))) {
         throw new Error(`Recorded merge repair worktree is missing: ${mergeWorktreePath}`);
     }
 
@@ -1271,12 +1276,7 @@ async function publishRepairedMergeWorktree(
         return false;
     }
 
-    await assertPublicationCandidateContainsTarget(
-        projectRoot,
-        oldTargetCommit,
-        mergeCommit,
-        targetBranch,
-    );
+    await assertPublicationCandidateContainsTarget(projectRoot, oldTargetCommit, mergeCommit, targetBranch);
     await assertNoRuntimePathsInNewHistory(mergeWorktreePath, oldTargetCommit, mergeCommit);
 
     if (targetCheckedOutInPrimary) {
@@ -1320,7 +1320,7 @@ async function mergeExecutionWorktreeIntoTargetBranch({
 
     const checkoutPath = await findCheckoutPathForBranch(projectRoot, targetBranch);
     if (checkoutPath) {
-        if (!await isSameFilesystemPath(checkoutPath, projectRoot)) {
+        if (!(await isSameFilesystemPath(checkoutPath, projectRoot))) {
             throw new Error(
                 `Target branch ${targetBranch} is checked out at ${checkoutPath}; refusing to update it behind ` +
                     "that worktree. Run recovery from that checkout or close/remove that worktree first.",
@@ -1417,7 +1417,7 @@ async function mergeExecutionWorktreeIntoTargetBranch({
             try {
                 await runGit(mergeWorktreePath, ["merge", "--no-ff", branch]);
             } catch (mergeError) {
-                if (!await resolvePlanMergeConflicts(mergeWorktreePath, branch, preservePlanPaths)) {
+                if (!(await resolvePlanMergeConflicts(mergeWorktreePath, branch, preservePlanPaths))) {
                     preserveMergeWorktree = true;
                     throw attachMergeRepairDetails(mergeError, {
                         repairCwd: mergeWorktreePath,
@@ -1428,12 +1428,7 @@ async function mergeExecutionWorktreeIntoTargetBranch({
             }
             const mergeCommit = (await runGit(mergeWorktreePath, ["rev-parse", "HEAD"])).trim();
             try {
-                await assertPublicationCandidateContainsTarget(
-                    projectRoot,
-                    oldTargetCommit,
-                    mergeCommit,
-                    targetBranch,
-                );
+                await assertPublicationCandidateContainsTarget(projectRoot, oldTargetCommit, mergeCommit, targetBranch);
                 await assertNoRuntimePathsInNewHistory(mergeWorktreePath, oldTargetCommit, mergeCommit);
                 await runGit(projectRoot, ["update-ref", `refs/heads/${targetBranch}`, mergeCommit, oldTargetCommit]);
                 return;
@@ -1479,7 +1474,7 @@ export async function inspectExecutionWorktreeMergeRisk({ projectRoot, branch, t
         }
         try {
             const checkoutPath = await findCheckoutPathForBranch(projectRoot, normalizedTargetBranch);
-            if (checkoutPath && !await isSameFilesystemPath(checkoutPath, projectRoot)) {
+            if (checkoutPath && !(await isSameFilesystemPath(checkoutPath, projectRoot))) {
                 failures.push(
                     `Target branch ${normalizedTargetBranch} is checked out at ${checkoutPath}; refusing to update it ` +
                         "behind that worktree.",
@@ -1494,10 +1489,10 @@ export async function inspectExecutionWorktreeMergeRisk({ projectRoot, branch, t
     try {
         const allowed = new Set(allowedDirtyPaths);
         const branchChangedPaths = new Set(
-            parseNulPaths(await runGit(projectRoot, ["diff", "--name-only", "-z", `${mergeTarget}...${branch}`])),
+            parseNulPaths(await runGit(projectRoot, ["diff", "--name-only", "-z", `${mergeTarget}...${branch}`, "--"])),
         );
         const blockingDirtyPaths = filterUserDirtyPaths(await gitStatusPaths(projectRoot), allowed).filter((path) =>
-            overlapsBranchChangedPath(path, branchChangedPaths)
+            overlapsBranchChangedPath(path, branchChangedPaths),
         );
         if (blockingDirtyPaths.length > 0) {
             warnings.push(
@@ -1531,21 +1526,19 @@ export async function inspectExecutionWorktreeMergeRisk({ projectRoot, branch, t
  * @param {{ projectRoot: string, branch: string, targetBranch?: string, worktreePath?: string, allowedDirtyPaths?: string[], preservePlanPaths?: string[], repairMergeWorktreePath?: string, expectedTargetHead?: string, planName?: string, planDescription?: string, sealedExecutionCommit?: string }} opts
  * @returns {Promise<MergeExecutionWorktreeResult|void>}
  */
-export async function mergeExecutionWorktree(
-    {
-        projectRoot,
-        branch,
-        targetBranch,
-        worktreePath,
-        allowedDirtyPaths = [],
-        preservePlanPaths = [],
-        repairMergeWorktreePath,
-        expectedTargetHead,
-        planName,
-        planDescription,
-        sealedExecutionCommit,
-    },
-) {
+export async function mergeExecutionWorktree({
+    projectRoot,
+    branch,
+    targetBranch,
+    worktreePath,
+    allowedDirtyPaths = [],
+    preservePlanPaths = [],
+    repairMergeWorktreePath,
+    expectedTargetHead,
+    planName,
+    planDescription,
+    sealedExecutionCommit,
+}) {
     await assertGitRepository(projectRoot, "Merging an execution worktree");
     const normalizedTargetBranch = targetBranch === "HEAD" ? undefined : targetBranch;
     let resolvedWorktreePath = worktreePath;
@@ -1566,10 +1559,7 @@ export async function mergeExecutionWorktree(
         if (repairedMetadata.code === 0) executionMetadataCommit = repairedMetadata.stdout.trim() || undefined;
     }
     if (resolvedWorktreePath && !executionMetadataCommit) {
-        const mergeTargetRef = (await runGit(
-            projectRoot,
-            ["rev-parse", normalizedTargetBranch || "HEAD"],
-        )).trim();
+        const mergeTargetRef = (await runGit(projectRoot, ["rev-parse", normalizedTargetBranch || "HEAD"])).trim();
         await commitDirtyWorktreeState(
             resolvedWorktreePath,
             branch,
@@ -1593,7 +1583,7 @@ export async function mergeExecutionWorktree(
 
     const targetCheckoutPath = await findCheckoutPathForBranch(projectRoot, normalizedTargetBranch);
     const updatedPrimaryCheckout = Boolean(
-        targetCheckoutPath && await isSameFilesystemPath(targetCheckoutPath, projectRoot),
+        targetCheckoutPath && (await isSameFilesystemPath(targetCheckoutPath, projectRoot)),
     );
     await mergeExecutionWorktreeIntoTargetBranch({
         projectRoot,
@@ -1631,7 +1621,7 @@ export async function validateWorktreeDiscard({ projectRoot, path, branch }) {
     await runGit(projectRoot, ["check-ref-format", `refs/heads/${branch}`]);
     const records = parseWorktreeRecords(await runGit(projectRoot, ["worktree", "list", "--porcelain"]));
     const primary = records[0];
-    if (!primary || await isSameFilesystemPath(primary.path, path)) {
+    if (!primary || (await isSameFilesystemPath(primary.path, path))) {
         throw new Error("Recovery cannot discard the primary checkout. Its branch and files were left unchanged.");
     }
     let attached = null;
@@ -1647,7 +1637,7 @@ export async function validateWorktreeDiscard({ projectRoot, path, branch }) {
     if (attached && attached.branchRef !== `refs/heads/${branch}`) {
         throw new Error(`The recorded worktree is on a different branch. Nothing was removed from ${path}.`);
     }
-    if (await pathExists(path) && !attached) {
+    if ((await pathExists(path)) && !attached) {
         throw new Error(`The recorded path is not an attached execution worktree. Nothing was removed from ${path}.`);
     }
 }
@@ -1711,7 +1701,7 @@ export async function* discardWorktreeGitArtifacts(options) {
 export async function removeWorktreeGitArtifacts({ projectRoot, path, force = false }) {
     await assertGitRepository(projectRoot, "Removing an execution worktree");
     const primary = parseWorktreeRecords(await runGit(projectRoot, ["worktree", "list", "--porcelain"]))[0];
-    if (!primary || await isSameFilesystemPath(primary.path, path)) {
+    if (!primary || (await isSameFilesystemPath(primary.path, path))) {
         throw new Error("Recovery cannot remove the primary checkout. Its branch and files were left unchanged.");
     }
     if (force) {
@@ -1766,9 +1756,13 @@ export async function removeWorktreeGitArtifacts({ projectRoot, path, force = fa
  * @param {MergedWorktreeBranchDeletionOptions} opts
  * @returns {Promise<{ deleted: boolean, reason: string }>}
  */
-export async function deleteMergedWorktreeBranch(
-    { projectRoot, branch, baseCommit, ownedPreparationCommit, targetBranch },
-) {
+export async function deleteMergedWorktreeBranch({
+    projectRoot,
+    branch,
+    baseCommit,
+    ownedPreparationCommit,
+    targetBranch,
+}) {
     if (targetBranch === branch) {
         return { deleted: false, reason: `${branch} is the publication target, so it was kept.` };
     }
@@ -1794,8 +1788,8 @@ export async function deleteMergedWorktreeBranch(
     }
     const targetRef = targetBranch ? `refs/heads/${targetBranch}` : "HEAD";
     const merged = await runGitResult(projectRoot, ["branch", "--merged", targetRef]);
-    const hasMergedProof = merged.code === 0 &&
-        merged.stdout.split("\n").some((line) => line.replace(/^\*\s*/, "").trim() === branch);
+    const hasMergedProof =
+        merged.code === 0 && merged.stdout.split("\n").some((line) => line.replace(/^\*\s*/, "").trim() === branch);
     if (!hasMergedProof) {
         return {
             deleted: false,
@@ -1836,11 +1830,7 @@ export async function deleteRemotelyPublishedWorktreeBranch({
 }) {
     const proofRef = `refs/runwield/publication-proof/${crypto.randomUUID()}`;
     try {
-        await runGit(projectRoot, [
-            "fetch",
-            remote,
-            `+refs/heads/${upstreamBranch}:${proofRef}`,
-        ]);
+        await runGit(projectRoot, ["fetch", remote, `+refs/heads/${upstreamBranch}:${proofRef}`]);
         const publicationContained = await runGitResult(projectRoot, [
             "merge-base",
             "--is-ancestor",
@@ -1886,9 +1876,13 @@ export async function deleteRemotelyPublishedWorktreeBranch({
                         "--parents",
                         `${artifactCommit}..refs/heads/${branch}`,
                     ]);
-                    const commits = descendants.code === 0
-                        ? descendants.stdout.split("\n").map((line) => line.trim()).filter(Boolean)
-                        : [];
+                    const commits =
+                        descendants.code === 0
+                            ? descendants.stdout
+                                  .split("\n")
+                                  .map((line) => line.trim())
+                                  .filter(Boolean)
+                            : [];
                     let onlyEmptySingleParentCommits = descendants.code === 0 && commits.length > 0;
                     for (const line of commits) {
                         const [commit, parent, ...otherParents] = line.split(/\s+/);

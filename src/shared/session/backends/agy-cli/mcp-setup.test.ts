@@ -246,7 +246,7 @@ test("Agy MCP setup asks once, accepts explicit approval, and preserves files on
             requestInteraction: (request) => {
                 assertStringIncludes(request.prompt, join(".gemini", "config", "mcp_config.json"));
                 assertStringIncludes(request.prompt, join(".gemini", "antigravity-cli", "settings.json"));
-                assertStringIncludes(request.prompt, "wld mcp agy-cli");
+                assertStringIncludes(request.prompt, `${WLD_EXECUTABLE} mcp agy-cli`);
                 assertStringIncludes(request.prompt, AGY_MCP_PERMISSION);
                 assertStringIncludes(request.prompt, "persists");
                 return { outcome: "accepted", value: "approve" };

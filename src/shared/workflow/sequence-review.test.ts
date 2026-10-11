@@ -2,7 +2,7 @@ import { readdirSync as fsReaddirSync, readFileSync as fsReadFileSync } from "no
 import { test } from "node:test";
 import { mkdir as fsMkdir, readFile as fsReadFile, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
 import fs from "node:fs/promises";
-import { dirname } from "@std/path";
+import { dirname, join } from "@std/path";
 import { withProcessGlobalTestLock } from "../../testing/process-global-lock.ts";
 import { getTransitionJournalPath } from "./state-transition.ts";
 import { assertEquals, assertExists, assertRejects, assertStringIncludes } from "@std/assert";
@@ -169,9 +169,15 @@ test("Sequence preflight rejects omitted children and forward dependencies", asy
             Error,
             "every child",
         );
-        await updatePlanFrontMatter(cwd, "sequence/index", { dependencies: ["search"] }, {}, {
-            expectedRevision: (await loadPlan(cwd, "sequence/index"))!.revision,
-        });
+        await updatePlanFrontMatter(
+            cwd,
+            "sequence/index",
+            { dependencies: ["search"] },
+            {},
+            {
+                expectedRevision: (await loadPlan(cwd, "sequence/index"))!.revision,
+            },
+        );
         await assertRejects(() => prepareSequenceReview(cwd, "sequence"), Error, "forward dependency");
     } finally {
         await fsRm(cwd, { recursive: true });
@@ -183,10 +189,16 @@ test("Sibling Plan ID dependency survives a child rename", async () => {
     try {
         const documents = await prepareSequenceReview(cwd, "sequence");
         const first = documents[1];
-        await updatePlanFrontMatter(cwd, "sequence/search", { dependencies: [first.planId] }, {}, {
-            expectedRevision: documents[2].revision,
-        });
-        await fs.rename(first.planPath, first.planPath.replace("/index.md", "/renamed.md"));
+        await updatePlanFrontMatter(
+            cwd,
+            "sequence/search",
+            { dependencies: [first.planId] },
+            {},
+            {
+                expectedRevision: documents[2].revision,
+            },
+        );
+        await fs.rename(first.planPath, join(dirname(first.planPath), "renamed.md"));
         const dependencies = await resolveSiblingChildPlanDependencies(cwd, "sequence", [first.planId]);
         assertEquals(dependencies[0].planName, "sequence/renamed");
         assertEquals(dependencies[0].planId, first.planId);
@@ -284,16 +296,18 @@ test("An interrupted Sequence write blocks child actions until the complete grou
         const { getPlanRevisionForText } = await import("../../plan-store.js");
         const { healSettledTransitionRecords } = await import("./transition-recovery.ts");
         const { executePlanAction } = await import("./plan-actions.ts");
-        const plans = await Promise.all(documents.map(async (doc) => {
-            const after = doc.plan.replace('status: "draft"', 'status: "ready_for_work"');
-            return {
-                planName: doc.planName,
-                before: doc.plan,
-                beforeRevision: doc.revision,
-                after,
-                afterRevision: await getPlanRevisionForText(after),
-            };
-        }));
+        const plans = await Promise.all(
+            documents.map(async (doc) => {
+                const after = doc.plan.replace('status: "draft"', 'status: "ready_for_work"');
+                return {
+                    planName: doc.planName,
+                    before: doc.plan,
+                    beforeRevision: doc.revision,
+                    after,
+                    afterRevision: await getPlanRevisionForText(after),
+                };
+            }),
+        );
         assertEquals(plans[1].before === plans[1].after, false);
         const path = getTransitionJournalPath(cwd, "interrupted-sequence");
         await fsMkdir(path.slice(0, path.lastIndexOf("/")), { recursive: true });
@@ -335,9 +349,15 @@ test("Sequence continuation uses sibling IDs and stops at a held child", async (
     const { cwd, hostedSession } = await setup();
     try {
         const docs = await prepareSequenceReview(cwd, "sequence");
-        await updatePlanFrontMatter(cwd, "sequence/search", { dependencies: [docs[1].planId] }, {}, {
-            expectedRevision: docs[2].revision,
-        });
+        await updatePlanFrontMatter(
+            cwd,
+            "sequence/search",
+            { dependencies: [docs[1].planId] },
+            {},
+            {
+                expectedRevision: docs[2].revision,
+            },
+        );
         const documents = await prepareSequenceReview(cwd, "sequence");
         await applySequenceReviewDecision({
             cwd,
@@ -352,9 +372,15 @@ test("Sequence continuation uses sibling IDs and stops at a held child", async (
         });
         const { resolveEpicContinuation } = await import("./epic-continuation.ts");
         const first = await loadPlan(cwd, "sequence/index");
-        await updatePlanFrontMatter(cwd, "sequence/index", { status: "verified" }, {}, {
-            expectedRevision: first!.revision,
-        });
+        await updatePlanFrontMatter(
+            cwd,
+            "sequence/index",
+            { status: "verified" },
+            {},
+            {
+                expectedRevision: first!.revision,
+            },
+        );
         const next = await resolveEpicContinuation({ cwd, completedPlanName: "sequence/index" });
         assertEquals(next.kind, "execute");
         assertEquals(next.childPlanName, "sequence/search");
@@ -402,10 +428,13 @@ for (const failurePoint of ["acceptance", "commit"] as const) {
                 fs.rename = async (from, to) => {
                     if (!failed && dirname(String(to)) === journalDir) {
                         const record: SequenceJournalState = JSON.parse(await fs.readFile(from, "utf8"));
-                        const atFailure = failurePoint === "commit"
-                            ? record.state === "committed"
-                            : record.state === "applying" &&
-                                record.completedEffects.some((effect) => effect.effect === "sequence_review_accepted");
+                        const atFailure =
+                            failurePoint === "commit"
+                                ? record.state === "committed"
+                                : record.state === "applying" &&
+                                  record.completedEffects.some(
+                                      (effect) => effect.effect === "sequence_review_accepted",
+                                  );
                         if (atFailure) {
                             failed = true;
                             throw Object.assign(new Error(`injected ${failurePoint} persistence failure`), {
@@ -477,20 +506,22 @@ test("Sequence live consumer sees committed approval before receiving the child 
         kinds: ["plan_written"],
         owningSession: null,
         signal: abort.signal,
-    }).then((event) => {
-        const dir = dirname(getTransitionJournalPath(cwd, "unused"));
-        const journals = [...fsReaddirSync(dir, { withFileTypes: true })].filter((entry) =>
-            entry.name.endsWith(".json")
-        );
-        const states = journals.map((entry) => {
-            const record: SequenceJournalState = JSON.parse(fsReadFileSync(`${dir}/${entry.name}`, "utf8"));
-            return record.state;
+    })
+        .then((event) => {
+            const dir = dirname(getTransitionJournalPath(cwd, "unused"));
+            const journals = [...fsReaddirSync(dir, { withFileTypes: true })].filter((entry) =>
+                entry.name.endsWith(".json"),
+            );
+            const states = journals.map((entry) => {
+                const record: SequenceJournalState = JSON.parse(fsReadFileSync(`${dir}/${entry.name}`, "utf8"));
+                return record.state;
+            });
+            return { event, states };
+        })
+        .catch((error) => {
+            if (!abort.signal.aborted) throw error;
+            return null;
         });
-        return { event, states };
-    }).catch((error) => {
-        if (!abort.signal.aborted) throw error;
-        return null;
-    });
     try {
         const documents = await prepareSequenceReview(cwd, "sequence");
         await applySequenceReviewDecision({

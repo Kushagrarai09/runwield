@@ -1,3 +1,5 @@
+import { execPath, platform, versions } from "node:process";
+import { bashFixturePath } from "../../scripts/bash-fixture.ts";
 import {
     mkdtemp as fsMkdtemp,
     readFile as fsReadFile,
@@ -17,14 +19,27 @@ test("background_task starts real shell work and controls it through the owning 
     const session = new HostedSession({ id: crypto.randomUUID(), cwd });
     const tool = createBackgroundTaskTool({ hostedSession: session, cwd, allowShellStart: true });
     try {
-        const release = `${cwd}/release`;
-        const marker = `${cwd}/completed`;
+        const release = join(cwd, "release");
+        const marker = join(cwd, "completed");
+        const script = join(cwd, "background.mjs");
+        await fsWriteFile(
+            script,
+            `
+import { existsSync, writeFileSync } from "node:fs";
+process.stdout.write("ready\\n");
+while (!existsSync(${JSON.stringify(release)})) await new Promise(r => setTimeout(r, 20));
+writeFileSync(${JSON.stringify(marker)}, "complete");
+process.stdout.write("complete");
+`,
+        );
+        const command = [execPath, ...(versions.deno ? ["run", "-A"] : ["--no-env-file", "--no-install"]), script]
+            .map((value) => (platform === "win32" ? `"${value}"` : `'${value.replaceAll("'", "'\"'\"'")}'`))
+            .join(" ");
         const start = await tool.execute(
             "start",
             {
                 action: "start",
-                command:
-                    `printf 'ready\\n'; while [ ! -f '${release}' ]; do sleep 0.02; done; printf complete > '${marker}'; printf complete`,
+                command,
             },
             new AbortController().signal,
             () => {},
@@ -45,7 +60,13 @@ test("background_task starts real shell work and controls it through the owning 
             await new Promise((resolve) => setTimeout(resolve, 10));
         }
         assertEquals(session.backgroundTasks.status(id).byte_count, 6);
-        assertEquals(await fsStat(marker).then(() => true, () => false), false);
+        assertEquals(
+            await fsStat(marker).then(
+                () => true,
+                () => false,
+            ),
+            false,
+        );
         await fsWriteFile(release, "go");
         await session.backgroundTasks.wait(id);
         assertEquals(await fsReadFile(marker, "utf8"), "complete");
@@ -82,23 +103,27 @@ test("background_task denies shell start without effective bash authority but pe
         const id = session.backgroundTasks.startShell({ command: "echo allowed", cwd }).task_id;
         await session.backgroundTasks.wait(id);
         assertEquals(
-            (await tool.execute(
-                "status",
-                { action: "status", task_id: id },
-                new AbortController().signal,
-                () => {},
-                {} as never,
-            )).details?.state,
+            (
+                await tool.execute(
+                    "status",
+                    { action: "status", task_id: id },
+                    new AbortController().signal,
+                    () => {},
+                    {} as never,
+                )
+            ).details?.state,
             "completed",
         );
         assertEquals(
-            (await tool.execute(
-                "cancel",
-                { action: "cancel", task_id: id },
-                new AbortController().signal,
-                () => {},
-                {} as never,
-            )).details?.state,
+            (
+                await tool.execute(
+                    "cancel",
+                    { action: "cancel", task_id: id },
+                    new AbortController().signal,
+                    () => {},
+                    {} as never,
+                )
+            ).details?.state,
             "completed",
         );
     } finally {
@@ -123,11 +148,17 @@ test("restricted background starts share the foreground command policy without b
         assertEquals(denied.details, null);
         if (denied.content[0].type !== "text") throw new Error("Expected policy error");
         assertStringIncludes(denied.content[0].text, "report a blocker");
-        assertEquals(await fsStat(`${cwd}/sentinel`).then(() => true, () => false), false);
+        assertEquals(
+            await fsStat(`${cwd}/sentinel`).then(
+                () => true,
+                () => false,
+            ),
+            false,
+        );
         const started = await call("start", "pwd");
         const id = started.details?.task_id ?? "";
         await session.backgroundTasks.wait(id);
-        assertStringIncludes((await call("status", undefined, id)).details?.output ?? "", cwd);
+        assertStringIncludes((await call("status", undefined, id)).details?.output ?? "", bashFixturePath(cwd));
         const deniedAll = createBackgroundTaskTool({
             hostedSession: session,
             cwd,

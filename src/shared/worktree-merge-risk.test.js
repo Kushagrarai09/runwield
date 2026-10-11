@@ -77,8 +77,10 @@ test("inspectExecutionWorktreeMergeRisk fails when target branch is checked out 
 
         assertEquals(result.ok, false);
         assertEquals(
-            result.failures.some((failure) =>
-                failure.includes("Target branch feature-base is checked out") && failure.includes(targetCheckout)
+            result.failures.some(
+                (failure) =>
+                    failure.includes("Target branch feature-base is checked out") &&
+                    failure.replaceAll("\\", "/").includes(targetCheckout.replaceAll("\\", "/")),
             ),
             true,
         );
@@ -118,9 +120,10 @@ test("inspectExecutionWorktreeMergeRisk requires targetBranch to be a local bran
 
         assertEquals(result.ok, false);
         assertEquals(
-            result.failures.some((failure) =>
-                failure.includes("Recorded worktree target branch is not available") &&
-                failure.includes("refs/heads/release-target")
+            result.failures.some(
+                (failure) =>
+                    failure.includes("Recorded worktree target branch is not available") &&
+                    failure.includes("refs/heads/release-target"),
             ),
             true,
         );
@@ -157,8 +160,8 @@ test("inspectExecutionWorktreeMergeRisk warns on overlapping dirty primary chang
 
         assertEquals(result.ok, true);
         assertEquals(
-            result.warnings.some((warning) =>
-                warning.includes("overlap execution worktree changes") && warning.includes("README.md")
+            result.warnings.some(
+                (warning) => warning.includes("overlap execution worktree changes") && warning.includes("README.md"),
             ),
             true,
         );
