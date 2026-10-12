@@ -19,8 +19,7 @@ function idFactory(prefix = "id") {
     return () => `${prefix}-${++next}`;
 }
 
-/** @param {string} cwd @param {string} piSessionId */
-async function writeTranscript(cwd, piSessionId) {
+async function writeTranscript(cwd: string, piSessionId: string) {
     const sessionDir = getRunWieldSessionDir(cwd);
     await fsMkdir(sessionDir, { recursive: true });
     const path = `${sessionDir}/2026-01-01T00-00-00-000Z_${piSessionId}.jsonl`;
