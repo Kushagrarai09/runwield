@@ -302,7 +302,7 @@ async function checkCleanupRestart(
         } finally {
             runtime.closeAllSessions();
             await git(root, ["worktree", "remove", "--force", tree]).catch(() => {});
-            await fsRm(root, { recursive: true });
+            await fsRm(root, { recursive: true, force: true });
             await fsRm(directory, { recursive: true });
         }
     });
