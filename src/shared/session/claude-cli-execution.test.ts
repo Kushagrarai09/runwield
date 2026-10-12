@@ -267,7 +267,7 @@ test("Claude CLI roots discover initially empty MCP tools and refresh them betwe
                 {
                     name: "fixture",
                     command: process.execPath,
-                    args: process.versions.deno ? ["run", "-A", fixtureServer] : ["run", fixtureServer],
+                    args: ["run", fixtureServer],
                     env: { RUNWIELD_MCP_FIXTURE_LOG: externalLogPath, RUNWIELD_MCP_FIXTURE_TOOLS_PATH: toolsPath },
                     source: "request",
                 },

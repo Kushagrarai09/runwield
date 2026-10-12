@@ -100,19 +100,9 @@ test("Codex discovery fails without launching anything when no candidate is acce
         `,
         );
         // Hide the real system app via an actual permission boundary. Never inspect credentials or launch a host CLI.
-        const denoArgs = [
-            "run",
-            "--config",
-            join(getCwd(), "deno.json"),
-            "--no-prompt",
-            "--allow-env",
-            "--allow-read",
-            `--deny-read=/Applications,${homeApplications}`,
-            probe,
-        ];
-        const useMacSandbox = !process.versions.deno && process.platform === "darwin";
+        const useMacSandbox = process.platform === "darwin";
         const command = useMacSandbox ? "/usr/bin/sandbox-exec" : process.execPath;
-        const args = process.versions.deno ? denoArgs : runtimeSourceArgs(["run", "-A", probe]);
+        const args = runtimeSourceArgs(["run", "-A", probe]);
         const result = await captureForegroundProcess(command, {
             args: useMacSandbox
                 ? [
@@ -130,10 +120,6 @@ test("Codex discovery fails without launching anything when no candidate is acce
         assertEquals(new TextDecoder().decode(result.stdout), "");
         assertStringIncludes(
             new TextDecoder().decode(result.stderr),
-            process.platform === "darwin"
-                ? process.versions.deno
-                    ? "Requires read access"
-                    : "EPERM"
-                : "Codex executable not found",
+            process.platform === "darwin" ? "EPERM" : "Codex executable not found",
         );
     }));

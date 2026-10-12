@@ -343,13 +343,13 @@ test("source remote help works without a generated identity and connection expla
             "src/shared/version.js",
         ])
             await fsCopyFile(path, join(root, path));
-        if (!process.versions.deno) {
-            await fsSymlink(
-                fromFileUrl(new URL("../../../node_modules", import.meta.url)),
-                join(root, "node_modules"),
-                "dir",
-            );
-        }
+
+        await fsSymlink(
+            fromFileUrl(new URL("../../../node_modules", import.meta.url)),
+            join(root, "node_modules"),
+            "dir",
+        );
+
         const module = await import(toFileUrl(join(root, "src/cmd/remote/index.ts")).href);
         const originalLog = console.log;
         let help = "";

@@ -148,3 +148,31 @@ argument boundaries, and failed build prerequisite propagation have focused regr
 Qualification for these final changes must include the remote image's runtime files, nonroot user, absent Deno runtime,
 health/readiness, built HTML/CSS, SQLite persistence across restart, graceful shutdown and read-only application directory.
 The draft PR stays unmerged and no release is published.
+
+
+## Fresh dependency and API audit
+
+A new independent review of `8716e918a` found omissions that successful runtime smoke checks had not covered: the
+repository's saved verification command and Claude editing hook still launched Deno; maintained mascot scripts still
+called Deno globals; and the Astro development Shared Space page read its mode only from the absent Deno environment.
+Those commands and tools now use Bun/Node APIs. The page reads the process environment and has a real Astro development
+HTTP regression for remote, local and unset modes. A temporary mutation that removed that environment value failed the
+new regression. Historical audit probe APIs were also ported, without changing their archived assertions.
+
+Obsolete Deno runtime branches have been removed from the product adapters (HTTP, subprocesses, locks, stdin, identity,
+Workspace assets and crash handling) and fixture tooling. The ordinary test runner now pins Bun unconditionally. A new
+AST-based owned-code audit runs with lint across repository code, including Astro frontmatter, inline preview scripts,
+brand tooling and the repository's executable command defaults. It rejects executable Deno references, reflected and
+computed Deno lookups, runtime-registry imports, Deno subprocess literals and shebangs. It is a regression guard, not a
+proof about arbitrary dynamically constructed code. The Deno-free container lane additionally executes the maintained
+mascot generators and the actual Astro development route tests.
+
+The explicit old-release interoperability probe still launches pinned Deno in package qualification to test cross-runtime
+lock ownership. This is an external compatibility test, not a product or ordinary toolchain dependency. User-project Deno
+Snip filters and command classification remain supported. Legacy fixture argument labels, historical prose, inert sample
+diffs, Deno-derived lint rule names, and preserved container user/home names do not invoke a runtime.
+
+The root and docs Bun locks resolve 1,159 and 463 package entries, respectively, with no Deno, JSR or standard-library
+runtime package selected. Unstorage lists an uninstalled optional `@deno/kv` peer and ships opt-in Deno drivers. Several
+vendor libraries retain guarded Deno support; inspected Bun exports and current application configuration do not select
+those runtime paths. Vendored libraries have not been rewritten merely to erase those strings.

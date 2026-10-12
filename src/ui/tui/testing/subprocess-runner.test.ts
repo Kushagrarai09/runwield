@@ -1,5 +1,5 @@
 import { assertEquals } from "../../../testing/assertions.ts";
-import { versions } from "node:process";
+
 import { test } from "node:test";
 import { ok as assert } from "node:assert/strict";
 import { runGoldenChild, sanitizeGoldenChildEnv } from "./subprocess-runner.js";
@@ -10,7 +10,7 @@ test("sanitizeGoldenChildEnv strips common credential variables", () => {
 });
 
 test("runGoldenChild captures output from a bounded active-runtime subprocess", async () => {
-    const result = await runGoldenChild([versions.deno ? "eval" : "-e", "console.log('golden-child')"], {
+    const result = await runGoldenChild(["-e", "console.log('golden-child')"], {
         timeoutMs: 2000,
     });
     assert(result.success);
@@ -19,7 +19,7 @@ test("runGoldenChild captures output from a bounded active-runtime subprocess", 
 });
 
 test("runGoldenChild reports timeout and terminates child", async () => {
-    const result = await runGoldenChild([versions.deno ? "eval" : "-e", "setInterval(() => {}, 1000)"], {
+    const result = await runGoldenChild(["-e", "setInterval(() => {}, 1000)"], {
         timeoutMs: 100,
     });
     assertEquals(result.timedOut, true);
