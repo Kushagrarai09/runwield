@@ -20,6 +20,7 @@ import {
     encodeCwdForSessionDir,
     getRootSessionBranchEntries,
     getRunWieldSessionDir,
+    getRunWieldSessionsBaseDir,
     getRunWieldSessionMemoryBackupDir,
     isPathInside,
     listCatalogSafeRootSessionLocators,
@@ -34,6 +35,18 @@ test("root-session path containment accepts children but rejects sibling prefixe
     assertEquals(isPathInside(base, base), true);
     assertEquals(isPathInside(join(base, "session.jsonl"), base), true);
     assertEquals(isPathInside(`${base}-other`, base), false);
+});
+
+test("Windows root Session paths use native canonical casing", { skip: process.platform !== "win32" }, async () => {
+    const root = await fsMkdtemp(join(tmpdir(), "runwield-root-alias-"));
+    try {
+        const canonicalRoot = await fsRealpath(root);
+        const expected = join(getRunWieldSessionsBaseDir(), encodeCwdForSessionDir(canonicalRoot));
+        assertEquals(getRunWieldSessionDir(root.toUpperCase()), expected);
+        assertEquals(getRunWieldSessionDir(root.toLowerCase()), expected);
+    } finally {
+        await fsRm(root, { recursive: true });
+    }
 });
 
 test("root-session persists a new transcript without Pi's private rewrite method", async () => {
