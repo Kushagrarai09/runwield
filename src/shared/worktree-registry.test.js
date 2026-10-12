@@ -510,14 +510,14 @@ Deno.test("worktree registry migration resolves unambiguous legacy plan names", 
         );
         const primaryPath = join(projectRoot, "docs/plans/demo-plan.md");
         const beforePlan = await Deno.readTextFile(primaryPath);
-        await assertRejects(() => listPlans(projectRoot), Error, "execution Plan is missing");
+        assertEquals(await listPlans(projectRoot), []);
 
         const entries = await listEntries(projectRoot);
         assertEquals(entries[0].planId, "plan-1");
         const stored = JSON.parse(await Deno.readTextFile(path));
         assertEquals(stored.version, 2);
         assertEquals(await Deno.readTextFile(primaryPath), beforePlan);
-        await assertRejects(() => listPlans(projectRoot), Error, "execution Plan is missing");
+        assertEquals(await listPlans(projectRoot), []);
     } finally {
         await Deno.remove(projectRoot, { recursive: true });
     }

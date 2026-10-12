@@ -2878,20 +2878,17 @@ async function listPlansWithTargetChildren(cwd, onlyEpic) {
             if (attempts.filter((entry) => entry.planName === attempt.planName).length !== 1) continue;
             const execution = await loadPlan(attempt.path, attempt.planName);
             if (!execution) {
-                const archived = await loadArchivedPlanByName(attempt.path, attempt.planName);
-                if (archived && (!attempt.planId || archived.attrs.planId === attempt.planId)) {
-                    const index = results.findIndex((item) =>
+                // A missing or archived authority cannot expose a stale primary copy.
+                // Direct Plan loading owns the recovery error, not the project catalog.
+                const index = results.findIndex(
+                    (item) =>
                         item.name === attempt.planName ||
-                        Boolean(attempt.planId && item.attrs.planId === attempt.planId)
-                    );
-                    if (index >= 0) results.splice(index, 1);
-                    const issueIndex = parseIssues.findIndex((issue) => issue.name === attempt.planName);
-                    if (issueIndex >= 0) parseIssues.splice(issueIndex, 1);
-                    continue;
-                }
-                throw new Error(
-                    `The execution Plan is missing at ${attempt.path}/docs/plans/${attempt.planName}.md. Restore that file before editing or continuing this Plan; the primary copy will not be used.`,
+                        Boolean(attempt.planId && item.attrs.planId === attempt.planId),
                 );
+                if (index >= 0) results.splice(index, 1);
+                const issueIndex = parseIssues.findIndex((issue) => issue.name === attempt.planName);
+                if (issueIndex >= 0) parseIssues.splice(issueIndex, 1);
+                continue;
             }
             if (attempt.planId && execution.attrs.planId && execution.attrs.planId !== attempt.planId) {
                 throw new Error(
@@ -3633,6 +3630,9 @@ async function ensurePlanIdentityLocked(cwd, planName, options = {}) {
             const byId = groupExistingPlanIds(plans);
             assertNoDuplicatePlanIds(byId);
             reservedPlanIds = new Set(byId.keys());
+            for (const attempt of await listControllerDocumentWorktrees(cwd)) {
+                if (attempt.planId) reservedPlanIds.add(attempt.planId);
+            }
         }
         const idGenerator = options.idGenerator || (() => crypto.randomUUID());
         let planId = normalizePlanId(plan.attrs.planId);
