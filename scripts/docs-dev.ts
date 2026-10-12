@@ -13,7 +13,7 @@ await stagePublicDocs(projectRoot, output);
 
 const server = spawn(
     process.execPath,
-    process.versions.deno ? ["run", "-A", "npm:astro@7.3.3", "dev", "--host", "127.0.0.1", "--port", "4322"] : [
+    [
         join(projectRoot, "docs-site", "node_modules", "astro", "bin", "astro.mjs"),
         "dev",
         "--host",

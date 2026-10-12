@@ -7,7 +7,7 @@ import { assertEquals, assertStringIncludes } from "../../testing/assertions.ts"
 async function privateEntry(args: string[], input?: string) {
     const child = spawnNativeProcess(process.execPath, {
         cwd: getCwd(),
-        args: ["run", ...(process.versions.deno ? ["-A", "--quiet"] : []), "src/cli.ts", ...args],
+        args: ["run", ...[], "src/cli.ts", ...args],
         stdin: input === undefined ? "null" : "piped",
         stdout: "piped",
         stderr: "piped",

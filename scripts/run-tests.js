@@ -1,4 +1,3 @@
-import { captureScriptProcess } from "./script-process.ts";
 import { requirePinnedBun } from "./check-bun-runtime.ts";
 import { tmpdir } from "node:os";
 import {
@@ -27,15 +26,14 @@ import process from "node:process";
  * excludes the Golden portfolio; `bun run ci` includes source and Golden tests.
  * Type checking is a separate `bun run check` gate.
  *
- * The legacy Deno branch retains its disposable, prewarmed DENO_DIR and explicit
- * permission handling for compatibility. Bun refuses Deno permission flags
- * instead of silently dropping their restrictions.
+ * Bun refuses legacy runtime permission flags instead of silently dropping
+ * their restrictions. Only the frozen, installed dependency graph is used.
  */
 import { retainTestEvidence } from "./retain-test-evidence.js";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath as fromFileUrl } from "node:url";
 import { listCiFiles } from "./ci-files.ts";
-import { runBoundedTest, writeSnipCommandResult } from "./run-with-snip.ts";
+import { runBoundedTest } from "./run-with-snip.ts";
 import { mergeTestTimings, orderTestsByTiming, readTestTimings, writeTestTimings } from "./test-timings.js";
 
 const TEST_FILE_TIMEOUT_MS = 10 * 60 * 1000;
@@ -78,10 +76,9 @@ async function* findTestFiles(dir) {
 /**
  * @param {string} sandboxRoot
  * @param {string} name
- * @param {string} denoDir
  * @returns {Promise<Record<string, string>>}
  */
-async function createSandboxEnv(sandboxRoot, name, denoDir) {
+async function createSandboxEnv(sandboxRoot, name) {
     const home = join(sandboxRoot, name);
     const temp = join(home, "tmp");
     const snipFiltersDir = join(home, ".config", "snip", "filters");
@@ -117,32 +114,10 @@ async function createSandboxEnv(sandboxRoot, name, denoDir) {
         TMPDIR: temp,
         TEMP: temp,
         TMP: temp,
-        DENO_DIR: denoDir,
         XDG_CONFIG_HOME: join(home, ".config"),
         XDG_CACHE_HOME: join(home, ".cache"),
         XDG_DATA_HOME: join(home, ".local", "share"),
     };
-}
-
-/**
- * @param {Record<string, string>} env
- * @param {string[]} testArgs
- * @returns {Promise<void>}
- */
-async function prewarmDenoDir(env, testArgs) {
-    if (process.versions.bun) return; // Bun executes only the frozen, already-installed dependency graph.
-    const result = await captureScriptProcess(process.execPath, {
-        args: ["test", "--no-run", ...testArgs],
-        cwd: REPO_ROOT,
-        env,
-        stdout: "piped",
-        stderr: "piped",
-    });
-    if (result.success) return;
-
-    const decoder = new TextDecoder();
-    const output = `${decoder.decode(result.stdout)}${decoder.decode(result.stderr)}`;
-    throw new Error(`Deno cache prewarm failed:\n${output}`);
 }
 
 /**
@@ -264,13 +239,12 @@ function isExcluded(file, excludedPaths) {
 
 /**
  * @param {string} sandboxRoot
- * @param {string} denoDir
  * @param {string[]} [roots]
  * @param {string[]} [excludedPaths]
  * @param {SuiteOptions} [options]
  * @returns {Promise<number>} process exit code
  */
-async function runIsolatedSuite(sandboxRoot, denoDir, roots = [REPO_ROOT], excludedPaths = [], options = {}) {
+async function runIsolatedSuite(sandboxRoot, roots = [REPO_ROOT], excludedPaths = [], options = {}) {
     const suiteStart = performance.now();
     if (options.reportDir) await fsMkdir(options.reportDir, { recursive: true });
     const discovered = new Set();
@@ -307,12 +281,6 @@ async function runIsolatedSuite(sandboxRoot, denoDir, roots = [REPO_ROOT], exclu
         await prepareGoldenRepositoryTemplates(goldenFixtureRoot);
     }
 
-    const prewarmStart = performance.now();
-    const prewarmEnv = await createSandboxEnv(sandboxRoot, "prewarm", denoDir);
-    if (files.length) await prewarmDenoDir(prewarmEnv, ["-A", "--no-check", "--quiet", ...files]);
-
-    const prewarmMs = performance.now() - prewarmStart;
-
     // Most integration work waits on Git and other subprocesses. Keep enough
     // independent files in flight to use the machine, with an explicit override
     // for smaller CI runners and concurrent local workloads.
@@ -339,75 +307,50 @@ async function runIsolatedSuite(sandboxRoot, denoDir, roots = [REPO_ROOT], exclu
             const name = relative(REPO_ROOT, file);
             const fileStartedAt = Date.now();
 
-            const env = await createSandboxEnv(sandboxRoot, `slot-${slot}-file-${slotRuns}`, denoDir);
+            const env = await createSandboxEnv(sandboxRoot, `slot-${slot}-file-${slotRuns}`);
             for (const key of ["WLD_TEST_SSHFS", "WLD_TEST_SSHFS_STALL"]) {
                 if (process.env[key] === "1") env[key] = "1";
             }
-            if (process.versions.bun) {
-                for (const key of [
-                    "PATH",
-                    "SystemRoot",
-                    "WINDIR",
-                    "COMSPEC",
-                    "PATHEXT",
-                    "LANG",
-                    "LC_ALL",
-                    "TERM",
-                    "TZ",
-                ]) {
-                    if (process.env[key]) env[key] = process.env[key];
-                }
+
+            for (const key of ["PATH", "SystemRoot", "WINDIR", "COMSPEC", "PATHEXT", "LANG", "LC_ALL", "TERM", "TZ"]) {
+                if (process.env[key]) env[key] = process.env[key];
             }
+
             // Nested runner tests must exercise their entire fixture suite.
             env.WLD_TEST_SHARD = "";
             if (goldenFixtureRoot) env.WLD_GOLDEN_FIXTURE_ROOT = goldenFixtureRoot;
             slotRuns += 1;
             const reportArgs = options.reportDir
-                ? process.versions.bun
-                    ? [
-                          "--reporter=junit",
-                          `--reporter-outfile=${join(options.reportDir, `${name.replace(/[^a-zA-Z0-9.-]/g, "_")}.xml`)}`,
-                      ]
-                    : ["--junit-path", join(options.reportDir, `${name.replace(/[^a-zA-Z0-9.-]/g, "_")}.xml`)]
+                ? [
+                      "--reporter=junit",
+                      `--reporter-outfile=${join(options.reportDir, `${name.replace(/[^a-zA-Z0-9.-]/g, "_")}.xml`)}`,
+                  ]
                 : [];
             const filterArgs =
                 options.filter === undefined
                     ? []
-                    : process.versions.bun
-                      ? [
-                            "--test-name-pattern",
-                            options.filter.startsWith("/") && options.filter.endsWith("/")
-                                ? options.filter.slice(1, -1)
-                                : options.filter.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-                        ]
-                      : ["--filter", options.filter];
-            const testArgs = process.versions.bun
-                ? [
-                      "test",
-                      "--no-env-file",
-                      "--no-install",
-                      "--no-orphans",
-                      "--preload",
-                      join(REPO_ROOT, "scripts", "bun-test-sandbox.ts"),
-                      "--timeout",
-                      String(TEST_FILE_TIMEOUT_MS),
-                      ...reportArgs,
-                      ...filterArgs,
-                      file,
-                  ]
-                : [
-                      "test",
-                      "-A",
-                      "--no-check",
-                      "--node-modules-dir=manual",
-                      "--quiet",
-                      ...reportArgs,
-                      ...filterArgs,
-                      file,
-                  ];
+                    : [
+                          "--test-name-pattern",
+                          options.filter.startsWith("/") && options.filter.endsWith("/")
+                              ? options.filter.slice(1, -1)
+                              : options.filter.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+                      ];
+            const testArgs = [
+                "test",
+                "--no-env-file",
+                "--no-install",
+                "--no-orphans",
+                "--preload",
+                join(REPO_ROOT, "scripts", "bun-test-sandbox.ts"),
+                "--timeout",
+                String(TEST_FILE_TIMEOUT_MS),
+                ...reportArgs,
+                ...filterArgs,
+                file,
+            ];
             const result = await runBoundedTest(testArgs, {
                 command: process.execPath,
-                clearEnv: Boolean(process.versions.bun),
+                clearEnv: true,
                 cwd: REPO_ROOT,
                 env,
                 failureLabel: `tests (${name})`,
@@ -440,7 +383,7 @@ async function runIsolatedSuite(sandboxRoot, denoDir, roots = [REPO_ROOT], exclu
             JSON.stringify(
                 {
                     elapsedMs: performance.now() - suiteStart,
-                    prewarmMs,
+                    prewarmMs: 0,
                     concurrency,
                     shard: options.shard || null,
                     completed,
@@ -462,7 +405,7 @@ async function runIsolatedSuite(sandboxRoot, denoDir, roots = [REPO_ROOT], exclu
 }
 
 export async function main(args = process.argv.slice(2)) {
-    if (process.versions.bun) requirePinnedBun();
+    requirePinnedBun();
     const {
         excludedPaths,
         failFast,
@@ -473,23 +416,19 @@ export async function main(args = process.argv.slice(2)) {
         rest: runnerArgs,
     } = parseRunnerArguments(args);
     selectTestShard([], shard);
-    if (process.versions.bun) {
-        const unsupported = runnerArgs.filter(
-            (arg, index) => arg.startsWith("-") && !(index === 0 && arg === "--isolated"),
-        );
-        if (unsupported.length) {
-            throw new Error(
-                `Unsupported Bun test runner options: ${unsupported.join(", ")}. ` +
-                    "Deno runtime flags cannot be ignored. See docs/contributing.md#task-compatibility.",
-            );
-        }
-    }
-    const sandboxRoot = await fsMkdtemp(join(tmpdir(), "runwield-test-sandboxes-"));
-    const denoDir = process.env["WLD_TEST_DENO_DIR"] || join(sandboxRoot, "deno-dir");
-    await fsMkdir(denoDir, { recursive: true });
 
-    // Deliberately do not call Deno.exit() inside try/finally: it terminates without
-    // running finally blocks, which left ~600MB of sandboxes behind per run.
+    const unsupported = runnerArgs.filter(
+        (arg, index) => arg.startsWith("-") && !(index === 0 && arg === "--isolated"),
+    );
+    if (unsupported.length) {
+        throw new Error(
+            `Unsupported Bun test runner options: ${unsupported.join(", ")}. ` +
+                "Deno runtime flags cannot be ignored. See docs/contributing.md#task-compatibility.",
+        );
+    }
+
+    const sandboxRoot = await fsMkdtemp(join(tmpdir(), "runwield-test-sandboxes-"));
+    // Return through finally so every isolated sandbox is cleaned before exit.
     let exitCode = 0;
     const suite =
         runnerArgs.some((arg) => arg.includes("src/ui/tui/golden-scenarios")) &&
@@ -504,15 +443,7 @@ export async function main(args = process.argv.slice(2)) {
         if (runnerArgs[0] === "--isolated") {
             const roots = runnerArgs.slice(1);
             if (roots.length === 0) throw new Error("--isolated requires at least one test file or directory.");
-            exitCode = await runIsolatedSuite(sandboxRoot, denoDir, roots, excludedPaths, {
-                failFast,
-                filter,
-                timingsFile,
-                reportDir,
-                shard,
-            });
-        } else if (process.versions.bun && runnerArgs.length > 0) {
-            exitCode = await runIsolatedSuite(sandboxRoot, denoDir, runnerArgs, excludedPaths, {
+            exitCode = await runIsolatedSuite(sandboxRoot, roots, excludedPaths, {
                 failFast,
                 filter,
                 timingsFile,
@@ -520,44 +451,15 @@ export async function main(args = process.argv.slice(2)) {
                 shard,
             });
         } else if (runnerArgs.length > 0) {
-            // Explicit paths or flags: one sandboxed process, arguments passed through.
-            if (shard) throw new Error("--shard requires isolated discovery; use --isolated <paths>.");
-            const env = await createSandboxEnv(sandboxRoot, "single", denoDir);
-            // Grant full permissions unless the caller passed their own permission
-            // flags — `-A` conflicts with explicit `--allow-*` grants, so it cannot
-            // be injected unconditionally. `--deny-*` narrows allow-all safely.
-            const hasPermissionFlags = runnerArgs.some(
-                (arg) => arg === "-A" || arg === "--allow-all" || arg.startsWith("--allow-"),
-            );
-            const filteredArgs = filter === undefined ? runnerArgs : [...runnerArgs, "--filter", filter];
-            const testArgs = hasPermissionFlags ? filteredArgs : ["-A", ...filteredArgs];
-            // Match the full-suite path (runIsolatedSuite) and every task invocation
-            // (test:golden-tui, workspace:test) by running tests with `--no-check`
-            // unless the caller already asked for type-checking. Type-checking here
-            // resolves deno.json's whole `compilerOptions.types` graph — the
-            // `"vite/client"` entry pulls npm:vite and its dependencies on every
-            // invocation, a large registry download on any machine without a warm
-            // cache that can blow past minute-scale budgets before a single test
-            // runs. `deno task check` owns type-checking; these children are
-            // sandboxed executions, not the type gate.
-            if (!testArgs.includes("--no-check")) testArgs.push("--no-check");
-            await prewarmDenoDir(env, testArgs);
-            // Preserve explicit dependency modes for loader diagnostics. Otherwise
-            // use the installation just prepared by the real no-run invocation.
-            const executionArgs = testArgs.some((arg) => arg.startsWith("--node-modules-dir"))
-                ? testArgs
-                : ["--node-modules-dir=manual", ...testArgs];
-            const result = await runBoundedTest(["test", ...executionArgs], {
-                env,
-                stdin: "inherit",
-                failureLabel: "tests",
-                timeoutMs: TEST_FILE_TIMEOUT_MS,
+            exitCode = await runIsolatedSuite(sandboxRoot, runnerArgs, excludedPaths, {
+                failFast,
+                filter,
+                timingsFile,
+                reportDir,
+                shard,
             });
-            await writeSnipCommandResult(result);
-
-            exitCode = result.code;
         } else {
-            exitCode = await runIsolatedSuite(sandboxRoot, denoDir, [REPO_ROOT], excludedPaths, {
+            exitCode = await runIsolatedSuite(sandboxRoot, [REPO_ROOT], excludedPaths, {
                 failFast,
                 filter,
                 timingsFile,

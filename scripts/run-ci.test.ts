@@ -13,9 +13,7 @@ test("CI collects all failures by default and supports explicit fail-fast", asyn
     const root = await fsMkdtemp(join(tmpdir(), "ci-command-fixture-"));
     try {
         const executable = `'${process.execPath.replaceAll("'", "'\\''")}'`;
-        const tasks = Object.fromEntries(
-            PRE_TEST_TASKS.map((name) => [name, `${executable} ${process.versions.deno ? "eval" : "--eval"} 'void 0'`]),
-        );
+        const tasks = Object.fromEntries(PRE_TEST_TASKS.map((name) => [name, `${executable} ${"--eval"} 'void 0'`]));
         await fsWriteFile(
             join(root, "deno.json"),
             JSON.stringify({

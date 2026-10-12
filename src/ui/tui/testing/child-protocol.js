@@ -110,13 +110,7 @@ export async function runGoldenScenarioChildProcess(request) {
     // npm:vite + dependencies — a large registry download on cold caches that
     // stalls scenario startup. The repo type gate is `deno task check`.
     const result = await runGoldenChild(
-        [
-            "run",
-            ...(process.versions.deno ? ["-A", "--no-check", "--node-modules-dir=manual"] : ["--no-install"]),
-            fromFileUrl(import.meta.url),
-            CHILD_FLAG,
-            payload,
-        ],
+        ["run", ...["--no-install"], fromFileUrl(import.meta.url), CHILD_FLAG, payload],
         { cwd: REPO_ROOT, timeoutMs: request.timeoutMs || 5000, awaitReadyMarker: true },
     );
     const childPayload = parseLastJsonLine(result.stdout);

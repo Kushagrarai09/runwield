@@ -156,9 +156,7 @@ test("production docs build publishes and indexes only fixture manual pages", as
         await stagePublicDocs(root, join(root, "docs-site", "src", "content", "docs"));
         await prepareDocsDependencies(root);
         const build = await captureScriptProcess(process.execPath, {
-            args: process.versions.deno
-                ? ["run", "-A", "npm:astro@7.3.3", "build"]
-                : [join(root, "docs-site", "node_modules", "astro", "bin", "astro.mjs"), "build"],
+            args: [join(root, "docs-site", "node_modules", "astro", "bin", "astro.mjs"), "build"],
             cwd: join(root, "docs-site"),
             stdout: "piped",
             stderr: "piped",

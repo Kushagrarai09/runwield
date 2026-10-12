@@ -15,7 +15,7 @@ test("suite runs against a sandboxed HOME", async () => {
     const sandbox = process.env["WLD_TEST_SANDBOX_HOME"];
     assert(
         sandbox,
-        "Tests must run via `deno task test` (or scripts/run-tests.js), which points HOME at a sandbox. " +
+        "Tests must run via `bun run test` (or scripts/run-tests.js), which points HOME at a sandbox. " +
             "Running `deno test` directly lets tests write to the real ~/.wld.",
     );
 

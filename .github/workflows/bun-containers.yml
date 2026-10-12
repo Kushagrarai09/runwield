@@ -43,6 +43,8 @@ jobs:
               run: bun scripts/build-workspace-runtime.js && bun scripts/build-plan-server-runtime.js
             - name: Verify relocated remote runtime and diagnostic compilation
               run: bun scripts/run-bun-tests.ts scripts/bun-remote-runtime.test.ts scripts/compile-entrypoint.test.ts
+            - name: Qualify migrated tooling and Astro development without Deno
+              run: bun run test:suite scripts/check-owned-runtime.test.ts scripts/task-compatibility.test.ts scripts/ci-policy.test.ts src/ui/workspace/workspace-dev-imports.integration.test.ts src/shared/http-server.test.ts src/shared/native-file-lock.test.ts src/shared/foreground-process.test.ts
 
     ux-image:
         name: Deno-free UX container

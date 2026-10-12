@@ -113,9 +113,7 @@ await Promise.all(streams);
 process.exit(code ?? 1);
 `,
     );
-    const compileArgs = process.versions.deno
-        ? ["compile", "--output", outputPath, "-A", "--no-check", sourcePath]
-        : ["build", "--compile", "--outfile", outputPath, sourcePath];
+    const compileArgs = ["build", "--compile", "--outfile", outputPath, sourcePath];
     const output = await captureForegroundProcess(process.execPath, { args: compileArgs, cwd: getCwd() });
     if (!output.success) throw new Error(new TextDecoder().decode(output.stderr));
     return outputPath;

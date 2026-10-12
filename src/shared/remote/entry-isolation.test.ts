@@ -151,15 +151,7 @@ for (const populated of [false, true]) {
                 ? await nativeTerminalSession(project, home)
                 : await (async () => {
                       const result = await captureForegroundProcess("python3", {
-                          args: [
-                              "-c",
-                              pty,
-                              cli,
-                              project,
-                              home,
-                              process.execPath,
-                              JSON.stringify(["run", ...(process.versions.deno ? ["-A", "--quiet"] : [])]),
-                          ],
+                          args: ["-c", pty, cli, project, home, process.execPath, JSON.stringify(["run", ...[]])],
                           cwd: projectRoot,
                       });
                       assertEquals(result.code, 0, new TextDecoder().decode(result.stderr));

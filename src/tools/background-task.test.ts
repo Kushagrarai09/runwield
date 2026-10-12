@@ -1,4 +1,4 @@
-import { execPath, platform, versions } from "node:process";
+import { execPath, platform } from "node:process";
 import {
     mkdtemp as fsMkdtemp,
     readFile as fsReadFile,
@@ -35,7 +35,7 @@ writeFileSync(${JSON.stringify(marker)}, "complete");
 process.stdout.write("complete");
 `,
         );
-        const command = [execPath, ...(versions.deno ? ["run", "-A"] : ["--no-env-file", "--no-install"]), script]
+        const command = [execPath, ...["--no-env-file", "--no-install"], script]
             .map((value) => (platform === "win32" ? `"${value}"` : `'${value.replaceAll("'", "'\"'\"'")}'`))
             .join(" ");
         const start = await tool.execute(
