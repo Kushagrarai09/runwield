@@ -1,3 +1,4 @@
+import { getCwd } from "../../constants.js";
 /**
  * @module cmd/export
  * Export current interactive session to HTML (default) or JSONL.
@@ -28,8 +29,8 @@ export async function runExportCommand(argv: string[], options: CommandContext =
 
     const requestedPath = argv.join(" ").trim();
     const projectRoot = typeof sessionRuntime.getSessionSnapshot === "function"
-        ? sessionRuntime.getSessionSnapshot(sessionId)?.cwd || Deno.cwd()
-        : Deno.cwd();
+        ? sessionRuntime.getSessionSnapshot(sessionId)?.cwd || getCwd()
+        : getCwd();
 
     const fallbackIso = sessionStartedAt || new Date().toISOString();
     const outputPath = requestedPath

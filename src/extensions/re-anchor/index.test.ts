@@ -1,3 +1,7 @@
+import { test } from "node:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import reAnchorExtension from "./index.ts";
@@ -72,7 +76,7 @@ globalThis.addEventListener("unload", () => {
     }
     for (const projectRoot of tempProjectRoots) {
         try {
-            Deno.removeSync(projectRoot, { recursive: true });
+            rmSync(projectRoot, { recursive: true });
         } catch {
             // Best effort test cleanup.
         }
@@ -93,15 +97,15 @@ function hostedSession(
     active: { planName: string; reviewLedger?: ReviewLedger } | null,
     recordedPlanName: string | null = null,
 ): HostedSession {
-    const projectRoot = Deno.makeTempDirSync({ prefix: "runwield-re-anchor-" });
+    const projectRoot = mkdtempSync(join(tmpdir(), "runwield-re-anchor-"));
     tempProjectRoots.push(projectRoot);
     const session = new HostedSession({ id: `re-anchor-${crypto.randomUUID()}`, cwd: projectRoot });
     openSessions.push(session);
     if (recordedPlanName) session.setWorkflowPlanName(recordedPlanName);
     if (active) {
         const planPath = getStoredPlanPath(projectRoot, active.planName);
-        Deno.mkdirSync(dirname(planPath), { recursive: true });
-        Deno.writeTextFileSync(
+        mkdirSync(dirname(planPath), { recursive: true });
+        writeFileSync(
             planPath,
             `---\nsummary: SECRET FRONT MATTER\nworktreeId: secret-worktree\n---\n# Approved body for ${active.planName}\n\n## Verification Plan\n\nRun tests.`,
         );
@@ -116,13 +120,13 @@ function hostedSession(
     return session;
 }
 
-Deno.test("no compaction means no injection", () => {
+test("no compaction means no injection", () => {
     const harness = setup({ agentName: "plan-engineer", hostedSession: hostedSession({ planName: "some-plan" }) });
 
     assertEquals(harness.injected(), "");
 });
 
-Deno.test("a settled compaction injects the Plan body without Front Matter", () => {
+test("a settled compaction injects the Plan body without Front Matter", () => {
     const harness = setup({ agentName: "plan-engineer", hostedSession: hostedSession({ planName: "some-plan" }) });
     harness.compact({ reason: "threshold" });
 
@@ -134,7 +138,7 @@ Deno.test("a settled compaction injects the Plan body without Front Matter", () 
     assert(!text.includes("worktreeId"));
 });
 
-Deno.test("the injected message is appended without disturbing existing history", () => {
+test("the injected message is appended without disturbing existing history", () => {
     const harness = setup({ agentName: "plan-engineer", hostedSession: hostedSession({ planName: "some-plan" }) });
     const messages = [baseMessage(), { role: "assistant", content: "working", timestamp: 2 }];
     harness.compact();
@@ -145,7 +149,7 @@ Deno.test("the injected message is appended without disturbing existing history"
     assertEquals(returned.slice(0, messages.length), messages);
 });
 
-Deno.test("one compaction boundary re-anchors exactly once", () => {
+test("one compaction boundary re-anchors exactly once", () => {
     const harness = setup({ agentName: "plan-engineer", hostedSession: hostedSession({ planName: "some-plan" }) });
     harness.compact();
 
@@ -153,7 +157,7 @@ Deno.test("one compaction boundary re-anchors exactly once", () => {
     assertEquals(harness.injected(), "", "the following request must be left alone");
 });
 
-Deno.test("an overflow-retried compaction does not arm the re-anchor", () => {
+test("an overflow-retried compaction does not arm the re-anchor", () => {
     const harness = setup({ agentName: "plan-engineer", hostedSession: hostedSession({ planName: "some-plan" }) });
 
     // Overflow recovery compacts, then retries the aborted turn. Only the
@@ -165,7 +169,7 @@ Deno.test("an overflow-retried compaction does not arm the re-anchor", () => {
     assert(harness.injected() !== "");
 });
 
-Deno.test("the active execution Plan wins over the planning workflow context", () => {
+test("the active execution Plan wins over the planning workflow context", () => {
     const harness = setup({
         agentName: "plan-engineer",
         hostedSession: hostedSession({ planName: "executing-plan" }, "stale-planning-plan"),
@@ -178,7 +182,7 @@ Deno.test("the active execution Plan wins over the planning workflow context", (
     assert(!text.includes("stale-planning-plan"), "the planning context must not override the executing Plan");
 });
 
-Deno.test("a planning turn re-anchors from the recorded workflow Plan name", () => {
+test("a planning turn re-anchors from the recorded workflow Plan name", () => {
     const harness = setup({
         agentName: "planner",
         hostedSession: hostedSession(null, "docs/plans/drafted-plan.md"),
@@ -191,7 +195,7 @@ Deno.test("a planning turn re-anchors from the recorded workflow Plan name", () 
     assertStringIncludes(text, "docs/plans/drafted-plan.md");
 });
 
-Deno.test("an Architect re-anchors on its Epic", () => {
+test("an Architect re-anchors on its Epic", () => {
     const harness = setup({ agentName: "architect", hostedSession: hostedSession(null, "some-epic") });
     harness.compact();
 
@@ -201,7 +205,7 @@ Deno.test("an Architect re-anchors on its Epic", () => {
     assertStringIncludes(text, "docs/plans/some-epic.md");
 });
 
-Deno.test("Reviewer-Feedback Engineer carries the open Review Issue Ledger", () => {
+test("Reviewer-Feedback Engineer carries the open Review Issue Ledger", () => {
     const ledger: ReviewLedger = {
         sequence: 2,
         items: [
@@ -237,14 +241,14 @@ Deno.test("Reviewer-Feedback Engineer carries the open Review Issue Ledger", () 
     assert(!text.includes("R1-2"), "resolved items must not be reopened by the re-anchor");
 });
 
-Deno.test("a Delegated Agent Session is never re-anchored", () => {
+test("a Delegated Agent Session is never re-anchored", () => {
     const harness = setup({ agentName: "delegated", hostedSession: hostedSession({ planName: "some-plan" }) });
     harness.compact();
 
     assertEquals(harness.injected(), "");
 });
 
-Deno.test("agents without a durable Plan artifact are not re-anchored", () => {
+test("agents without a durable Plan artifact are not re-anchored", () => {
     for (const agentName of ["reviewer", "slicer", "router", "guide"]) {
         const harness = setup({ agentName, hostedSession: hostedSession({ planName: "some-plan" }) });
         harness.compact();
@@ -253,21 +257,21 @@ Deno.test("agents without a durable Plan artifact are not re-anchored", () => {
     }
 });
 
-Deno.test("no resolvable Plan name means no injection", () => {
+test("no resolvable Plan name means no injection", () => {
     const harness = setup({ agentName: "plan-engineer", hostedSession: hostedSession(null, null) });
     harness.compact();
 
     assertEquals(harness.injected(), "");
 });
 
-Deno.test("a missing hostedSession leaves the request untouched", () => {
+test("a missing hostedSession leaves the request untouched", () => {
     const harness = setup({ agentName: "plan-engineer", hostedSession: null });
     harness.compact();
 
     assertEquals(harness.injected(), "");
 });
 
-Deno.test("a throwing workflow lookup leaves the turn unmodified", () => {
+test("a throwing workflow lookup leaves the turn unmodified", () => {
     // Containment is about the failure a well-behaved HostedSession cannot
     // produce, so this is the one place a hostile stand-in is the subject under
     // test rather than a shortcut around real state.

@@ -1,3 +1,7 @@
+import { isMissingExecutableError } from "../foreground-process.ts";
+import { open } from "node:fs/promises";
+import { captureForegroundProcess } from "../captured-process.ts";
+import { readFile as fsReadFile, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
 /**
  * @module shared/workflow/git-snapshot
  * Git tree snapshots for workflow-scoped validation diffs.
@@ -36,16 +40,13 @@ export class WorktreeReviewTargetError extends WorktreeReviewComparisonError {
 async function runGit(cwd: string, args: string[], env: Record<string, string> = {}): Promise<string> {
     let output;
     try {
-        const command = new Deno.Command("git", {
+        output = await captureForegroundProcess("git", {
             args,
             cwd,
             env,
-            stdout: "piped",
-            stderr: "piped",
         });
-        output = await command.output();
     } catch (error) {
-        if (error instanceof Deno.errors.NotFound) {
+        if (error instanceof Error && isMissingExecutableError(error)) {
             throw new GitRepositoryRequiredError(
                 `Git operation requires a Git repository: git ${args.join(" ")}. The git executable was not found.`,
                 { cwd, operation: `git ${args.join(" ")}`, state: "git_missing" },
@@ -90,9 +91,7 @@ export async function listCommitsTouchingPathsSince(
     since: string | undefined,
     paths: string[],
 ): Promise<GitCommitSummary[]> {
-    const pathspecs = (Array.isArray(paths) ? paths : [])
-        .map((path) => String(path || "").trim())
-        .filter(Boolean);
+    const pathspecs = (Array.isArray(paths) ? paths : []).map((path) => String(path || "").trim()).filter(Boolean);
     if (!since || pathspecs.length === 0) return [];
     await assertGitRepository(cwd, "Checking affected path commit history");
 
@@ -106,10 +105,14 @@ export async function listCommitsTouchingPathsSince(
         ...pathspecs,
     ]);
 
-    return output.trim().split("\n").filter(Boolean).map((line) => {
-        const [hash = "", date = "", ...subjectParts] = line.split("\x1f");
-        return { hash, date, subject: subjectParts.join("\x1f") };
-    });
+    return output
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => {
+            const [hash = "", date = "", ...subjectParts] = line.split("\x1f");
+            return { hash, date, subject: subjectParts.join("\x1f") };
+        });
 }
 
 /**
@@ -120,20 +123,21 @@ export async function captureWorktreeTree(cwd: string): Promise<string> {
     await assertGitRepository(cwd, "Capturing an execution baseline tree");
     const realIndex = (await runGit(cwd, ["rev-parse", "--git-path", "index"])).trim();
     const realIndexPath = isAbsolute(realIndex) ? realIndex : join(cwd, realIndex);
-    const indexPath = await Deno.makeTempFile({ dir: dirname(realIndexPath), prefix: "runwield-index-" });
+    const indexPath = join(dirname(realIndexPath), `runwield-index-${crypto.randomUUID()}`);
+    await (await open(indexPath, "wx", 0o600)).close();
     const env = { GIT_INDEX_FILE: indexPath };
 
     try {
         try {
-            await Deno.writeFile(indexPath, await Deno.readFile(realIndexPath));
+            await fsWriteFile(indexPath, await fsReadFile(realIndexPath));
         } catch (error) {
-            if (!(error instanceof Deno.errors.NotFound)) throw error;
-            await Deno.remove(indexPath);
+            if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+            await fsRm(indexPath);
         }
         await runGit(cwd, ["add", "-A", "--", "."], env);
         return (await runGit(cwd, ["write-tree"], env)).trim();
     } finally {
-        await Deno.remove(indexPath).catch(() => {});
+        await fsRm(indexPath).catch(() => {});
     }
 }
 

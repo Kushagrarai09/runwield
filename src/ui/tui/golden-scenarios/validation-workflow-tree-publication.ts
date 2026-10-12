@@ -260,6 +260,8 @@ export const validationTreePublicationDirtyCheckoutScenario = withValidationBran
         terminal: { columns: 100, rows: 30 },
         timeoutMs: 150000,
         committedProjectFiles: [
+            // The delivered-file assertion checks exact LF bytes; Plan checkout still uses native Git conversion.
+            { path: ".gitattributes", text: "dirty-overlap.txt text eol=lf\n" },
             { path: ".wld/settings.json", text: `${JSON.stringify({ verification_command: "true" }, null, 4)}\n` },
             {
                 path: `docs/plans/${dirtyPublicationPlanName}.md`,
@@ -414,6 +416,8 @@ export const validationTreePublicationLocalOnlyScenario = withValidationBranches
         terminal: { columns: 100, rows: 30 },
         timeoutMs: 120000,
         committedProjectFiles: [
+            // The delivered-file assertion checks exact LF bytes; Plan checkout still uses native Git conversion.
+            { path: ".gitattributes", text: "local-publication.txt text eol=lf\n" },
             { path: ".wld/settings.json", text: `${JSON.stringify({ verification_command: "true" }, null, 4)}\n` },
             {
                 path: `docs/plans/${localPublicationPlanName}.md`,

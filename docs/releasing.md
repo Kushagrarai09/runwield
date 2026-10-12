@@ -55,9 +55,23 @@ bash install.sh vX.Y.Z-rc.N
 Release operators need:
 
 - `git` with push access to this repository.
-- `deno` matching the repository toolchain.
+- Bun matching `.bun-version` (1.4.3) for release executables and their binary qualification.
+- `deno` matching the repository toolchain for source regression, Golden and package tooling.
 - `gh` authenticated to GitHub with permission to read releases before tagging, verify Candidate releases during
   promotion, and edit release notes after CI publishes assets (`gh auth status` should pass for the target account).
+
+## Binary runtime
+
+Release binaries use pinned Bun, frozen root/docs dependency graphs, and the Bun Workspace build.
+All five existing release targets and archive names remain supported. Artifact metadata uses the
+existing platform triples; the embedded build identity includes the Bun compiler and dependency graph.
+`--remote-preflight` reports the executing runtime and its version so qualification rejects a Deno binary
+or an unexpected Bun version. Deno continues to run the source and Golden regression gates and the
+native package verification tooling. Run those tools in separate checkouts from Bun builds.
+
+The Bun binary gate retains bundled-reference extraction, image resizing, Plans UI, and Plan/code
+review checks. Native Windows ZIP and Homebrew checks still gate publication. This compiler change
+does not publish to Stable channels during a Candidate release or restore automatic WinGet submission.
 
 ## Release source
 

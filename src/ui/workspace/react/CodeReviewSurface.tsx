@@ -1495,8 +1495,8 @@ function GuidedReviewExplainer({ guide, job, files, token, onToggleReviewed, onR
             unplacedFiles: remaining,
         };
     }, [guide, files]);
-    const sectionNotes = (guide.sections || []).map((section) => (
-        <div className="rw-guide-notes">
+    const sectionNotes = (guide.sections || []).map((section, index) => (
+        <div key={index} className="rw-guide-notes">
             {(section.blocks || []).filter((block) => !["prose", "diff"].includes(block.type))
                 .map((block, index) => <GuideBlock key={index} block={block} token={token} />)}
         </div>

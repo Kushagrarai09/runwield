@@ -1,3 +1,4 @@
+import { readFile as fsReadFile } from "node:fs/promises";
 import { extractYaml, test as hasFrontMatter } from "@std/front-matter";
 import { basename, join } from "@std/path";
 import { fileExists } from "../helpers.ts";
@@ -305,7 +306,7 @@ async function readPromptTemplateForInvocation(path: string, templateName: strin
     let raw = "";
     try {
         await assertPersonalResourcePath(path, `prompt template "${templateName}"`);
-        raw = await Deno.readTextFile(path);
+        raw = await fsReadFile(path, "utf8");
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(`Failed to read prompt template "${templateName}": ${message}`);

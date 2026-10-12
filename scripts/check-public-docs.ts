@@ -1,3 +1,5 @@
+import { readdir as fsReaddir, readFile as fsReadFile, stat as fsStat } from "node:fs/promises";
+import process from "node:process";
 import { PUBLIC_DOCS, routeFor } from "./public-docs.ts";
 import { getCwd } from "../src/constants.js";
 import { join } from "@std/path";
@@ -10,7 +12,7 @@ async function checkPublicDocs(): Promise<void> {
     const routes = PUBLIC_DOCS.map((source) => join(routeFor(source).slice(1), "index.html"));
     for (const route of routes) {
         try {
-            await Deno.stat(join(output, route));
+            await fsStat(join(output, route));
         } catch {
             failures.push(`missing route /${route}`);
         }
@@ -22,7 +24,7 @@ async function checkPublicDocs(): Promise<void> {
         ...routes.filter((route) => route !== "index.html"),
     ];
     for (const route of htmlRoutes) {
-        const html = await Deno.readTextFile(join(output, route));
+        const html = await fsReadFile(join(output, route), "utf8");
         for (const match of html.matchAll(/(?:href|src)="([^"]+)"/g)) {
             const value = match[1];
             if (value.startsWith("data:")) continue;
@@ -39,10 +41,10 @@ async function checkPublicDocs(): Promise<void> {
                 : join(output, pathname.slice(1));
             let targetHtml = "";
             try {
-                const info = await Deno.stat(target);
-                if (info.isFile && target.endsWith(".html")) targetHtml = await Deno.readTextFile(target);
+                const info = await fsStat(target);
+                if (info.isFile() && target.endsWith(".html")) targetHtml = await fsReadFile(target, "utf8");
             } catch (error) {
-                if (!(error instanceof Deno.errors.NotFound)) throw error;
+                if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
                 failures.push(`${route} links to missing published target ${value}`);
                 continue;
             }
@@ -63,19 +65,19 @@ async function checkPublicDocs(): Promise<void> {
         ]
     ) {
         try {
-            await Deno.stat(join(output, excluded));
+            await fsStat(join(output, excluded));
             failures.push(`excluded docs directory was published: ${excluded}`);
         } catch (error) {
-            if (!(error instanceof Deno.errors.NotFound)) throw error;
+            if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
         }
     }
 
     async function outputText(directory: string): Promise<string> {
         let text = "";
-        for await (const entry of Deno.readDir(directory)) {
+        for await (const entry of await fsReaddir(directory, { withFileTypes: true })) {
             const path = join(directory, entry.name);
-            if (entry.isDirectory) text += await outputText(path);
-            else text += new TextDecoder().decode(await Deno.readFile(path));
+            if (entry.isDirectory()) text += await outputText(path);
+            else text += new TextDecoder().decode(await fsReadFile(path));
         }
         return text;
     }
@@ -87,13 +89,13 @@ async function checkPublicDocs(): Promise<void> {
         }
     }
 
-    const sitemap = await Deno.readTextFile(join(output, "sitemap-0.xml"));
+    const sitemap = await fsReadFile(join(output, "sitemap-0.xml"), "utf8");
     // Only the five central PRDs publish, under /contributing/prd/.
     for (const excluded of ["docs.runwield.dev/prd/", "/plans/", "/research/", "/audits/"]) {
         if (sitemap.includes(excluded)) failures.push(`sitemap exposes excluded route ${excluded}`);
     }
 
-    const index = await Deno.readTextFile(join(output, "index.html"));
+    const index = await fsReadFile(join(output, "index.html"), "utf8");
     for (
         const text of ["RunWield Documentation", "Quickstart", "Configure RunWield"]
     ) {
@@ -115,7 +117,7 @@ async function checkPublicDocs(): Promise<void> {
 
     if (failures.length > 0) {
         for (const failure of failures) console.error(`- ${failure}`);
-        Deno.exit(1);
+        process.exit(1);
     }
     console.log(`Verified ${PUBLIC_DOCS.length} public documentation routes`);
 }

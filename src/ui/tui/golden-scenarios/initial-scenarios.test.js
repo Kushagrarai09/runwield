@@ -1,3 +1,15 @@
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { getCwd } from "../../../constants.js";
+import { test } from "node:test";
+import {
+    mkdtemp as fsMkdtemp,
+    readdir as fsReaddir,
+    readFile as fsReadFile,
+    rm as fsRm,
+    stat as fsStat,
+} from "node:fs/promises";
+import process from "node:process";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
     escapeCancellationScenario,
@@ -29,7 +41,7 @@ async function removeChildHeartbeatArtifact(error) {
         /** @type {{ childPayload?: { heartbeatArtifactDir?: unknown } }} */ (error || {}).childPayload;
     const root = childPayload?.heartbeatArtifactDir;
     if (typeof root !== "string" || !root) return;
-    await Deno.remove(root, { recursive: true }).catch(() => {});
+    await fsRm(root, { recursive: true }).catch(() => {});
 }
 
 const scenarioExportNames = new Map([
@@ -44,7 +56,7 @@ const scenarioExportNames = new Map([
 ]);
 
 for (const scenario of initialGoldenScenarios.filter((candidate) => candidate !== helpSlashCommandScenario)) {
-    Deno.test(`golden scenario: ${scenario.name}`, async () => {
+    test(`golden scenario: ${scenario.name}`, async () => {
         const { runGoldenScenarioChildProcess } = await import("../testing/child-protocol.js");
         const result = await runGoldenScenarioChildProcess({
             scenarioModule: "src/ui/tui/golden-scenarios/initial-scenarios.js",
@@ -55,7 +67,7 @@ for (const scenario of initialGoldenScenarios.filter((candidate) => candidate !=
     });
 }
 
-Deno.test("golden actor fails on missing scripted turn", () => {
+test("golden actor fails on missing scripted turn", () => {
     const actor = new GoldenScenarioActor([{ id: "guide", agent: "guide", response: "ok" }]);
     assertRejects(
         async () => await Promise.resolve(actor.next({ agent: "router" })),
@@ -64,7 +76,7 @@ Deno.test("golden actor fails on missing scripted turn", () => {
     );
 });
 
-Deno.test("golden actor fails on unused scripted turn", () => {
+test("golden actor fails on unused scripted turn", () => {
     const actor = new GoldenScenarioActor([{ id: "router", agent: "router", response: "ok" }]);
     assertRejects(
         async () => await Promise.resolve(actor.assertComplete()),
@@ -73,7 +85,7 @@ Deno.test("golden actor fails on unused scripted turn", () => {
     );
 });
 
-Deno.test("golden runner enforces subprocess isolation for composed scenarios", async () => {
+test("golden runner enforces subprocess isolation for composed scenarios", async () => {
     await assertRejects(
         () => runGoldenScenario({ name: "composed", composedTui: true }, { keepArtifacts: false }),
         Error,
@@ -81,7 +93,7 @@ Deno.test("golden runner enforces subprocess isolation for composed scenarios", 
     );
 });
 
-Deno.test("golden runner reports unknown actions", async () => {
+test("golden runner reports unknown actions", async () => {
     await assertRejects(
         () => runGoldenScenario({ name: "bad", actions: [{ type: "unknown" }] }, { keepArtifacts: false }),
         Error,
@@ -89,7 +101,7 @@ Deno.test("golden runner reports unknown actions", async () => {
     );
 });
 
-Deno.test("golden actor fails on ambiguous scripted turns", async () => {
+test("golden actor fails on ambiguous scripted turns", async () => {
     const actor = new GoldenScenarioActor([
         { id: "a", agent: "router", response: "a" },
         { id: "b", agent: "router", response: "b" },
@@ -101,7 +113,7 @@ Deno.test("golden actor fails on ambiguous scripted turns", async () => {
     );
 });
 
-Deno.test("golden actor validates declared available tool set", async () => {
+test("golden actor validates declared available tool set", async () => {
     const actor = new GoldenScenarioActor([
         { id: "router", agent: "router", availableTools: ["triage_report", "read"], response: "ok" },
     ]);
@@ -112,7 +124,7 @@ Deno.test("golden actor validates declared available tool set", async () => {
     );
 });
 
-Deno.test("golden actor fails when required tools are unavailable", () => {
+test("golden actor fails when required tools are unavailable", () => {
     const actor = new GoldenScenarioActor([
         { id: "router", agent: "router", requiredTools: ["triage_report"], response: "ok" },
     ]);
@@ -123,7 +135,7 @@ Deno.test("golden actor fails when required tools are unavailable", () => {
     );
 });
 
-Deno.test("golden scenario child process runs with isolated environment before scenario import", async () => {
+test("golden scenario child process runs with isolated environment before scenario import", async () => {
     const { runGoldenScenarioChildProcess } = await import("../testing/child-protocol.js");
     const result = await runGoldenScenarioChildProcess({
         scenarioModule: "src/ui/tui/golden-scenarios/initial-scenarios.js",
@@ -133,22 +145,22 @@ Deno.test("golden scenario child process runs with isolated environment before s
     assertEquals(result.ok, true);
     assertEquals(result.result.name, "help-slash-command");
     assertEquals(result.result.actor.remaining, []);
-    assertEquals(await Deno.stat(result.env.root).then(() => true).catch(() => false), false);
+    assertEquals(await fsStat(result.env.root).then(() => true).catch(() => false), false);
 });
 
-Deno.test("golden composition cleans up partial startup failure", async () => {
+test("golden composition cleans up partial startup failure", async () => {
     const { join } = await import("@std/path");
     const { withProcessGlobalTestLock } = await import("../../../testing/process-global-lock.ts");
     await withProcessGlobalTestLock(async () => {
-        const previousHome = Deno.env.get("HOME");
-        const previousCwd = Deno.cwd();
+        const previousHome = process.env["HOME"];
+        const previousCwd = getCwd();
         const { createGoldenIsolatedEnvironment } = await import("../testing/isolated-environment.js");
         const { VirtualTerminal } = await import("../testing/virtual-terminal.js");
         const env = await createGoldenIsolatedEnvironment();
         const terminal = new VirtualTerminal();
         try {
-            for (const [key, value] of Object.entries(env.env)) Deno.env.set(key, value);
-            Deno.chdir(env.projectRoot);
+            for (const [key, value] of Object.entries(env.env)) process.env[key] = value;
+            process.chdir(env.projectRoot);
             const { _setTestStatePath } = await import("../../../cmd/init/init-state.ts");
             _setTestStatePath(join(env.runwieldDir, "init-state.json"));
             const { createInteractiveTuiComposition } = await import("../interactive-tui-composition.ts");
@@ -167,15 +179,15 @@ Deno.test("golden composition cleans up partial startup failure", async () => {
             );
             assertEquals(terminal.stopped, true);
         } finally {
-            Deno.chdir(previousCwd);
-            if (previousHome === undefined) Deno.env.delete("HOME");
-            else Deno.env.set("HOME", previousHome);
+            process.chdir(previousCwd);
+            if (previousHome === undefined) delete process.env["HOME"];
+            else process.env["HOME"] = previousHome;
             await env.cleanup();
         }
     });
 });
 
-Deno.test("golden scenario child process failure reports retained diagnostics artifact", async () => {
+test("golden scenario child process failure reports retained diagnostics artifact", async () => {
     const { runGoldenScenarioChildProcess } = await import("../testing/child-protocol.js");
     const error = await assertRejects(
         () =>
@@ -190,15 +202,15 @@ Deno.test("golden scenario child process failure reports retained diagnostics ar
     const artifactDir = /** @type {Error & { artifactDir?: string }} */ (error).artifactDir;
     assert(artifactDir, "Expected child failure to expose artifactDir on the thrown error.");
     try {
-        const diagnostics = await Deno.readTextFile(`${artifactDir}/child-diagnostics.json`);
+        const diagnostics = await fsReadFile(`${artifactDir}/child-diagnostics.json`, "utf8");
         assert(diagnostics.includes("missingGoldenScenario"));
     } finally {
-        await Deno.remove(artifactDir, { recursive: true }).catch(() => {});
+        await fsRm(artifactDir, { recursive: true }).catch(() => {});
         await removeChildHeartbeatArtifact(error);
     }
 });
 
-Deno.test("golden scenario timeout retains child heartbeat diagnostics", async () => {
+test("golden scenario timeout retains child heartbeat diagnostics", async () => {
     const { runGoldenScenarioChildProcess } = await import("../testing/child-protocol.js");
     const error = await assertRejects(
         () =>
@@ -214,7 +226,7 @@ Deno.test("golden scenario timeout retains child heartbeat diagnostics", async (
     const artifactDir = childPayload?.artifactDir;
     assert(artifactDir, "Expected timeout failure to expose child heartbeat artifactDir.");
     try {
-        const diagnostics = JSON.parse(await Deno.readTextFile(`${artifactDir}/timeout-diagnostics.json`));
+        const diagnostics = JSON.parse(await fsReadFile(`${artifactDir}/timeout-diagnostics.json`, "utf8"));
         assert(typeof diagnostics.screenText === "string", "Expected heartbeat screen diagnostics.");
         assert(
             diagnostics.runtime && typeof diagnostics.runtime.activeAgent === "string",
@@ -228,11 +240,11 @@ Deno.test("golden scenario timeout retains child heartbeat diagnostics", async (
     } finally {
         await removeChildHeartbeatArtifact(error);
         const parentArtifactDir = /** @type {Error & { artifactDir?: string }} */ (error).artifactDir;
-        if (parentArtifactDir) await Deno.remove(parentArtifactDir, { recursive: true }).catch(() => {});
+        if (parentArtifactDir) await fsRm(parentArtifactDir, { recursive: true }).catch(() => {});
     }
 });
 
-Deno.test("golden scenario child crash surfaces substantive scenario diagnostics", async () => {
+test("golden scenario child crash surfaces substantive scenario diagnostics", async () => {
     const { runGoldenScenarioChildProcess } = await import("../testing/child-protocol.js");
     const error = await assertRejects(
         () =>
@@ -248,7 +260,7 @@ Deno.test("golden scenario child crash surfaces substantive scenario diagnostics
     const artifactDir = childPayload?.artifactDir;
     assert(artifactDir, "Expected child scenario failure to expose scenario artifactDir.");
     try {
-        const diagnostics = JSON.parse(await Deno.readTextFile(`${artifactDir}/diagnostics.json`));
+        const diagnostics = JSON.parse(await fsReadFile(`${artifactDir}/diagnostics.json`, "utf8"));
         assert(typeof diagnostics.screenText === "string", "Expected screen diagnostics.");
         assert(
             diagnostics.runtime && typeof diagnostics.runtime.activeAgent === "string",
@@ -259,11 +271,11 @@ Deno.test("golden scenario child crash surfaces substantive scenario diagnostics
     } finally {
         await removeChildHeartbeatArtifact(error);
         const parentArtifactDir = /** @type {Error & { artifactDir?: string }} */ (error).artifactDir;
-        if (parentArtifactDir) await Deno.remove(parentArtifactDir, { recursive: true }).catch(() => {});
+        if (parentArtifactDir) await fsRm(parentArtifactDir, { recursive: true }).catch(() => {});
     }
 });
 
-Deno.test("golden actor exposes faux-provider response factory integration", () => {
+test("golden actor exposes faux-provider response factory integration", () => {
     const actor = new GoldenScenarioActor([
         { id: "guide", agent: "guide", phase: "inquiry", text: "hello", thinking: "thinking" },
     ]);
@@ -273,7 +285,7 @@ Deno.test("golden actor exposes faux-provider response factory integration", () 
     actor.assertComplete();
 });
 
-Deno.test("golden runner rejects unexpected interactions", async () => {
+test("golden runner rejects unexpected interactions", async () => {
     await assertRejects(
         () =>
             runGoldenScenario({
@@ -286,8 +298,8 @@ Deno.test("golden runner rejects unexpected interactions", async () => {
     );
 });
 
-Deno.test("golden runner writes diagnostic artifacts on failure", async () => {
-    const artifactRoot = await Deno.makeTempDir({ prefix: "golden-artifacts-test-" });
+test("golden runner writes diagnostic artifacts on failure", async () => {
+    const artifactRoot = await fsMkdtemp(join(tmpdir(), "golden-artifacts-test-"));
     try {
         await assertRejects(
             () => runGoldenScenario({ name: "artifact", actions: [{ type: "unknown" }] }, { artifactRoot }),
@@ -295,9 +307,9 @@ Deno.test("golden runner writes diagnostic artifacts on failure", async () => {
             "Unknown scenario action",
         );
         const entries = [];
-        for await (const entry of Deno.readDir(artifactRoot)) entries.push(entry.name);
+        for await (const entry of await fsReaddir(artifactRoot, { withFileTypes: true })) entries.push(entry.name);
         assertEquals(entries.length, 1);
     } finally {
-        await Deno.remove(artifactRoot, { recursive: true }).catch(() => {});
+        await fsRm(artifactRoot, { recursive: true }).catch(() => {});
     }
 });

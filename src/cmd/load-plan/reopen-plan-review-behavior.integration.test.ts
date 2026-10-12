@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import {
     fauxAssistantMessage,
@@ -35,7 +36,7 @@ async function savedReview(
     });
 }
 
-Deno.test("reopened ordinary feedback sends its image to the saved planning Agent in the same Session", async () => {
+test("reopened ordinary feedback sends its image to the saved planning Agent in the same Session", async () => {
     await withRuntimeCommandFixture(
         "reopen-feedback-agent-",
         async ({ homeDir, projectRoot, setModelResponseFactory }) => {
@@ -92,7 +93,7 @@ Deno.test("reopened ordinary feedback sends its image to the saved planning Agen
     );
 });
 
-Deno.test("reopened ordinary approval and run starts the saved Plan", async () => {
+test("reopened ordinary approval and run starts the saved Plan", async () => {
     await withRuntimeCommandFixture("reopen-approve-run-", async ({ homeDir, projectRoot, setModelMessages }) => {
         await savePlan(projectRoot, "target", "# Target\n\n## Context\n\nImplement this.\n", {
             classification: "PLANNED_CHANGE",
@@ -148,7 +149,7 @@ Deno.test("reopened ordinary approval and run starts the saved Plan", async () =
     });
 });
 
-Deno.test("reopened PROJECT Epic approval starts decomposition in the same Session", async () => {
+test("reopened PROJECT Epic approval starts decomposition in the same Session", async () => {
     await withRuntimeCommandFixture(
         "reopen-epic-decompose-",
         async ({ homeDir, projectRoot, setModelResponseFactory }) => {
@@ -199,7 +200,7 @@ Deno.test("reopened PROJECT Epic approval starts decomposition in the same Sessi
     );
 });
 
-Deno.test("reopened Sequence combines child feedback and then approves and runs the first child", async () => {
+test("reopened Sequence combines child feedback and then approves and runs the first child", async () => {
     await withRuntimeCommandFixture(
         "reopen-sequence-decisions-",
         async ({ homeDir, projectRoot, setModelResponseFactory }) => {

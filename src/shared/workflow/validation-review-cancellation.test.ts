@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assertEquals, assertExists, assertStringIncludes } from "@std/assert";
 import { loadPlan } from "../../plan-store.js";
 import { HostedSession } from "../session/hosted-session.js";
@@ -28,7 +29,7 @@ for (
         { outcome: "selected", _meta: { exit: true, feedback: "Unsubmitted draft", annotations: [{ text: "draft" }] } },
     ] as const
 ) {
-    Deno.test(`Code Review cancellation overrides decision data: ${JSON.stringify(response)}`, () => {
+    test(`Code Review cancellation overrides decision data: ${JSON.stringify(response)}`, () => {
         const review = normalizeHumanReview(response);
         assertEquals(review.approved, false);
         assertEquals(review.feedback, "");
@@ -39,7 +40,7 @@ for (
     });
 }
 
-Deno.test("real broker cancellation twice preserves review for a fresh Session and HTTP approval", async () => {
+test("real broker cancellation twice preserves review for a fresh Session and HTTP approval", async () => {
     const projectRoot = await makeValidationProjectRoot("p", {
         classification: "QUICK_FIX",
         status: "reviewed",

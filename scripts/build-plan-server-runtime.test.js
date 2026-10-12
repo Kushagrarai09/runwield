@@ -1,3 +1,12 @@
+import { test } from "node:test";
+import {
+    mkdir as fsMkdir,
+    mkdtemp as fsMkdtemp,
+    readFile as fsReadFile,
+    rm as fsRm,
+    writeFile as fsWriteFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { assertEquals, assertRejects } from "@std/assert";
 import { join } from "@std/path";
 import { readWorkspaceStyles } from "../src/ui/workspace/workspace-styles.ts";
@@ -11,7 +20,7 @@ import {
 
 /** @returns {Promise<string>} */
 async function makeTempRoot() {
-    return await Deno.makeTempDir({ prefix: "runwield-plan-server-runtime-" });
+    return await fsMkdtemp(join(tmpdir(), "runwield-plan-server-runtime-"));
 }
 
 /**
@@ -19,8 +28,8 @@ async function makeTempRoot() {
  * @param {string} content
  */
 async function writeFile(path, content = "fixture") {
-    await Deno.mkdir(join(path, ".."), { recursive: true }).catch(() => {});
-    await Deno.writeTextFile(path, content);
+    await fsMkdir(join(path, ".."), { recursive: true }).catch(() => {});
+    await fsWriteFile(path, content);
 }
 
 /** @param {string} root */
@@ -50,7 +59,7 @@ async function writeRuntimeInputs(root) {
     await writeFile(join(root, "src/ui/theme/catppuccin-mocha.json"), '{"name":"catppuccin-mocha"}\n');
 }
 
-Deno.test("listRuntimeAssetDestinations returns the passive asset allowlist", () => {
+test("listRuntimeAssetDestinations returns the passive asset allowlist", () => {
     assertEquals(listRuntimeAssetDestinations(), [
         "brand/logo.svg",
         ...AGENT_DEFINITION_ASSETS,
@@ -62,7 +71,7 @@ Deno.test("listRuntimeAssetDestinations returns the passive asset allowlist", ()
     ]);
 });
 
-Deno.test("buildPlanServerRuntime creates a minimal runtime root", async () => {
+test("buildPlanServerRuntime creates a minimal runtime root", async () => {
     const root = await makeTempRoot();
     try {
         await writeRuntimeInputs(root);
@@ -95,8 +104,9 @@ Deno.test("buildPlanServerRuntime creates a minimal runtime root", async () => {
             ],
         }]);
 
-        const packagedCss = await Deno.readTextFile(
+        const packagedCss = await fsReadFile(
             join(root, "dist/plan-server/src/ui/workspace/static/workspace.css"),
+            "utf8",
         );
         assertEquals(packagedCss, await readWorkspaceStyles("src/ui/workspace/static/workspace.css"));
         assertEquals(packagedCss.includes("@import"), false);
@@ -114,11 +124,11 @@ Deno.test("buildPlanServerRuntime creates a minimal runtime root", async () => {
             "src/ui/workspace/static/workspace.css",
         ]);
     } finally {
-        await Deno.remove(root, { recursive: true });
+        await fsRm(root, { recursive: true });
     }
 });
 
-Deno.test("buildPlanServerRuntime removes stale output", async () => {
+test("buildPlanServerRuntime removes stale output", async () => {
     const root = await makeTempRoot();
     try {
         await writeRuntimeInputs(root);
@@ -141,11 +151,11 @@ Deno.test("buildPlanServerRuntime removes stale output", async () => {
         assertEquals(files.includes("src/cli.ts"), false);
         assertEquals(files.includes("src/agent-definitions/subagent-definitions/reviewer-prompt.md"), false);
     } finally {
-        await Deno.remove(root, { recursive: true });
+        await fsRm(root, { recursive: true });
     }
 });
 
-Deno.test("buildPlanServerRuntime fails when required inputs are missing", async () => {
+test("buildPlanServerRuntime fails when required inputs are missing", async () => {
     const root = await makeTempRoot();
     try {
         await assertRejects(
@@ -161,15 +171,15 @@ Deno.test("buildPlanServerRuntime fails when required inputs are missing", async
             "Required Plan Server runtime file is missing",
         );
     } finally {
-        await Deno.remove(root, { recursive: true });
+        await fsRm(root, { recursive: true });
     }
 });
 
-Deno.test("buildPlanServerRuntime fails clearly when Workspace runtime output lacks server entry", async () => {
+test("buildPlanServerRuntime fails clearly when Workspace runtime output lacks server entry", async () => {
     const root = await makeTempRoot();
     try {
         await writeRuntimeInputs(root);
-        await Deno.remove(join(root, "dist/workspace-runtime/server.mjs"));
+        await fsRm(join(root, "dist/workspace-runtime/server.mjs"));
         let didRunBundle = false;
 
         await assertRejects(
@@ -189,15 +199,15 @@ Deno.test("buildPlanServerRuntime fails clearly when Workspace runtime output la
         );
         assertEquals(didRunBundle, false);
     } finally {
-        await Deno.remove(root, { recursive: true });
+        await fsRm(root, { recursive: true });
     }
 });
 
-Deno.test("required Workspace runtime file list includes the Astro server entry", () => {
+test("required Workspace runtime file list includes the Astro server entry", () => {
     assertEquals(REQUIRED_WORKSPACE_RUNTIME_FILES, ["server.mjs"]);
 });
 
-Deno.test("findProhibitedRuntimeFiles rejects broad source and state copies", () => {
+test("findProhibitedRuntimeFiles rejects broad source and state copies", () => {
     assertEquals(
         findProhibitedRuntimeFiles([
             "remote-server.js",

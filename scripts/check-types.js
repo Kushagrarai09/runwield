@@ -1,4 +1,5 @@
 #!/usr/bin/env -S deno run --allow-read --allow-run --allow-env
+import process from "node:process";
 
 /**
  * Type-check every production and test source file.
@@ -24,5 +25,5 @@ if (import.meta.main) {
         failureLabel: "type checks",
     });
     await writeSnipCommandResult(result);
-    Deno.exit(result.code);
+    process.exit(result.code);
 }

@@ -3,7 +3,9 @@
  * Shared constants for RunWield CLI orchestration.
  */
 
-import { join } from "@std/path";
+import { realpathSync } from "node:fs";
+import { isAbsolute, join, relative } from "node:path";
+import { argv, cwd, env, platform, versions } from "node:process";
 import { RUNWIELD_SOURCE_ROOT } from "../runtime-root.js";
 
 /** Name of the installed CLI binary shown in user-facing docs/help. */
@@ -26,7 +28,7 @@ export const PROJECT_SECRET_STORE_RELATIVE_PATH = ".wld/collaboration-secrets.js
  * @returns {string}
  */
 export function getCwd() {
-    return Deno.cwd();
+    return cwd();
 }
 
 /**
@@ -233,7 +235,7 @@ export const WORKTREE_BRANCH_PREFIX = "worktree/";
  */
 function readOptionalEnv(name) {
     try {
-        return Deno.env.get(name) || "";
+        return env[name] || "";
     } catch {
         return "";
     }
@@ -261,15 +263,21 @@ export function isTestModulePath(path) {
 // realm's main module cannot change.
 const IS_TEST_REALM = (() => {
     try {
-        return isTestModulePath(new URL(Deno.mainModule).pathname);
+        // Keep Deno's per-realm main module during the transition. Bun's test
+        // preload supplies the stronger before-import sandbox check as well.
+        /** @type {{ mainModule?: string } | undefined} */
+        const deno = Reflect.get(globalThis, String("Deno"));
+        if (deno?.mainModule) return isTestModulePath(new URL(deno.mainModule).pathname);
+        return isTestModulePath(argv[1] || "") || Boolean(versions.bun && argv[1] === "test") ||
+            Boolean(readOptionalEnv("NODE_TEST_CONTEXT"));
     } catch {
         return false;
     }
 })();
 
 const UNSANDBOXED_TEST_RUN_MESSAGE =
-    "Run the suite with `deno task test` (or scripts/run-tests.js), which points HOME and MNEMOTECA_DB_PATH at a " +
-    "sandbox. Running `deno test` directly lets tests overwrite the real ~/.wld and the real mnemoteca memory database.";
+    "Run the suite with `deno task test` or `bun run test:bun`, whose isolated runners point HOME and " +
+    "MNEMOTECA_DB_PATH at a sandbox. Direct test commands can overwrite real ~/.wld and memory databases.";
 
 // Fail the moment a test realm loads this module without the sandbox marker
 // that only scripts/run-tests.js sets. The lazy guard below is what makes the
@@ -307,9 +315,10 @@ export function describeUnsandboxedTestRun({ isTestRealm, sandboxHome, homeDir }
  */
 function isTempTestHome(homeDir) {
     try {
-        const tempDir = Deno.realPathSync(readOptionalEnv("TMPDIR") || "/tmp");
-        const resolvedHome = Deno.realPathSync(homeDir);
-        return resolvedHome === tempDir || resolvedHome.startsWith(`${tempDir}/`);
+        const tempDir = realpathSync(readOptionalEnv("TMPDIR") || "/tmp");
+        const resolvedHome = realpathSync(homeDir);
+        const child = relative(tempDir, resolvedHome);
+        return child === "" || (!child.startsWith("..") && !isAbsolute(child));
     } catch {
         return false;
     }
@@ -342,7 +351,7 @@ function assertTestRunIsSandboxed(homeDir) {
  * @returns {string}
  */
 export function getHomeDir() {
-    const homeDir = readOptionalEnv("HOME") || (Deno.build.os === "windows" ? windowsHomeDir() : "");
+    const homeDir = readOptionalEnv("HOME") || (platform === "win32" ? windowsHomeDir() : "");
     assertTestRunIsSandboxed(homeDir);
     return homeDir;
 }

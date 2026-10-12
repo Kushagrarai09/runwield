@@ -1,3 +1,4 @@
+import { copyFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { SettingsManager } from "@earendil-works/pi-coding-agent";
 import { dirname, join } from "@std/path";
 import { parse as parseJsonc } from "@std/jsonc";
@@ -118,7 +119,7 @@ function getExactProjectSettingsPath(projectRoot) {
  */
 function fileExists(path) {
     try {
-        return Deno.statSync(path).isFile;
+        return statSync(path).isFile();
     } catch {
         return false;
     }
@@ -160,13 +161,13 @@ function acquireSettingsLockSyncWithRetry(path) {
  */
 function ensureSettingsFileForLock(path) {
     try {
-        Deno.statSync(path);
+        statSync(path);
     } catch (_e) {
         const parentDir = dirname(path);
         try {
-            Deno.mkdirSync(parentDir, { recursive: true });
+            mkdirSync(parentDir, { recursive: true });
         } catch (_e2) { /* ignore */ }
-        Deno.writeTextFileSync(path, "{}");
+        writeFileSync(path, "{}");
     }
 }
 
@@ -176,7 +177,7 @@ function ensureSettingsFileForLock(path) {
  */
 function readSettingsContent(path) {
     try {
-        const raw = Deno.readTextFileSync(path);
+        const raw = readFileSync(path, "utf8");
         return stripJsoncComments(raw);
     } catch (_e) {
         return undefined;
@@ -190,10 +191,10 @@ function readSettingsContent(path) {
 function writeSettingsContent(path, content) {
     const parentDir = dirname(path);
     try {
-        Deno.mkdirSync(parentDir, { recursive: true });
+        mkdirSync(parentDir, { recursive: true });
     } catch (_e) { /* ignore */ }
 
-    Deno.writeTextFileSync(path, content);
+    writeFileSync(path, content);
 }
 
 /**
@@ -213,8 +214,8 @@ export function migratePiSettingsOnce(options = {}) {
     }
 
     try {
-        Deno.mkdirSync(dirname(runwieldPath), { recursive: true });
-        Deno.copyFileSync(piPath, runwieldPath);
+        mkdirSync(dirname(runwieldPath), { recursive: true });
+        copyFileSync(piPath, runwieldPath);
         return { copied: true, skipped: false };
     } catch (error) {
         return { copied: false, skipped: false, error: error instanceof Error ? error.message : String(error) };
@@ -458,9 +459,9 @@ function readRemoteSettingsSnapshot() {
     assertPersonalResourcePathSync(path, "global settings");
     let content;
     try {
-        content = Deno.readTextFileSync(path);
+        content = readFileSync(path, "utf8");
     } catch (error) {
-        if (!(error instanceof Deno.errors.NotFound)) throw error;
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
         // An initialized global profile can have no settings.json yet. Recheck
         // the root after the failed read so detach during the read fails closed.
         assertPersonalResourcePathSync(path, "global settings");

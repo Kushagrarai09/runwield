@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assert, assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
@@ -42,7 +43,7 @@ function createAgentSession(
     return { hostedSession, sessionManager };
 }
 
-Deno.test("planning runs the real plan_written machinery with the supplied triage context", async () => {
+test("planning runs the real plan_written machinery with the supplied triage context", async () => {
     await withRuntimeCommandFixture("planning-agent-runner-", async ({ projectRoot, setModelMessages }) => {
         await savePlan(projectRoot, "fixture-plan", "# Fixture Plan", { status: "draft" });
         setModelMessages([
@@ -97,7 +98,7 @@ Deno.test("planning runs the real plan_written machinery with the supplied triag
     });
 });
 
-Deno.test("Plan pause does not repeat an Antigravity denial already shown by the backend", () => {
+test("Plan pause does not repeat an Antigravity denial already shown by the backend", () => {
     const denial = new AgyCliBackendError("permission_denied", {
         message: "Blocked: view_file: [redacted-home]/.gemini/antigravity-cli/settings.json",
     });
@@ -110,7 +111,7 @@ Deno.test("Plan pause does not repeat an Antigravity denial already shown by the
     );
 });
 
-Deno.test("Engineer completion is derived from the real task_completed tool result", async () => {
+test("Engineer completion is derived from the real task_completed tool result", async () => {
     await withRuntimeCommandFixture("engineer-runner-", async ({ projectRoot, setModelMessages }) => {
         setModelMessages([
             fauxAssistantMessage(fauxToolCall("task_completed", { message: "- Implemented.\n- Verified." })),
@@ -149,7 +150,7 @@ Deno.test("Engineer completion is derived from the real task_completed tool resu
     });
 });
 
-Deno.test("Pair execution reports a durable checkpoint and settles without a form", async () => {
+test("Pair execution reports a durable checkpoint and settles without a form", async () => {
     await withRuntimeCommandFixture("pair-engineer-runner-", async ({ projectRoot, setModelMessages }) => {
         setModelMessages([
             fauxAssistantMessage(fauxToolCall("pair_checkpoint", {

@@ -1,3 +1,4 @@
+import { captureForegroundProcess } from "../captured-process.ts";
 /**
  * @module shared/work-records/index-adapter
  * Derived Mnemoteca index for canonical Work Records.
@@ -42,13 +43,10 @@ const REBUILD_GUIDANCE = "Run `wld wr index rebuild` to repair the derived Work 
 
 async function resolveGitCommonDir(cwd: string) {
     try {
-        const command = new Deno.Command("git", {
+        const result = await captureForegroundProcess("git", {
             args: ["rev-parse", "--path-format=absolute", "--git-common-dir"],
             cwd,
-            stdout: "piped",
-            stderr: "piped",
         });
-        const result = await command.output();
         if (result.code !== 0) return "";
         return decode(result.stdout);
     } catch {

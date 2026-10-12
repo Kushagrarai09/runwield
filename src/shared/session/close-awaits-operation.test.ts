@@ -1,3 +1,5 @@
+import { readFile as fsReadFile } from "node:fs/promises";
+import { test } from "node:test";
 import { assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxText } from "@earendil-works/pi-ai";
 import { withRuntimeCommandFixture } from "../../cmd/testing/runtime-command-fixture.ts";
@@ -9,7 +11,7 @@ function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-Deno.test("closeSession waits for the outer managed operation before disposal", async () => {
+test("closeSession waits for the outer managed operation before disposal", async () => {
     await withRuntimeCommandFixture(
         "close-awaits-operation-",
         async ({ homeDir: home, projectRoot: cwd, setModelResponseFactory }) => {
@@ -68,7 +70,7 @@ Deno.test("closeSession waits for the outer managed operation before disposal", 
                     store.inspectSessionActivation(managed.runwieldSessionId).activation?.state,
                     "idle",
                 );
-                const transcript = await Deno.readTextFile(cataloged.transcriptPath);
+                const transcript = await fsReadFile(cataloged.transcriptPath, "utf8");
                 assertEquals(transcript.includes("hold the managed operation open"), true);
 
                 const reopened = await runtime.loadSession({

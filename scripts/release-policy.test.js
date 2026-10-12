@@ -1,7 +1,9 @@
+import { test } from "node:test";
+import { readFile as fsReadFile } from "node:fs/promises";
 import { assertEquals, assertMatch, assertStringIncludes } from "@std/assert";
 
-Deno.test("release prompt starts with the three release choices before policy discovery", async () => {
-    const prompt = await Deno.readTextFile(new URL("../src/prompt-templates/release.md", import.meta.url));
+test("release prompt starts with the three release choices before policy discovery", async () => {
+    const prompt = await fsReadFile(new URL("../src/prompt-templates/release.md", import.meta.url), "utf8");
     const choiceIndex = prompt.indexOf("What kind of release operation should I run?");
     const discoveryIndex = prompt.indexOf("Discover the repository's release policy");
 
@@ -21,16 +23,13 @@ Deno.test("release prompt starts with the three release choices before policy di
     assertStringIncludes(prompt, "empty release");
     assertStringIncludes(prompt, "When the repository policy says CI creates the host release");
     assertStringIncludes(prompt, "source selected by the repository's policy");
-    assertStringIncludes(
-        prompt.replace(/\s+/g, " "),
-        "Do not introduce branch rules that its policy does not define",
-    );
+    assertStringIncludes(prompt.replace(/\s+/g, " "), "Do not introduce branch rules that its policy does not define");
     assertEquals(prompt.includes("release/vX.Y.Z"), false);
     assertEquals(prompt.includes("tools:"), false);
 });
 
-Deno.test("wld release policy distinguishes repository-specific policy from generic wld usage", async () => {
-    const policy = await Deno.readTextFile(new URL("../docs/releasing.md", import.meta.url));
+test("wld release policy distinguishes repository-specific policy from generic wld usage", async () => {
+    const policy = await fsReadFile(new URL("../docs/releasing.md", import.meta.url), "utf8");
 
     assertStringIncludes(policy, "This document is wld's release policy");
     assertStringIncludes(policy, "wld users releasing other repositories");
@@ -48,15 +47,12 @@ Deno.test("wld release policy distinguishes repository-specific policy from gene
     assertStringIncludes(policy, "`release/vMAJOR.MINOR.PATCH` as its Release Branch");
     assertStringIncludes(policy, "Later Candidates resolve the live pushed Release Branch from `origin`");
     assertStringIncludes(policy, "Never merge `main` into an active Release Branch");
-    assertStringIncludes(
-        policy.replace(/\s+/g, " "),
-        "explicitly forward-port the fix to `main`",
-    );
+    assertStringIncludes(policy.replace(/\s+/g, " "), "explicitly forward-port the fix to `main`");
     assertStringIncludes(policy, "This fixed list does not grow automatically");
 });
 
-Deno.test("release workflow keeps tag publication and manual recovery channel-safe", async () => {
-    const workflow = await Deno.readTextFile(".github/workflows/release.yml");
+test("release workflow keeps tag publication and manual recovery channel-safe", async () => {
+    const workflow = await fsReadFile(".github/workflows/release.yml", "utf8");
 
     assertStringIncludes(workflow, "workflow_dispatch:");
     assertMatch(workflow, /workflow_dispatch:[\s\S]*tag:[\s\S]*required: true/);
@@ -76,7 +72,7 @@ Deno.test("release workflow keeps tag publication and manual recovery channel-sa
     assertStringIncludes(workflow, "scripts/release-assets.js");
     assertStringIncludes(workflow, "wld-${VERSION}-${{ matrix.asset_suffix }}");
 
-    const policy = await Deno.readTextFile("docs/releasing.md");
+    const policy = await fsReadFile("docs/releasing.md", "utf8");
     assertStringIncludes(policy, "required-tag manual dispatch solely for recovery");
     assertStringIncludes(
         policy.replace(/\s+/g, " "),
@@ -84,8 +80,8 @@ Deno.test("release workflow keeps tag publication and manual recovery channel-sa
     );
 });
 
-Deno.test("release publication requires native Windows package qualification", async () => {
-    const workflow = await Deno.readTextFile(".github/workflows/release.yml");
+test("release publication requires native Windows package qualification", async () => {
+    const workflow = await fsReadFile(".github/workflows/release.yml", "utf8");
     const windowsJob = workflow.match(/\n[ ]{4}windows-package-check:\n([\s\S]*?)\n[ ]{4}release:/)?.[1] || "";
     const releaseJob = workflow.match(/\n[ ]{4}release:\n([\s\S]*)$/)?.[1] || "";
 
@@ -95,8 +91,8 @@ Deno.test("release publication requires native Windows package qualification", a
     assertMatch(releaseJob, /needs:[\s\S]*- windows-package-check/);
 });
 
-Deno.test("WinGet submission stays disabled while Stable manifest preparation remains active", async () => {
-    const workflow = await Deno.readTextFile(".github/workflows/release.yml");
+test("WinGet submission stays disabled while Stable manifest preparation remains active", async () => {
+    const workflow = await fsReadFile(".github/workflows/release.yml", "utf8");
     const submitStart = workflow.indexOf("    winget-submit:");
     const submitEnd = workflow.indexOf("\n    homebrew-package:", submitStart);
     const submitJob = workflow.slice(submitStart, submitEnd);
@@ -122,8 +118,8 @@ Deno.test("WinGet submission stays disabled while Stable manifest preparation re
     assertEquals(submitJob.includes("submit $manifestPath --token"), false);
 });
 
-Deno.test("Stable releases validate on macOS before publishing the Homebrew tap", async () => {
-    const workflow = await Deno.readTextFile(".github/workflows/release.yml");
+test("Stable releases validate on macOS before publishing the Homebrew tap", async () => {
+    const workflow = await fsReadFile(".github/workflows/release.yml", "utf8");
     const jobStart = workflow.indexOf("    homebrew-package:");
     const job = workflow.slice(jobStart);
     const dependencyTapIndex = job.indexOf("brew tap 1broseidon/tap");
@@ -141,8 +137,8 @@ Deno.test("Stable releases validate on macOS before publishing the Homebrew tap"
     assertEquals(pushIndex > checkIndex, true);
 });
 
-Deno.test("release-tier Golden TUI alias does not run TODO goldens", async () => {
-    const config = JSON.parse(await Deno.readTextFile("deno.json"));
+test("release-tier Golden TUI alias does not run TODO goldens", async () => {
+    const config = JSON.parse(await fsReadFile("deno.json", "utf8"));
     const normalTest = String(config.tasks?.test || "");
     const extensiveGoldenTest = String(config.tasks?.["test:golden-tui:extensive"] || "");
 
@@ -151,12 +147,12 @@ Deno.test("release-tier Golden TUI alias does not run TODO goldens", async () =>
     assertStringIncludes(extensiveGoldenTest, "src/ui/tui/golden-scenarios");
 });
 
-Deno.test("release workflow runs source, Golden, and binary qualification in parallel", async () => {
-    const releaseCheck = await Deno.readTextFile(new URL("./release-check.js", import.meta.url));
-    const workflow = await Deno.readTextFile(".github/workflows/release.yml");
+test("release workflow runs source, Golden, and binary qualification in parallel", async () => {
+    const releaseCheck = await fsReadFile(new URL("./release-check.js", import.meta.url), "utf8");
+    const workflow = await fsReadFile(".github/workflows/release.yml", "utf8");
 
     assertStringIncludes(releaseCheck, '["task", "test:golden-tui:extensive"]');
-    assertStringIncludes(workflow, "deno task release:check --binary-only --build-version");
+    assertStringIncludes(workflow, "bun scripts/release-check.js --runtime bun --binary-only --build-version");
     assertStringIncludes(workflow, "deno task test:golden-tui:extensive --fail-fast --timings-file");
     assertMatch(workflow, /golden-shards:\n[\s\S]*?needs: metadata/);
     assertMatch(workflow, /release-check:\n[\s\S]*?needs: metadata/);
@@ -171,8 +167,8 @@ Deno.test("release workflow runs source, Golden, and binary qualification in par
     }
 });
 
-Deno.test("Golden workflow covers direct main and release branch pushes with measured concurrency", async () => {
-    const workflow = await Deno.readTextFile(".github/workflows/golden.yml");
+test("Golden workflow covers direct main and release branch pushes with measured concurrency", async () => {
+    const workflow = await fsReadFile(".github/workflows/golden.yml", "utf8");
 
     assertMatch(workflow, /push:\n\s+branches:\n\s+- main\n\s+- "release\/\*\*"/);
     assertStringIncludes(workflow, "WLD_TEST_CONCURRENCY: ${{ inputs.concurrency || '3' }}");
@@ -180,8 +176,8 @@ Deno.test("Golden workflow covers direct main and release branch pushes with mea
     assertStringIncludes(workflow, "--timings-file .ci-cache/golden-timings.json");
 });
 
-Deno.test("release CLI publishes tags without owning qualification or host release mutation", async () => {
-    const script = await Deno.readTextFile(new URL("./release.js", import.meta.url));
+test("release CLI publishes tags without owning qualification or host release mutation", async () => {
+    const script = await fsReadFile(new URL("./release.js", import.meta.url), "utf8");
 
     assertEquals(script.includes("release create"), false);
     assertEquals(script.includes("release edit"), false);
@@ -194,13 +190,13 @@ Deno.test("release CLI publishes tags without owning qualification or host relea
     assertEquals(script.includes('"status", "--porcelain"'), false);
 });
 
-Deno.test("README links to wld release policy", async () => {
-    const readme = await Deno.readTextFile(new URL("../README.md", import.meta.url));
+test("README links to wld release policy", async () => {
+    const readme = await fsReadFile(new URL("../README.md", import.meta.url), "utf8");
     assertStringIncludes(readme, "[releasing](docs/releasing.md)");
 });
 
-Deno.test("release publication waits for Candidate and Stable Homebrew checks", async () => {
-    const workflow = await Deno.readTextFile(".github/workflows/release.yml");
+test("release publication waits for Candidate and Stable Homebrew checks", async () => {
+    const workflow = await fsReadFile(".github/workflows/release.yml", "utf8");
     const release = workflow.slice(workflow.indexOf("    release:"), workflow.indexOf("    winget-package:"));
     assertStringIncludes(release, "- homebrew-check");
     const check = workflow.slice(workflow.indexOf("    homebrew-check:"), workflow.indexOf("    release:"));
@@ -209,8 +205,8 @@ Deno.test("release publication waits for Candidate and Stable Homebrew checks", 
     assertStringIncludes(check, "brew tap 1broseidon/tap");
 });
 
-Deno.test("published recovery skips builds and verifies existing bytes before packaging", async () => {
-    const workflow = await Deno.readTextFile(".github/workflows/release.yml");
+test("published recovery skips builds and verifies existing bytes before packaging", async () => {
+    const workflow = await fsReadFile(".github/workflows/release.yml", "utf8");
     assertStringIncludes(workflow, "if: needs.metadata.outputs.published != 'true'");
     assertStringIncludes(workflow, 'gh release download "$RELEASE_TAG"');
     assertStringIncludes(workflow, 'release-upload "$RELEASE_TAG" published');
@@ -218,8 +214,8 @@ Deno.test("published recovery skips builds and verifies existing bytes before pa
 });
 
 for (const jobName of ["homebrew-check", "homebrew-package"]) {
-    Deno.test(`${jobName} trusts only the required dependency formulas before validation`, async () => {
-        const workflow = await Deno.readTextFile(".github/workflows/release.yml");
+    test(`${jobName} trusts only the required dependency formulas before validation`, async () => {
+        const workflow = await fsReadFile(".github/workflows/release.yml", "utf8");
         const start = workflow.indexOf(`    ${jobName}:`);
         assertEquals(start >= 0, true);
         const nextJob = workflow.slice(start + 1).search(/\n {4}[a-z][a-z-]*:/);
@@ -239,8 +235,8 @@ for (const jobName of ["homebrew-check", "homebrew-package"]) {
     });
 }
 
-Deno.test("native Homebrew jobs use a bottle-supported runner and a bounded timeout", async () => {
-    const workflow = await Deno.readTextFile(".github/workflows/release.yml");
+test("native Homebrew jobs use a bottle-supported runner and a bounded timeout", async () => {
+    const workflow = await fsReadFile(".github/workflows/release.yml", "utf8");
     for (const name of ["homebrew-check", "homebrew-package"]) {
         const job = workflow.slice(workflow.indexOf(`    ${name}:`)).split(/\n {4}[a-z][a-z-]+:/)[0];
         assertStringIncludes(job, "runs-on: macos-15");
@@ -248,11 +244,26 @@ Deno.test("native Homebrew jobs use a bottle-supported runner and a bounded time
     }
 });
 
-Deno.test("manual recovery preserves workflow source checks and tagged product qualification", async () => {
-    const workflow = await Deno.readTextFile(".github/workflows/release.yml");
+test("manual recovery preserves workflow source checks and tagged product qualification", async () => {
+    const workflow = await fsReadFile(".github/workflows/release.yml", "utf8");
     const ci = workflow.slice(workflow.indexOf("    ci-shards:"), workflow.indexOf("    golden-shards:"));
     assertStringIncludes(ci, 'git checkout -B main "$GITHUB_SHA"');
     assertEquals(ci.includes("ref: ${{ needs.metadata.outputs.tag }}"), false);
     const golden = workflow.slice(workflow.indexOf("    golden-shards:"), workflow.indexOf("    release-check:"));
     assertStringIncludes(golden, "ref: ${{ needs.metadata.outputs.tag }}");
+});
+
+test("release executables use pinned Bun while native package and Stable channel gates remain", async () => {
+    const workflow = await fsReadFile(".github/workflows/release.yml", "utf8");
+    const build = workflow.slice(workflow.indexOf("    build:"), workflow.indexOf("    assets:"));
+    const binaryGate = workflow.slice(workflow.indexOf("    release-check:"), workflow.indexOf("    build:"));
+    assertStringIncludes(build, "bun-version-file: .bun-version");
+    assertStringIncludes(build, "bun run install:locked");
+    assertStringIncludes(build, 'bun run compile:bun "${{ matrix.binary_name }}" "${{ matrix.bun_target }}"');
+    assertEquals(build.includes("scripts/compile.js"), false);
+    assertStringIncludes(build, 'embedded.runtime !== "bun"');
+    assertStringIncludes(binaryGate, "scripts/release-check.js --runtime bun --binary-only");
+    for (const target of ["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64", "windows-x64"]) {
+        assertStringIncludes(build, `bun_target: bun-${target}`);
+    }
 });

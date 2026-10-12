@@ -1,3 +1,5 @@
+import { readFile as fsReadFile } from "node:fs/promises";
+import { test } from "node:test";
 import { assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import { withRuntimeCommandFixture } from "../../cmd/testing/runtime-command-fixture.ts";
@@ -9,7 +11,7 @@ function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-Deno.test("managed deferred messages deliver once and canceled messages stay cleared after reopen", async () => {
+test("managed deferred messages deliver once and canceled messages stay cleared after reopen", async () => {
     await withRuntimeCommandFixture(
         "managed-queue-lifecycle-",
         async ({ homeDir: home, projectRoot: cwd, setModelResponseFactories }) => {
@@ -118,7 +120,7 @@ Deno.test("managed deferred messages deliver once and canceled messages stay cle
                     sessionPath: cataloged.transcriptPath,
                 });
                 assertEquals(runtime.getQueuedMessages(reopened.sessionId), []);
-                const transcript = await Deno.readTextFile(cataloged.transcriptPath);
+                const transcript = await fsReadFile(cataloged.transcriptPath, "utf8");
                 assertEquals(transcript.split(deliveredText).length - 1, 1);
                 assertEquals(transcript.includes(canceledText), false);
             } finally {

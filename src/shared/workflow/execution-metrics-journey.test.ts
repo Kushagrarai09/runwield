@@ -1,8 +1,9 @@
+import { test } from "node:test";
 import { assert, assertEquals } from "@std/assert";
 import { withWorkflowMetricsFixture } from "../../testing/workflow-metrics-fixture.ts";
 import { ExecutionMetricsRecorder } from "./execution-metrics.ts";
 
-Deno.test("saved observations reconstruct tool order, repeated use, batch children, and a zero-call delegate", async () => {
+test("saved observations reconstruct tool order, repeated use, batch children, and a zero-call delegate", async () => {
     await withWorkflowMetricsFixture(async ({ projectRoot, readMetrics }) => {
         const root = new ExecutionMetricsRecorder({
             projectRoot,

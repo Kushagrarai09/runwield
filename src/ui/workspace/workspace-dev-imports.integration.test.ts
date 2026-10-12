@@ -1,17 +1,24 @@
+import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
+import { captureForegroundProcess } from "../../shared/captured-process.ts";
+import { test } from "node:test";
+import { mkdtemp as fsMkdtemp, rm as fsRm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import process from "node:process";
 import { assertEquals } from "@std/assert";
 import { fileURLToPath } from "node:url";
 import { makeValidationProjectRoot } from "../../shared/workflow/validation-test-helpers.js";
 
-Deno.test("Astro dev serves local and owner Plan Boards with canonical Plan data", async () => {
+test("Astro dev serves local and owner Plan Boards with canonical Plan data", async () => {
     const projectRoot = await makeValidationProjectRoot("dev-import-regression", {
         status: "draft",
         summary: "Canonical development import fixture",
     });
-    const scratch = await Deno.makeTempDir({ prefix: "workspace-astro-dev-test-" });
+    const scratch = await fsMkdtemp(join(tmpdir(), "workspace-astro-dev-test-"));
     const repoRoot = new URL("../../../", import.meta.url);
     const script = `
         import { dev } from ${JSON.stringify(new URL("node_modules/astro/dist/core/index.js", repoRoot).href)};
-        import { assertEquals, assertStringIncludes } from "@std/assert";
+        import { assertEquals, assertStringIncludes } from ${JSON.stringify(import.meta.resolve("@std/assert"))};
         const server = await dev({
             root: ${JSON.stringify(fileURLToPath(new URL("src/ui/workspace/", repoRoot)))},
             configFile: "astro.config.mjs",
@@ -32,18 +39,16 @@ Deno.test("Astro dev serves local and owner Plan Boards with canonical Plan data
         }
     `;
     try {
-        const output = await new Deno.Command(Deno.execPath(), {
-            args: ["eval", "--config", fileURLToPath(new URL("deno.json", repoRoot)), script],
+        const output = await captureForegroundProcess(process.execPath, {
+            args: runtimeSourceArgs(["eval", "--config", fileURLToPath(new URL("deno.json", repoRoot)), script]),
             cwd: projectRoot,
             env: { ASTRO_TELEMETRY_DISABLED: "1" },
-            stdout: "piped",
-            stderr: "piped",
             signal: AbortSignal.timeout(120_000),
-        }).output();
+        });
         const decoder = new TextDecoder();
         assertEquals(output.success, true, decoder.decode(output.stdout) + decoder.decode(output.stderr));
     } finally {
-        await Deno.remove(projectRoot, { recursive: true });
-        await Deno.remove(scratch, { recursive: true });
+        await fsRm(projectRoot, { recursive: true });
+        await fsRm(scratch, { recursive: true });
     }
 });

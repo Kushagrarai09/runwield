@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 /** @module ui/workspace/server/owner-projects */
 
 import { basename, resolve } from "node:path";
@@ -80,7 +81,7 @@ export function sessionBelongsToOwnerProject(
     const project = store.getProjectById(projectId);
     if (!project) return false;
     try {
-        return resolve(Deno.realPathSync(session.transcriptCwd)) === resolve(Deno.realPathSync(project.currentRoot));
+        return resolve(realpathSync(session.transcriptCwd)) === resolve(realpathSync(project.currentRoot));
     } catch {
         return resolve(session.transcriptCwd) === resolve(project.currentRoot);
     }

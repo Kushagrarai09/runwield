@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { withRuntimeCommandFixture } from "../testing/runtime-command-fixture.ts";
 import { createSessionRuntime } from "../../shared/session/session-runtime.ts";
@@ -5,7 +6,7 @@ import { openOwnerCoordinationStore } from "../../shared/owner-coordination/inde
 import { RuntimeInteractionTypes } from "../../shared/session/session-runtime-interactions.js";
 import { runPlanReviewCommand } from "./index.ts";
 
-Deno.test("/plan-review reports the live URL published by the review surface without another presentation", async () => {
+test("/plan-review reports the live URL published by the review surface without another presentation", async () => {
     await withRuntimeCommandFixture("plan-review-command-", async ({ homeDir, projectRoot }) => {
         const ownerStore = openOwnerCoordinationStore({ dbPath: `${homeDir}/owner.sqlite3` });
         const runtime = createSessionRuntime({ sessionStore: ownerStore, ownerProcessKind: "test" });

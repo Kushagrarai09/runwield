@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assertEquals } from "@std/assert";
 import {
     assertGoldenScenarioCoverage,
@@ -6,7 +7,7 @@ import {
 } from "../testing/mod.ts";
 import { goldenTuiPortfolioScenarios } from "./catalog.ts";
 
-Deno.test("golden TUI portfolio declares asserted coverage for every required capability", () => {
+test("golden TUI portfolio declares asserted coverage for every required capability", () => {
     const scenarios =
         /** @type {import('../testing/scenario-runner.js').GoldenScenario[]} */ (/** @type {unknown} */ (goldenTuiPortfolioScenarios));
     assertGoldenScenarioCoverage(scenarios);

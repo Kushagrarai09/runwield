@@ -2,6 +2,7 @@
  * This is build tooling, not a Git-commit or VERSION comparison.
  */
 import { join } from "@std/path";
+import { lstat, readdir, readFile } from "node:fs/promises";
 
 export const REMOTE_PROTOCOL_VERSION = 1;
 export const BUILD_IDENTITY_PATH = "src/shared/build-identity.js";
@@ -34,7 +35,7 @@ export async function sha256Bytes(bytes) {
 
 /** @param {string} path */
 export async function sha256File(path) {
-    return sha256Bytes(await Deno.readFile(path));
+    return sha256Bytes(await readFile(path));
 }
 
 /**
@@ -52,20 +53,20 @@ async function inputFiles(root, includeRuntime) {
             name.endsWith(".test.tsx") || name.endsWith(".spec.ts")
         ) return;
         const path = join(root, name);
-        const info = await Deno.lstat(path);
-        if (info.isSymlink) {
+        const info = await lstat(path);
+        if (info.isSymbolicLink()) {
             // Documentation links in the vendored tree are not compiled.
             if (name.startsWith("third_party/") && name.endsWith(".md")) return;
             throw new Error(`Build input is a symlink: ${name}`);
         }
-        if (info.isDirectory) {
+        if (info.isDirectory()) {
             const entries = [];
-            for await (const entry of Deno.readDir(path)) entries.push(entry.name);
+            entries.push(...await readdir(path));
             for (const entry of entries.sort()) {
                 if (["node_modules", ".git", ".astro", ".vite", "dist", "coverage"].includes(entry)) continue;
                 await visit(`${name}/${entry}`);
             }
-        } else if (info.isFile) found.push(name);
+        } else if (info.isFile()) found.push(name);
         else throw new Error(`Unsupported build input: ${name}`);
     }
     for (const name of INPUTS) {
@@ -110,7 +111,7 @@ export async function computeBuildIdentity(root, denoVersion, compileOptions, in
 /** @param {string} artifact @param {string} metadataPath @returns {Promise<ArtifactMetadata>} */
 export async function verifyBuildArtifact(artifact, metadataPath = `${artifact}.build.json`) {
     /** @type {ArtifactMetadata} */
-    const metadata = JSON.parse(await Deno.readTextFile(metadataPath));
+    const metadata = JSON.parse(await readFile(metadataPath, "utf8"));
     if (
         metadata.schema !== BUILD_METADATA_SCHEMA || metadata.protocol !== REMOTE_PROTOCOL_VERSION ||
         !/^[a-f0-9]{64}$/.test(metadata.buildId) || !/^[a-z0-9_-]+$/.test(metadata.target) ||

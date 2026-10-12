@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { fauxAssistantMessage, fauxText } from "@earendil-works/pi-ai";
 import { withRuntimeCommandFixture } from "../cmd/testing/runtime-command-fixture.ts";
@@ -5,7 +6,7 @@ import { HostedSession } from "../shared/session/hosted-session.js";
 import { runIsolatedAgentSession } from "../shared/session/session.js";
 import { createDelegateAgentTool } from "./delegate-agent.ts";
 
-Deno.test("background delegates share shell slots and synchronous reader leases and release them on cancellation", async () => {
+test("background delegates share shell slots and synchronous reader leases and release them on cancellation", async () => {
     await withRuntimeCommandFixture(
         "background-delegate-slots-",
         async ({ projectRoot, setModelResponseFactories }) => {

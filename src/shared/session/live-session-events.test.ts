@@ -1,8 +1,9 @@
+import { test } from "node:test";
 import { assert, assertEquals } from "@std/assert";
 import { appendLiveSessionEvent } from "./live-session-events.ts";
 import { createSessionRuntimeEvent, type SessionRuntimeEvent } from "./session-runtime-events.js";
 
-Deno.test("live observation excludes saved replay and coalesces streaming text", () => {
+test("live observation excludes saved replay and coalesces streaming text", () => {
     const events: SessionRuntimeEvent[] = [];
     appendLiveSessionEvent(
         events,
@@ -30,7 +31,7 @@ Deno.test("live observation excludes saved replay and coalesces streaming text",
     assertEquals(events[0].delta.length, 2000);
 });
 
-Deno.test("a long operation retains its latest question and terminal events", () => {
+test("a long operation retains its latest question and terminal events", () => {
     const events: SessionRuntimeEvent[] = [];
     for (let index = 0; index < 1500; index++) {
         appendLiveSessionEvent(
@@ -58,7 +59,7 @@ Deno.test("a long operation retains its latest question and terminal events", ()
     assertEquals(events.at(-1)?.type, "turn_end");
 });
 
-Deno.test("long live turns retain the latest Core busy state for browser attachment", () => {
+test("long live turns retain the latest Core busy state for browser attachment", () => {
     const events: SessionRuntimeEvent[] = [];
     for (const busy of [true, false]) {
         appendLiveSessionEvent(events, createSessionRuntimeEvent("session", { type: "busy_changed", busy }));

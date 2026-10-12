@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assert, assertEquals } from "@std/assert";
 import {
     buildPullRevisionRequest,
@@ -6,13 +7,13 @@ import {
     summarizePullPlanningOutcome,
 } from "./collaboration-pull.ts";
 
-Deno.test("selectPullPlanningAgent routes PROJECT Plans to Architect and FEATURE Plans to Planner", () => {
+test("selectPullPlanningAgent routes PROJECT Plans to Architect and FEATURE Plans to Planner", () => {
     assertEquals(selectPullPlanningAgent({ classification: "PROJECT" }), "architect");
     assertEquals(selectPullPlanningAgent({ type: "epic" }), "planner");
     assertEquals(selectPullPlanningAgent({ classification: "FEATURE" }), "planner");
 });
 
-Deno.test("formatPullCommentsForPrompt preserves global, inline, resolved, and unreadable comment context", () => {
+test("formatPullCommentsForPrompt preserves global, inline, resolved, and unreadable comment context", () => {
     const prompt = formatPullCommentsForPrompt([
         {
             id: "c1",
@@ -42,7 +43,7 @@ Deno.test("formatPullCommentsForPrompt preserves global, inline, resolved, and u
     assert(prompt.includes("unreadable") && prompt.includes("tampered"));
 });
 
-Deno.test("buildPullRevisionRequest includes structured metadata and redacts secret-looking URL fragments", () => {
+test("buildPullRevisionRequest includes structured metadata and redacts secret-looking URL fragments", () => {
     const request = buildPullRevisionRequest({
         planName: "demo",
         title: "Demo Plan",
@@ -82,7 +83,7 @@ Deno.test("buildPullRevisionRequest includes structured metadata and redacts sec
     assert(request.includes("wld plans push <plan>"));
 });
 
-Deno.test("summarizePullPlanningOutcome points maintainers to push instead of execution", () => {
+test("summarizePullPlanningOutcome points maintainers to push instead of execution", () => {
     assertEquals(
         summarizePullPlanningOutcome({ outcome: "saved" }, "demo"),
         'Planning agent finished with outcome "saved". Review the local revision, then publish with: wld plans push demo',

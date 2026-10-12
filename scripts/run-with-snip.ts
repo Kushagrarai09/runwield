@@ -1,5 +1,9 @@
 #!/usr/bin/env -S deno run -A
+import { captureScriptProcess, type ScriptProcessOutput } from "./script-process.ts";
+import { writeFile as fsWriteFile } from "node:fs/promises";
+import process from "node:process";
 
+import { makeTempFile } from "../src/testing/temp-file.ts";
 import { basename } from "@std/path";
 
 export interface SnipCommandOptions {
@@ -59,19 +63,19 @@ export async function runWithSnip(
     options: SnipCommandOptions,
 ): Promise<SnipCommandResult> {
     const env = {
-        ...Deno.env.toObject(),
+        ...{ ...process.env },
         ...options.env,
         // Snip's tee stores raw output. Plan 3 stores filtered diagnostics instead.
         SNIP_TEE: "0",
     };
-    const result = await new Deno.Command("snip", {
+    const result = await captureScriptProcess("snip", {
         args: [command, ...args],
         cwd: options.cwd,
         env,
         stdin: options.stdin ?? "null",
         stdout: "piped",
         stderr: "piped",
-    }).output();
+    });
     return await formatCommandResult(command, args, options, result);
 }
 
@@ -79,7 +83,7 @@ async function formatCommandResult(
     command: string,
     args: string[],
     options: SnipCommandOptions,
-    result: Deno.CommandOutput,
+    result: ScriptProcessOutput,
 ): Promise<SnipCommandResult> {
     const decoder = new TextDecoder();
     const stdout = decoder.decode(result.stdout);
@@ -93,8 +97,8 @@ async function formatCommandResult(
 
     const filtered = extractDenoFailureOutput(command, args, `${stdout}${stderr}`) ||
         `${options.failureLabel} failed with exit code ${result.code}.`;
-    const failureLogPath = await Deno.makeTempFile({ prefix: failureLogPrefix(options.failureLabel), suffix: ".log" });
-    await Deno.writeTextFile(failureLogPath, `${filtered}\n`);
+    const failureLogPath = await makeTempFile({ prefix: failureLogPrefix(options.failureLabel), suffix: ".log" });
+    await fsWriteFile(failureLogPath, `${filtered}\n`);
 
     return {
         code: result.code,
@@ -105,8 +109,8 @@ async function formatCommandResult(
 }
 
 async function testTimeoutResult(timeoutMs: number): Promise<SnipCommandResult> {
-    const failureLogPath = await Deno.makeTempFile({ prefix: "tests-timeout-", suffix: ".log" });
-    await Deno.writeTextFile(failureLogPath, `Test process exceeded ${timeoutMs / 1000}s and was stopped.\n`);
+    const failureLogPath = await makeTempFile({ prefix: "tests-timeout-", suffix: ".log" });
+    await fsWriteFile(failureLogPath, `Test process exceeded ${timeoutMs / 1000}s and was stopped.\n`);
     return {
         code: 124,
         stdout: "",
@@ -118,7 +122,7 @@ async function testTimeoutResult(timeoutMs: number): Promise<SnipCommandResult> 
 // Run the test process itself, not Snip: stopping a Snip wrapper leaves its test child alive.
 export async function runBoundedTest(
     args: string[],
-    options: SnipCommandOptions & { timeoutMs: number },
+    options: SnipCommandOptions & { timeoutMs: number; command?: string; clearEnv?: boolean },
 ): Promise<SnipCommandResult> {
     const controller = new AbortController();
     let timedOut = false;
@@ -127,18 +131,19 @@ export async function runBoundedTest(
         controller.abort();
     }, options.timeoutMs);
     try {
-        const result = await new Deno.Command("deno", {
+        const result = await captureScriptProcess(options.command ?? "deno", {
             args,
             cwd: options.cwd,
-            env: { ...Deno.env.toObject(), ...options.env },
+            env: options.clearEnv ? options.env : { ...process.env, ...options.env },
+            clearEnv: options.clearEnv,
             stdin: options.stdin ?? "null",
             stdout: "piped",
             stderr: "piped",
             signal: controller.signal,
-        }).output();
+        });
         clearTimeout(timer);
         if (timedOut) return await testTimeoutResult(options.timeoutMs);
-        return await formatCommandResult("deno", args, options, result);
+        return await formatCommandResult(options.command ?? "deno", args, options, result);
     } catch (error) {
         if (!timedOut) throw error;
         return await testTimeoutResult(options.timeoutMs);
@@ -148,21 +153,29 @@ export async function runBoundedTest(
 }
 
 export async function writeSnipCommandResult(result: SnipCommandResult): Promise<void> {
-    if (result.stdout) await Deno.stdout.write(new TextEncoder().encode(result.stdout));
-    if (result.stderr) await Deno.stderr.write(new TextEncoder().encode(result.stderr));
+    if (result.stdout) {
+        await new Promise<void>((resolve, reject) =>
+            process.stdout.write(result.stdout, (error) => error ? reject(error) : resolve())
+        );
+    }
+    if (result.stderr) {
+        await new Promise<void>((resolve, reject) =>
+            process.stderr.write(result.stderr, (error) => error ? reject(error) : resolve())
+        );
+    }
 }
 
 if (import.meta.main) {
-    const separator = Deno.args.indexOf("--");
-    const failureLabel = separator > 0 ? Deno.args.slice(0, separator).join(" ") : "command";
-    const command = separator >= 0 ? Deno.args[separator + 1] : undefined;
-    const args = separator >= 0 ? Deno.args.slice(separator + 2) : [];
+    const separator = process.argv.slice(2).indexOf("--");
+    const failureLabel = separator > 0 ? process.argv.slice(2).slice(0, separator).join(" ") : "command";
+    const command = separator >= 0 ? process.argv.slice(2)[separator + 1] : undefined;
+    const args = separator >= 0 ? process.argv.slice(2).slice(separator + 2) : [];
     if (!command) {
         console.error("usage: run-with-snip <failure label> -- <command> [args...]");
-        Deno.exit(64);
+        process.exit(64);
     }
 
     const result = await runWithSnip(command, args, { failureLabel, stdin: "inherit" });
     await writeSnipCommandResult(result);
-    Deno.exit(result.code);
+    process.exit(result.code);
 }

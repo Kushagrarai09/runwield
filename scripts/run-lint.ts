@@ -1,4 +1,5 @@
 #!/usr/bin/env -S deno run -A
+import process from "node:process";
 
 import { dirname, fromFileUrl } from "@std/path";
 import { listCiFiles } from "./ci-files.ts";
@@ -21,5 +22,5 @@ if (import.meta.main) {
         },
     );
     await writeSnipCommandResult(result);
-    Deno.exit(result.code);
+    process.exit(result.code);
 }

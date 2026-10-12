@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assertEquals } from "@std/assert";
 import { mountDashboard, newDashboardWindow } from "./dashboard-test-dom.ts";
 
@@ -10,7 +11,7 @@ const frame = (type: string) => ({
     sections: keys.map((key) => ({ key, items: [] })),
 });
 
-Deno.test("Dashboard pauses hidden refresh and rejects updates after navigation", async () => {
+test("Dashboard pauses hidden refresh and rejects updates after navigation", async () => {
     const window = newDashboardWindow();
     let visibility = "visible";
     Object.defineProperty(window.document, "visibilityState", { get: () => visibility });

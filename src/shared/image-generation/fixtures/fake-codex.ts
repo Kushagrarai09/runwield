@@ -1,3 +1,5 @@
+import { utimes as fsUtimes, writeFile as fsWriteFile } from "node:fs/promises";
+import process from "node:process";
 import { getCwd } from "../../../constants.js";
 
 interface Request {
@@ -8,17 +10,17 @@ interface Request {
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAIAAADwyuo0AAAAEElEQVR4nGP4z8AARwzIHABvqgf5gNwAKAAAAABJRU5ErkJggg==";
 
 async function main() {
-    const mode = Deno.env.get("RUNWIELD_CODEX_IMAGE_MODE") || "success";
-    const log = Deno.env.get("RUNWIELD_CODEX_IMAGE_LOG");
+    const mode = process.env["RUNWIELD_CODEX_IMAGE_MODE"] || "success";
+    const log = process.env["RUNWIELD_CODEX_IMAGE_LOG"];
     const decoder = new TextDecoder();
     let buffer = "";
-    for await (const chunk of Deno.stdin.readable) {
+    for await (const chunk of process.stdin) {
         buffer += decoder.decode(chunk, { stream: true });
         let newline: number;
         while ((newline = buffer.indexOf("\n")) >= 0) {
             const request = JSON.parse(buffer.slice(0, newline)) as Request;
             buffer = buffer.slice(newline + 1);
-            if (log) await Deno.writeTextFile(log, `${JSON.stringify(request)}\n`, { append: true });
+            if (log) await fsWriteFile(log, `${JSON.stringify(request)}\n`, { flag: "a" });
             const respond = <T>(result: T) => console.log(JSON.stringify({ id: request.id, result }));
             switch (request.method) {
                 case "initialize":
@@ -56,15 +58,15 @@ async function main() {
                         console.log("not json");
                         break;
                     }
-                    if (mode === "exit") Deno.exit(1);
+                    if (mode === "exit") process.exit(1);
                     const path = `${getCwd()}/image.png`;
-                    await Deno.writeFile(path, Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)));
-                    if (mode === "stale") await Deno.utime(path, 1, 1);
+                    await fsWriteFile(path, Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)));
+                    if (mode === "stale") await fsUtimes(path, 1, 1);
                     const item = {
                         id: "image-fixture",
                         type: "imageGeneration",
                         status: mode === "failed-image" ? "failed" : "completed",
-                        savedPath: mode === "outside" ? Deno.env.get("RUNWIELD_CODEX_IMAGE_OUTSIDE") : path,
+                        savedPath: mode === "outside" ? process.env["RUNWIELD_CODEX_IMAGE_OUTSIDE"] : path,
                         failure: null,
                         result: "fixture",
                     };

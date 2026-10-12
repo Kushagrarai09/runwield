@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assertEquals, assertStrictEquals } from "@std/assert";
 import { createSessionTabNotificationController } from "./session-tab-notifications.ts";
 
@@ -52,7 +53,7 @@ function installBrowser(
 const enabledPolicy = { enabled: true, events: { agentStopped: true }, suppressWhenFocused: true };
 const stoppedEvent = { type: "attention_requested", reason: "agentStopped", agentName: "Guide", sessionName: "Demo" };
 
-Deno.test("browser notifications construct the real Notification and focus the tab on click", () => {
+test("browser notifications construct the real Notification and focus the tab on click", () => {
     const browser = installBrowser();
     try {
         const controller = createSessionTabNotificationController();
@@ -68,7 +69,7 @@ Deno.test("browser notifications construct the real Notification and focus the t
     }
 });
 
-Deno.test("browser notifications skip denied, missing API, disabled settings, and focused visible tabs", () => {
+test("browser notifications skip denied, missing API, disabled settings, and focused visible tabs", () => {
     const denied = installBrowser({ permission: "denied" });
     try {
         createSessionTabNotificationController().notifyAgentStopped(stoppedEvent, enabledPolicy);
@@ -110,7 +111,7 @@ Deno.test("browser notifications skip denied, missing API, disabled settings, an
     }
 });
 
-Deno.test("browser notifications allow background and suppression-disabled focused delivery", () => {
+test("browser notifications allow background and suppression-disabled focused delivery", () => {
     const focused = installBrowser({ visibilityState: "visible", focused: true });
     try {
         createSessionTabNotificationController().notifyAgentStopped(stoppedEvent, {
@@ -124,7 +125,7 @@ Deno.test("browser notifications allow background and suppression-disabled focus
     }
 });
 
-Deno.test("browser notifications ignore non-production event shapes and isolate failures", () => {
+test("browser notifications ignore non-production event shapes and isolate failures", () => {
     const browser = installBrowser({ throwOnConstruct: true });
     try {
         const controller = createSessionTabNotificationController();
@@ -137,7 +138,7 @@ Deno.test("browser notifications ignore non-production event shapes and isolate 
     }
 });
 
-Deno.test("browser notification disposal closes tracked notifications and clears click handlers", () => {
+test("browser notification disposal closes tracked notifications and clears click handlers", () => {
     const browser = installBrowser();
     try {
         const controller = createSessionTabNotificationController();
@@ -168,7 +169,7 @@ function installServiceWorker(
     };
 }
 
-Deno.test("mobile notifications use the active service worker when the Notification constructor is unsupported", async () => {
+test("mobile notifications use the active service worker when the Notification constructor is unsupported", async () => {
     const browser = installBrowser({ throwOnConstruct: true });
     const shown: Array<{ title: string; options: NotificationOptions }> = [];
     const restore = installServiceWorker({
@@ -191,7 +192,7 @@ Deno.test("mobile notifications use the active service worker when the Notificat
     }
 });
 
-Deno.test("notifications fall back to desktop delivery when no service worker is registered", async () => {
+test("notifications fall back to desktop delivery when no service worker is registered", async () => {
     const browser = installBrowser();
     const restore = installServiceWorker(undefined);
     try {
@@ -203,7 +204,7 @@ Deno.test("notifications fall back to desktop delivery when no service worker is
     }
 });
 
-Deno.test("leaving a Session cancels pending notification delivery", async () => {
+test("leaving a Session cancels pending notification delivery", async () => {
     const browser = installBrowser();
     let count = 0;
     const restore = installServiceWorker({
@@ -226,7 +227,7 @@ Deno.test("leaving a Session cancels pending notification delivery", async () =>
     }
 });
 
-Deno.test("Workspace notifications ignore stops routed to another input surface", async () => {
+test("Workspace notifications ignore stops routed to another input surface", async () => {
     const browser = installBrowser();
     try {
         const controller = createSessionTabNotificationController();

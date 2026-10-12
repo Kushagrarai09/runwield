@@ -1,10 +1,13 @@
+import { mkdtemp as fsMkdtemp, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
+import { test } from "node:test";
+import { tmpdir } from "node:os";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { join } from "@std/path";
 import { formatCodeReviewAnnotations, normalizeCodeReviewDecision, runCodeReview } from "./code-review.ts";
 import type { BrowserPort } from "../../shared/browser-port.ts";
 import { createScriptedReviewBrowser } from "./review-test-fixture.ts";
 
-Deno.test("normalizeCodeReviewDecision handles approvals, annotations, and cancellation", () => {
+test("normalizeCodeReviewDecision handles approvals, annotations, and cancellation", () => {
     assertEquals(
         normalizeCodeReviewDecision({
             approved: true,
@@ -44,7 +47,7 @@ Deno.test("normalizeCodeReviewDecision handles approvals, annotations, and cance
     );
 });
 
-Deno.test("formatCodeReviewAnnotations renders file, line, and text", () => {
+test("formatCodeReviewAnnotations renders file, line, and text", () => {
     assertEquals(
         formatCodeReviewAnnotations([
             { file: "src/a.js", line: 12, text: "Rename this." },
@@ -54,10 +57,10 @@ Deno.test("formatCodeReviewAnnotations renders file, line, and text", () => {
     );
 });
 
-Deno.test("runCodeReview serves the real review surface and loads submitted image bytes", async () => {
-    const projectRoot = await Deno.makeTempDir({ prefix: "runwield-code-review-" });
+test("runCodeReview serves the real review surface and loads submitted image bytes", async () => {
+    const projectRoot = await fsMkdtemp(join(tmpdir(), "runwield-code-review-"));
     const imagePath = join(projectRoot, "review.png");
-    await Deno.writeFile(imagePath, new Uint8Array([137, 80, 78, 71]));
+    await fsWriteFile(imagePath, new Uint8Array([137, 80, 78, 71]));
     const scriptedBrowser = createScriptedReviewBrowser("feedback", {
         approved: false,
         feedback: "Use the attached reference.",
@@ -84,12 +87,12 @@ Deno.test("runCodeReview serves the real review surface and loads submitted imag
         assertStringIncludes(scriptedBrowser.urls[0], "/review/code?token=");
         assertEquals(reviewUrl, scriptedBrowser.urls[0]);
     } finally {
-        await Deno.remove(projectRoot, { recursive: true });
+        await fsRm(projectRoot, { recursive: true });
     }
 });
 
-Deno.test("runCodeReview cancellation stops the real review server", async () => {
-    const projectRoot = await Deno.makeTempDir({ prefix: "runwield-code-review-cancel-" });
+test("runCodeReview cancellation stops the real review server", async () => {
+    const projectRoot = await fsMkdtemp(join(tmpdir(), "runwield-code-review-cancel-"));
     const controller = new AbortController();
     let markOpened: () => void = () => {};
     const opened = new Promise<void>((resolveOpened) => markOpened = resolveOpened);
@@ -118,6 +121,6 @@ Deno.test("runCodeReview cancellation stops the real review server", async () =>
             canceled: true,
         });
     } finally {
-        await Deno.remove(projectRoot, { recursive: true });
+        await fsRm(projectRoot, { recursive: true });
     }
 });

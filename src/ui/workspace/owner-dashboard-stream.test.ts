@@ -1,3 +1,8 @@
+import process from "node:process";
+import { mkdir as fsMkdir, mkdtemp as fsMkdtemp, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
+import { test } from "node:test";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { assertEquals, assertStrictEquals } from "@std/assert";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
@@ -20,10 +25,10 @@ type StreamFrame = {
     sections: Array<{ items: Array<{ planId: string }> }>;
 };
 
-Deno.test("owner dashboard stream authenticates and completes with verified rows", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "rw-dashboard-stream-" });
+test("owner dashboard stream authenticates and completes with verified rows", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "rw-dashboard-stream-"));
     const root = `${dir}/project`;
-    await Deno.mkdir(root);
+    await fsMkdir(root);
     const store = openOwnerCoordinationStore({ dbPath: `${dir}/owner.sqlite3` });
     const appObject = createOwnerWorkspaceApp({ mode: "owner", publicOrigin: "http://127.0.0.1:8787", store });
     try {
@@ -67,16 +72,16 @@ Deno.test("owner dashboard stream authenticates and completes with verified rows
     } finally {
         if ("close" in appObject && typeof appObject.close === "function") await appObject.close();
         store.close();
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("dashboard keeps Promise identity and publishes later Project while first waits", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "rw-dashboard-progress-" });
+test("dashboard keeps Promise identity and publishes later Project while first waits", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "rw-dashboard-progress-"));
     const first = `${dir}/first`;
     const second = `${dir}/second`;
-    await Deno.mkdir(first);
-    await Deno.mkdir(second);
+    await fsMkdir(first);
+    await fsMkdir(second);
     const store = openOwnerCoordinationStore({ dbPath: `${dir}/owner.sqlite3` });
     let release = () => {};
     const blocked = new Promise<void>((resolve) => {
@@ -126,12 +131,12 @@ Deno.test("dashboard keeps Promise identity and publishes later Project while fi
     } finally {
         release();
         store.close();
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("one Project streams a finished row and registry failure before its unrelated live socket responds", async () => {
-    if (Deno.build.os === "windows") return; // The live connection uses a named pipe there.
+test("one Project streams a finished row and registry failure before its unrelated live socket responds", async () => {
+    if (process.platform === "win32") return; // The live connection uses a named pipe there.
     const fixture = await makeManagedSessionFixture();
     const { store, session, project } = fixture;
     const operationId = "dashboard-blocked-operation";
@@ -175,7 +180,7 @@ Deno.test("one Project streams a finished row and registry failure before its un
         });
         await enterProjectRuntime(fixture.projectRoot);
         const registryPath = getWorktreeRegistryPath(fixture.projectRoot);
-        await Deno.mkdir(dirname(registryPath), { recursive: true });
+        await fsMkdir(dirname(registryPath), { recursive: true });
         const attempt = (id: string) => ({
             id,
             planName: "validated",
@@ -189,7 +194,7 @@ Deno.test("one Project streams a finished row and registry failure before its un
             createdAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z",
         });
-        await Deno.writeTextFile(registryPath, JSON.stringify({ version: 2, entries: [attempt("a"), attempt("b")] }));
+        await fsWriteFile(registryPath, JSON.stringify({ version: 2, entries: [attempt("a"), attempt("b")] }));
         let proof = store.acquireSessionActivation({
             runwieldSessionId: session.runwieldSessionId,
             projectId: project.projectId,
@@ -341,12 +346,12 @@ Deno.test("one Project streams a finished row and registry failure before its un
     }
 });
 
-Deno.test("unreadable publication registry fails the finished card before unrelated Project checks end", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "rw-dashboard-registry-" });
+test("unreadable publication registry fails the finished card before unrelated Project checks end", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "rw-dashboard-registry-"));
     const first = `${dir}/first`;
     const second = `${dir}/second`;
-    await Deno.mkdir(first);
-    await Deno.mkdir(second);
+    await fsMkdir(first);
+    await fsMkdir(second);
     const store = openOwnerCoordinationStore({ dbPath: `${dir}/owner.sqlite3` });
     const gate = Promise.withResolvers<void>();
     try {
@@ -359,7 +364,7 @@ Deno.test("unreadable publication registry fails the finished card before unrela
         });
         await enterProjectRuntime(first);
         const path = getWorktreeRegistryPath(first);
-        await Deno.mkdir(dirname(path), { recursive: true });
+        await fsMkdir(dirname(path), { recursive: true });
         const attempt = (id: string) => ({
             id,
             planName: "validated",
@@ -373,7 +378,7 @@ Deno.test("unreadable publication registry fails the finished card before unrela
             createdAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z",
         });
-        await Deno.writeTextFile(path, JSON.stringify({ version: 2, entries: [attempt("a"), attempt("b")] }));
+        await fsWriteFile(path, JSON.stringify({ version: 2, entries: [attempt("a"), attempt("b")] }));
         const continuation = {
             operations: new Map(),
             async listSessions(projectId: string) {
@@ -412,14 +417,14 @@ Deno.test("unreadable publication registry fails the finished card before unrela
     } finally {
         gate.resolve();
         store.close();
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
-Deno.test("standalone Sessions linked to one on-hold Plan remain distinct", async () => {
-    const dir = await Deno.makeTempDir({ prefix: "rw-dashboard-standalone-" });
+test("standalone Sessions linked to one on-hold Plan remain distinct", async () => {
+    const dir = await fsMkdtemp(join(tmpdir(), "rw-dashboard-standalone-"));
     const root = `${dir}/project`;
-    await Deno.mkdir(root);
+    await fsMkdir(root);
     const store = openOwnerCoordinationStore({ dbPath: `${dir}/owner.sqlite3` });
     try {
         const project = store.registerProject({ root, displayName: "Test" });
@@ -445,14 +450,14 @@ Deno.test("standalone Sessions linked to one on-hold Plan remain distinct", asyn
         assertEquals(new Set(rows.map((item) => item.href)).size, 2);
     } finally {
         store.close();
-        await Deno.remove(dir, { recursive: true });
+        await fsRm(dir, { recursive: true });
     }
 });
 
 const dashboardScopeFixture = defineCommittedGitFixture({ "README.md": "# Dashboard scope\n" });
 
-Deno.test("HTTP dashboard stream completes its producer and starts a fresh read afterward", async () => {
-    if (Deno.build.os === "windows") return; // The live connection uses a named pipe there.
+test("HTTP dashboard stream completes its producer and starts a fresh read afterward", async () => {
+    if (process.platform === "win32") return; // The live connection uses a named pipe there.
     await withProcessGlobalTestLock(async () => {
         const root = await dashboardScopeFixture.checkout({ prefix: "rw-dashboard-scope-" });
         const fixture = await makeManagedSessionFixture({ projectRoot: root });
@@ -545,12 +550,12 @@ Deno.test("HTTP dashboard stream completes its producer and starts a fresh read 
             if (listening) await new Promise<void>((resolve) => socket.close(() => resolve()));
             if ("close" in appObject && typeof appObject.close === "function") await appObject.close();
             await fixture.cleanup();
-            await Deno.remove(root, { recursive: true });
+            await fsRm(root, { recursive: true });
         }
     });
 });
 
-Deno.test("archived Sessions stay under Plans in dashboard and sidebar but leave standalone history", async () => {
+test("archived Sessions stay under Plans in dashboard and sidebar but leave standalone history", async () => {
     const { WorkspaceSessionContinuationService } = await import("./server/session-continuation.js");
     const { loadOwnerSidebar } = await import("./server/owner-dashboard.ts");
     const fixture = await makeManagedSessionFixture();
@@ -585,7 +590,7 @@ Deno.test("archived Sessions stay under Plans in dashboard and sidebar but leave
             ...await readTranscriptEvidence(fixture.transcriptPath),
         });
         const path = `${fixture.sessionDir}/2026-01-02T00-00-00-000Z_standalone-archive.jsonl`;
-        await Deno.writeTextFile(
+        await fsWriteFile(
             path,
             `${
                 JSON.stringify({
@@ -597,7 +602,7 @@ Deno.test("archived Sessions stay under Plans in dashboard and sidebar but leave
                 })
             }\n`,
         );
-        await Deno.writeTextFile(
+        await fsWriteFile(
             path,
             `${
                 JSON.stringify({
@@ -607,7 +612,7 @@ Deno.test("archived Sessions stay under Plans in dashboard and sidebar but leave
                     message: { role: "user", content: [{ type: "text", text: "Standalone conversation" }] },
                 })
             }\n`,
-            { append: true },
+            { flag: "a" },
         );
         const standalone = await store.ensureSessionCatalogRecord({
             projectId: project.projectId,

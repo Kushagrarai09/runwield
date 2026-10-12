@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assert, assertEquals } from "@std/assert";
 import { VALIDATION_WORKFLOW_BRANCHES, type ValidationWorkflowBranchId } from "./validation-workflow-coverage.ts";
 
@@ -7,7 +8,7 @@ function branch(id: ValidationWorkflowBranchId) {
     return found;
 }
 
-Deno.test("human review none and ask-skip branches have independent owners and evidence", () => {
+test("human review none and ask-skip branches have independent owners and evidence", () => {
     const none = branch("human-review:none");
     const askSkip = branch("human-review:ask-skip");
 

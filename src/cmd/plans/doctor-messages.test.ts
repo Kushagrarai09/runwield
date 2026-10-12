@@ -1,7 +1,8 @@
+import { test } from "node:test";
 import { assert, assertEquals } from "@std/assert";
 import { doctorCheckMessage, doctorCleanMessage, doctorNeedsHelpMessage } from "./doctor-messages.ts";
 
-Deno.test("doctor messages stay plain", () => {
+test("doctor messages stay plain", () => {
     const messages = [
         doctorCleanMessage(0),
         doctorCleanMessage(3),

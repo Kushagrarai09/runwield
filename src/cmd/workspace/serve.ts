@@ -3,6 +3,7 @@
  * Persistent owner Workspace launcher.
  */
 
+import process, { platform } from "node:process";
 import { parseArgs } from "@std/cli/parse-args";
 import { CLI_BIN } from "../../constants.js";
 import { getOwnerCoordinationDatabasePath, openOwnerCoordinationStore } from "../../shared/owner-coordination/index.js";
@@ -78,10 +79,10 @@ export function printWorkspaceServeHelp(): void {
 
 function installShutdownHandlers(controller: AbortController): () => void {
     const handler = () => controller.abort();
-    const signals: Deno.Signal[] = Deno.build.os === "windows" ? ["SIGINT"] : ["SIGINT", "SIGTERM"];
-    for (const signal of signals) Deno.addSignalListener(signal, handler);
+    const signals: NodeJS.Signals[] = platform === "win32" ? ["SIGINT"] : ["SIGINT", "SIGTERM"];
+    for (const signal of signals) process.on(signal, handler);
     return () => {
-        for (const signal of signals) Deno.removeSignalListener(signal, handler);
+        for (const signal of signals) process.off(signal, handler);
     };
 }
 

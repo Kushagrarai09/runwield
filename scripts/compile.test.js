@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
 import {
     assertCompileDenoVersion,
@@ -7,7 +8,7 @@ import {
     parseCompileOptions,
 } from "./compile.js";
 
-Deno.test("buildCompileArgs uses Deno compile flags and bundled resource includes", () => {
+test("buildCompileArgs uses Deno compile flags and bundled resource includes", () => {
     const args = buildCompileArgs();
 
     assertEquals(args.slice(0, 19), [
@@ -58,14 +59,14 @@ Deno.test("buildCompileArgs uses Deno compile flags and bundled resource include
     assertEquals(args.some((arg) => arg.includes("plannotator-pi-extension-compiled")), false);
 });
 
-Deno.test("buildCompileArgs keeps resource includes before the script", () => {
+test("buildCompileArgs keeps resource includes before the script", () => {
     const args = buildCompileArgs();
 
     assertEquals(args.at(-1), "src/cli.ts");
     assertEquals(args.includes("src/agent-definitions/subagent-definitions"), false);
 });
 
-Deno.test("buildCompileArgs accepts release target, output, and reload overrides", () => {
+test("buildCompileArgs accepts release target, output, and reload overrides", () => {
     const args = buildCompileArgs({
         output: "wld.exe",
         target: "x86_64-pc-windows-msvc",
@@ -78,7 +79,7 @@ Deno.test("buildCompileArgs accepts release target, output, and reload overrides
     assertEquals(args.indexOf("--target") < args.indexOf("--include"), true);
 });
 
-Deno.test("parseCompileOptions supports separated and equals forms", () => {
+test("parseCompileOptions supports separated and equals forms", () => {
     assertEquals(
         parseCompileOptions(["--reload", "--output", "wld", "--target=aarch64-apple-darwin", "--expect-build-id=abc"]),
         {
@@ -92,7 +93,7 @@ Deno.test("parseCompileOptions supports separated and equals forms", () => {
     assertThrows(() => parseCompileOptions(["--wat"]), Error, "Unknown compile option");
 });
 
-Deno.test("standalone compiler version allows the minimum Deno version or newer", () => {
+test("standalone compiler version allows the minimum Deno version or newer", () => {
     assertCompileDenoVersion(DENO_COMPILE_MINIMUM_VERSION);
     assertCompileDenoVersion("2.9.4");
     assertCompileDenoVersion("2.10.0");
@@ -101,7 +102,7 @@ Deno.test("standalone compiler version allows the minimum Deno version or newer"
     assertThrows(() => assertCompileDenoVersion("2.8.0"), Error, DENO_COMPILE_MINIMUM_VERSION);
 });
 
-Deno.test("native compilation runs the binary startup smoke test", () => {
+test("native compilation runs the binary startup smoke test", () => {
     assertEquals(canSmokeTestCompiledBinary(undefined), true);
     assertEquals(canSmokeTestCompiledBinary("unsupported-target"), false);
 });

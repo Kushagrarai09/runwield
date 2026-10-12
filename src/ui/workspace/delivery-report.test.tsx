@@ -1,3 +1,4 @@
+import { test } from "node:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -5,7 +6,7 @@ import { buildDeliveryReport } from "../../shared/workflow/delivery-report.ts";
 import { reduceSessionEvents, SessionTimeline } from "./components/SessionTimeline.jsx";
 import { createPublicationAttempt } from "../../shared/workflow/publication-attempt.ts";
 
-Deno.test("Plan Branch completion card names the landing and the user's next merge", () => {
+test("Plan Branch completion card names the landing and the user's next merge", () => {
     const report = buildDeliveryReport({
         planName: "example",
         attrs: { classification: "PLANNED_CHANGE", targetBranch: "release", deliveryBranch: "plan/example" },
@@ -41,7 +42,7 @@ Deno.test("Plan Branch completion card names the landing and the user's next mer
     assertStringIncludes(html, "open a PR to release");
 });
 
-Deno.test("delivery report survives replay as an inline Session card with safe artifact links", () => {
+test("delivery report survives replay as an inline Session card with safe artifact links", () => {
     const report = buildDeliveryReport({
         planName: "<script>fixture</script>",
         attrs: { planId: "fixture", workRecord: { status: "generated", path: "docs/work-records/example.md" } },

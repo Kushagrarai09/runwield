@@ -4,13 +4,14 @@
  * Starts the compiled Workspace question page for Runtime interactions.
  */
 
+import { versions } from "node:process";
 import { startSessionQuestionWorkspaceServer } from "../../ui/workspace/server.js";
 
 /**
  * @typedef {Object} BrowserQuestionServer
  * @property {string} token
  * @property {string} url
- * @property {() => Promise<void>} shutdown
+ * @property {(options?: { drain?: boolean }) => Promise<void>} shutdown
  */
 
 /**
@@ -39,9 +40,20 @@ export function startBrowserQuestionServer({ interaction, acpSessionId = "", ans
     return {
         token,
         url: `${origin}/session-question?token=${encodeURIComponent(token)}`,
-        shutdown: async () => {
-            controller.abort();
-            await server.finished;
+        shutdown: async ({ drain = false } = {}) => {
+            // Deno's native abort delivers this response; abort after shutdown() raises BadResource.
+            if (!drain || versions.deno) {
+                controller.abort();
+                await server.finished;
+                return;
+            }
+            // Let the accepted answer reach the browser, but bound unrelated unfinished uploads.
+            const timer = setTimeout(() => controller.abort(), 1_000);
+            try {
+                await server.shutdown();
+            } finally {
+                clearTimeout(timer);
+            }
         },
     };
 }

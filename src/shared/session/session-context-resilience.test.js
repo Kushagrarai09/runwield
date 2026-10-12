@@ -1,3 +1,5 @@
+import { readFile as fsReadFile } from "node:fs/promises";
+import { test } from "node:test";
 import { assert, assertEquals, assertMatch, assertThrows } from "@std/assert";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import { Agent } from "@earendil-works/pi-agent-core";
@@ -100,7 +102,7 @@ function hasCompactionSummary(messages) {
     return JSON.stringify(messages).includes("Compaction Summary");
 }
 
-Deno.test("messageStream fixture rejects pending as a final done stop reason", () => {
+test("messageStream fixture rejects pending as a final done stop reason", () => {
     assertThrows(
         () => finalDoneStopReason("pending"),
         Error,
@@ -108,7 +110,7 @@ Deno.test("messageStream fixture rejects pending as a final done stop reason", (
     );
 });
 
-Deno.test("RunWield/Pi seam currently submits another provider call after tool-result pressure without compaction", async () => {
+test("RunWield/Pi seam currently submits another provider call after tool-result pressure without compaction", async () => {
     const providerContexts =
         /** @type {{ call: number; completedToolResults: number; estimatedTokens: number; compacted: boolean }[]} */ ([]);
     let providerCalls = 0;
@@ -205,9 +207,9 @@ function characterizePublicContextResilienceContract(api) {
     };
 }
 
-Deno.test("selected public Pi AgentSession contract lacks the required completed-turn stop and recovery hook", async () => {
+test("selected public Pi AgentSession contract lacks the required completed-turn stop and recovery hook", async () => {
     const repositoryRoot = new URL("../../../", import.meta.url);
-    const denoConfig = JSON.parse(await Deno.readTextFile(new URL("deno.json", repositoryRoot)));
+    const denoConfig = JSON.parse(await fsReadFile(new URL("deno.json", repositoryRoot), "utf8"));
     for (const [name, specifier] of Object.entries(denoConfig.imports)) {
         if (!name.startsWith("@earendil-works/")) continue;
         assertMatch(

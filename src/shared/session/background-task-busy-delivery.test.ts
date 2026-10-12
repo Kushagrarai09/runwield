@@ -1,3 +1,5 @@
+import { readFile as fsReadFile } from "node:fs/promises";
+import { test } from "node:test";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import type { TranscriptContext } from "@earendil-works/pi-ai";
@@ -7,7 +9,7 @@ import { openFileSessionStore } from "./file-session-store.ts";
 import { createReplayEvents } from "./session-transcript-projection.js";
 import { RuntimeEventTypes } from "./session-runtime-events.js";
 
-Deno.test("a completed task steers the busy parent root once before its next model request", async () => {
+test("a completed task steers the busy parent root once before its next model request", async () => {
     await withRuntimeCommandFixture("background-busy-delivery-", async ({ projectRoot, setModelResponseFactories }) => {
         let nextRequest = "";
         let calls = 0;
@@ -47,7 +49,7 @@ Deno.test("a completed task steers the busy parent root once before its next mod
             try {
                 const saved = store.getSessionById(snapshot?.managed?.runwieldSessionId || "");
                 assert(saved);
-                const entries = (await Deno.readTextFile(saved.transcriptPath)).trim().split("\n").map((line) =>
+                const entries = (await fsReadFile(saved.transcriptPath, "utf8")).trim().split("\n").map((line) =>
                     JSON.parse(line)
                 );
                 const replay = createReplayEvents("busy", entries);
@@ -69,7 +71,7 @@ Deno.test("a completed task steers the busy parent root once before its next mod
     });
 });
 
-Deno.test("a busy root receives task output rather than its foreground delegated child", async () => {
+test("a busy root receives task output rather than its foreground delegated child", async () => {
     await withRuntimeCommandFixture("background-parent-target-", async ({ projectRoot, setModelResponseFactories }) => {
         let parentRequest = "";
         let childRequest = "";

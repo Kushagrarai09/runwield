@@ -1,3 +1,6 @@
+import { mkdir as fsMkdir, mkdtemp as fsMkdtemp, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
+import { test } from "node:test";
+import { tmpdir } from "node:os";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import { join } from "@std/path";
 import { getRunWieldSessionDir } from "../session/root-session.js";
@@ -26,18 +29,18 @@ function idFactory(prefix = "id") {
 /** @param {string} cwd @param {string} piSessionId @param {string} timestamp @param {Array<Record<string, unknown>>} bodyEntries */
 async function writeTranscript(cwd, piSessionId, timestamp, bodyEntries = []) {
     const sessionDir = getRunWieldSessionDir(cwd);
-    await Deno.mkdir(sessionDir, { recursive: true });
+    await fsMkdir(sessionDir, { recursive: true });
     const path = join(sessionDir, `${timestamp.replace(/[:.]/g, "-")}_${piSessionId}.jsonl`);
     const entries = [{ type: "session", id: piSessionId, cwd, timestamp }, ...bodyEntries];
-    await Deno.writeTextFile(path, `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`);
+    await fsWriteFile(path, `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`);
     return path;
 }
 
 async function createCommittedFixture() {
-    const dir = await Deno.makeTempDir({ prefix: "runwield-rollover-commit-" });
+    const dir = await fsMkdtemp(join(tmpdir(), "runwield-rollover-commit-"));
     const database = openOwnerCoordinationDatabase({ dbPath: `${dir}/owner.sqlite3` });
     const root = `${dir}/repo`;
-    await Deno.mkdir(root);
+    await fsMkdir(root);
     const project = registerProject(database, { root, idFactory: idFactory("project"), now: () => "t0" });
     const firstPath = await writeTranscript(root, "pi-one", "2026-01-01T00:00:00.000Z", [{
         type: "message",
@@ -80,7 +83,7 @@ async function createCommittedFixture() {
 /** @param {Awaited<ReturnType<typeof createCommittedFixture>>} fixture */
 async function cleanupFixture(fixture) {
     fixture.database.close();
-    await Deno.remove(fixture.dir, { recursive: true });
+    await fsRm(fixture.dir, { recursive: true });
 }
 
 /** @param {Awaited<ReturnType<typeof createCommittedFixture>>} fixture @param {string} [piSessionId] */
@@ -96,7 +99,7 @@ async function successorOptions(fixture, piSessionId = "pi-two") {
     return { path, safeLocator, evidence, piSessionId };
 }
 
-Deno.test("commitSegmentRolloverAndPublish seals, appends, moves activation, publishes, and releases atomically", async () => {
+test("commitSegmentRolloverAndPublish seals, appends, moves activation, publishes, and releases atomically", async () => {
     const fixture = await createCommittedFixture();
     try {
         let proof = acquireSessionActivation(fixture.database, {
@@ -147,7 +150,7 @@ Deno.test("commitSegmentRolloverAndPublish seals, appends, moves activation, pub
     }
 });
 
-Deno.test("failed rollover transaction leaves no successor row, no seal, no pointer move, and no generation", async () => {
+test("failed rollover transaction leaves no successor row, no seal, no pointer move, and no generation", async () => {
     const fixture = await createCommittedFixture();
     try {
         let proof = acquireSessionActivation(fixture.database, {
@@ -203,7 +206,7 @@ Deno.test("failed rollover transaction leaves no successor row, no seal, no poin
     }
 });
 
-Deno.test("rollover commit rejects stale fences, wrong predecessors, non-advancing generations, and held activations", async () => {
+test("rollover commit rejects stale fences, wrong predecessors, non-advancing generations, and held activations", async () => {
     const fixture = await createCommittedFixture();
     try {
         let proof = acquireSessionActivation(fixture.database, {
