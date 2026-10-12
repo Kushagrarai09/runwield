@@ -9,24 +9,20 @@ initRunWieldTheme();
 
 import { getMarkdownTheme } from "../theme/theme.js";
 import { MermaidMarkdown } from "./mermaid-markdown.js";
+import type { MermaidMarkdownOptions } from "./mermaid-markdown.js";
 
-/** @param {string[]} lines */
-function plain(lines) {
+type MermaidRenderer = NonNullable<MermaidMarkdownOptions["renderMermaid"]>;
+
+function plain(lines: string[]) {
     return lines.map((line) => stripAnsi(line)).join("\n");
 }
 
-/**
- * @param {string} text
- * @param {number} [width]
- * @param {(source: string) => string} [renderMermaid]
- */
-function renderMermaidMarkdown(text, width = 100, renderMermaid) {
+function renderMermaidMarkdown(text: string, width = 100, renderMermaid?: MermaidRenderer) {
     const md = new MermaidMarkdown(text, 0, 0, getMarkdownTheme(), undefined, undefined, { renderMermaid });
     return md.render(width);
 }
 
-/** @param {string} body */
-function fence(body) {
+function fence(body: string) {
     return `before\n\n\`\`\`mermaid\n${body}\n\`\`\`\n\nafter`;
 }
 
@@ -109,7 +105,7 @@ test("MermaidMarkdown falls back instead of wrapping diagrams that do not fit", 
     const narrowPlain = plain(narrow);
 
     assertStringIncludes(narrowPlain, "```mermaid");
-    assert(narrow.every((/** @type {string} */ line) => visibleWidth(line) <= 20));
+    assert(narrow.every((line: string) => visibleWidth(line) <= 20));
 });
 
 test("MermaidMarkdown reevaluates cached diagrams when width changes", () => {
