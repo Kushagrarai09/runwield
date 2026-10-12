@@ -70,7 +70,8 @@ import process from "node:process";
  * still rejected.
  */
 
-import { dirname, fromFileUrl } from "@std/path";
+import { dirname } from "node:path";
+import { fileURLToPath as fromFileUrl } from "node:url";
 import { listCiFiles } from "./ci-files.ts";
 
 const BASELINE_PATH = new URL("./injection-seam-baseline.json", import.meta.url);

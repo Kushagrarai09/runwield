@@ -5,7 +5,7 @@ import { mkdir as fsMkdir, mkdtemp as fsMkdtemp, rm as fsRm, stat as fsStat } fr
 import { tmpdir } from "node:os";
 import process from "node:process";
 // Run isolated source and standalone renderer, saved-operation, and combined workloads.
-import { join, resolve } from "@std/path";
+import { join, resolve } from "node:path";
 import { buildCompileArgs } from "./compile.js";
 import { sha256File } from "./build-metadata.js";
 

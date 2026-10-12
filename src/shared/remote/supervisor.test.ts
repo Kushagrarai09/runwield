@@ -14,8 +14,10 @@ import {
 } from "node:fs/promises";
 import { test } from "node:test";
 import { tmpdir } from "node:os";
-import { assert, assertEquals, assertStringIncludes } from "@std/assert";
-import { join, toFileUrl } from "@std/path";
+import { ok as assert } from "node:assert/strict";
+import { assertEquals, assertStringIncludes } from "../../testing/assertions.ts";
+import { join } from "node:path";
+import { pathToFileURL as toFileUrl } from "node:url";
 import { BUILD_ID, REMOTE_PROTOCOL_VERSION } from "../build-identity.js";
 import { startRemoteControlService } from "./control.ts";
 import { getHomeDir } from "../../constants.js";

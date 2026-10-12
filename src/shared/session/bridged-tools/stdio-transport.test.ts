@@ -1,3 +1,4 @@
+import { assertEquals } from "../../../testing/assertions.ts";
 import { fileURLToPath } from "node:url";
 import { spawnForegroundProcess } from "../../foreground-process.ts";
 import { runtimeSourceArgs } from "../../../testing/runtime-source-args.ts";
@@ -6,7 +7,6 @@ import { mkdtemp as fsMkdtemp, rm as fsRm, stat as fsStat, writeFile as fsWriteF
 import { test } from "node:test";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { assertEquals } from "@std/assert";
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool, SessionManager } from "@earendil-works/pi-coding-agent";
 import { Client } from "@modelcontextprotocol/sdk/client";

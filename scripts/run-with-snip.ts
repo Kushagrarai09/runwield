@@ -4,7 +4,7 @@ import { writeFile as fsWriteFile } from "node:fs/promises";
 import process from "node:process";
 
 import { makeTempFile } from "../src/testing/temp-file.ts";
-import { basename } from "@std/path";
+import { basename } from "node:path";
 
 export interface SnipCommandOptions {
     cwd?: string;

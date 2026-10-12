@@ -4,8 +4,9 @@ import { tmpdir } from "node:os";
 import { execPath, versions } from "node:process";
 import { type CapturedProcessOutput, captureForegroundProcess } from "../../shared/captured-process.ts";
 import { mkdir as fsMkdir, rm as fsRm } from "node:fs/promises";
-import { assertEquals, assertStringIncludes } from "@std/assert";
-import { fromFileUrl, join } from "@std/path";
+import { assertEquals, assertStringIncludes } from "../../testing/assertions.ts";
+import { fileURLToPath as fromFileUrl } from "node:url";
+import { join } from "node:path";
 import { runQuitCommand } from "./index.ts";
 
 const decoder = new TextDecoder();

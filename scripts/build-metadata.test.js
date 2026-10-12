@@ -8,8 +8,9 @@ import {
     writeFile as fsWriteFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { assertEquals, assertNotEquals, assertRejects } from "@std/assert";
-import { join } from "@std/path";
+import { notDeepStrictEqual as assertNotEquals } from "node:assert/strict";
+import { assertEquals, assertRejects } from "../src/testing/assertions.ts";
+import { join } from "node:path";
 import { computeBuildIdentity, sha256File, verifyBuildArtifact } from "./build-metadata.js";
 import { prepareDevelopmentArtifacts } from "./release-assets.js";
 import { writeBuildIdentityFile } from "./write-version.js";

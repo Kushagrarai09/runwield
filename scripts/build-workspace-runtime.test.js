@@ -1,3 +1,4 @@
+import { assertEquals } from "../src/testing/assertions.ts";
 import {
     mkdir as fsMkdir,
     mkdtemp as fsMkdtemp,
@@ -7,8 +8,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { test } from "node:test";
-import { assertEquals } from "@std/assert";
-import { join } from "@std/path";
+import { join } from "node:path";
 import {
     buildWorkspaceRuntime,
     getOpaqueWorkspaceAssetName,

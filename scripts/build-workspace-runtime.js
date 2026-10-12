@@ -16,7 +16,7 @@ import {
  * as passive data instead of treating hundreds of chunks as graph roots.
  */
 
-import { basename, dirname, extname, join } from "@std/path";
+import { basename, dirname, extname, join } from "node:path";
 
 const DEFAULT_SERVER_ENTRY = "dist/workspace/server/entry.mjs";
 const DEFAULT_CLIENT_DIR = "dist/workspace/client";

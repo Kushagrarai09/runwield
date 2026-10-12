@@ -1,11 +1,12 @@
+import { assertEquals } from "../src/testing/assertions.ts";
 import { runtimeSourceArgs } from "../src/testing/runtime-source-args.ts";
 import { captureScriptProcess } from "./script-process.ts";
 import { test } from "node:test";
 import { mkdtemp as fsMkdtemp, readFile as fsReadFile, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import process from "node:process";
-import { assertEquals } from "@std/assert";
-import { fromFileUrl, join } from "@std/path";
+import { fileURLToPath as fromFileUrl } from "node:url";
+import { join } from "node:path";
 import { type CiTaskName, type CiTaskResult, PRE_TEST_TASKS, runCi } from "./run-ci.ts";
 
 test("CI collects all failures by default and supports explicit fail-fast", async () => {

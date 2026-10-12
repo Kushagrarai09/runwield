@@ -1,4 +1,5 @@
-import { assert, assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
+import { ok as assert } from "node:assert/strict";
+import { assertEquals, assertStringIncludes, assertThrows } from "../testing/assertions.ts";
 import { isMissingExecutableError, spawnForegroundProcess, spawnForegroundShell } from "./foreground-process.ts";
 import { getCwd } from "../constants.js";
 

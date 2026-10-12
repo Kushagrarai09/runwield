@@ -15,8 +15,10 @@ import {
 import { tmpdir } from "node:os";
 import { test } from "node:test";
 import process from "node:process";
-import { assert, assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
-import { dirname, fromFileUrl, join, resolve } from "@std/path";
+import { ok as assert } from "node:assert/strict";
+import { assertEquals, assertRejects, assertStringIncludes } from "../src/testing/assertions.ts";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath as fromFileUrl } from "node:url";
 import { PUBLIC_DOCS, renderPublicDocument, stagePublicDocs } from "./public-docs.ts";
 
 const RELEASE = {

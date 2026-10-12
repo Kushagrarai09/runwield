@@ -2,7 +2,7 @@ import { spawnNativeProcess } from "../foreground-process.ts";
 import { getCwd } from "../../constants.js";
 import process from "node:process";
 import { test } from "node:test";
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assertEquals, assertStringIncludes } from "../../testing/assertions.ts";
 
 async function privateEntry(args: string[], input?: string) {
     const child = spawnNativeProcess(process.execPath, {

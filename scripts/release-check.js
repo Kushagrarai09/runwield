@@ -15,7 +15,7 @@ import process from "node:process";
  * script used by the release workflow, then smoke-test the native executable.
  */
 
-import { join } from "@std/path";
+import { join } from "node:path";
 import { buildCompileArgs } from "./compile.js";
 
 const BUNDLED_AGENT_DEFS_SOURCE_DIR = join("src", "agent-definitions");

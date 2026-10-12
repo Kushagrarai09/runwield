@@ -2,7 +2,8 @@ import { spawn } from "node:child_process";
 import { watch } from "node:fs/promises";
 import process from "node:process";
 import { waitForScriptExit } from "./script-process.ts";
-import { dirname, fromFileUrl, join, resolve } from "@std/path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath as fromFileUrl } from "node:url";
 import { stagePublicDocs } from "./public-docs.ts";
 
 const projectRoot = resolve(dirname(fromFileUrl(import.meta.url)), "..");

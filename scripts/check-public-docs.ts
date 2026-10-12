@@ -2,7 +2,7 @@ import { readdir as fsReaddir, readFile as fsReadFile, stat as fsStat } from "no
 import process from "node:process";
 import { PUBLIC_DOCS, routeFor } from "./public-docs.ts";
 import { getCwd } from "../src/constants.js";
-import { join } from "@std/path";
+import { join } from "node:path";
 
 async function checkPublicDocs(): Promise<void> {
     const root = getCwd();

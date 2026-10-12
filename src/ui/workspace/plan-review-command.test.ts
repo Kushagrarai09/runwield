@@ -1,6 +1,7 @@
+import { assertEquals } from "../../testing/assertions.ts";
 // @ts-nocheck: owner Workspace app and managed fixture expose JavaScript records.
 import { test } from "node:test";
-import { assert, assertEquals } from "@std/assert";
+import { ok as assert } from "node:assert/strict";
 import { ensurePlanIdentity, savePlan } from "../../plan-store.js";
 import { makeManagedSessionFixture } from "../../testing/managed-session-fixture.ts";
 import { withRuntimeCommandFixture } from "../../cmd/testing/runtime-command-fixture.ts";

@@ -18,7 +18,7 @@ import process from "node:process";
  * adjacent metadata. Do not use VERSION or a Git hash as a compatibility check.
  */
 
-import { dirname, resolve } from "@std/path";
+import { dirname, resolve } from "node:path";
 import {
     BUILD_IDENTITY_PATH,
     BUILD_METADATA_SCHEMA,

@@ -15,7 +15,7 @@ import {
 } from "node:fs/promises";
 import { clearInterval, setInterval } from "node:timers";
 import { pid, platform } from "node:process";
-import { basename, dirname, join, resolve, SEPARATOR } from "@std/path";
+import { basename, dirname, join, resolve, sep as SEPARATOR } from "node:path";
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
     getRunWieldRuntimeDir,

@@ -57,7 +57,8 @@ import process from "node:process";
  * gate is `deno task check`, not these sandboxed executions.
  */
 import { retainTestEvidence } from "./retain-test-evidence.js";
-import { basename, dirname, fromFileUrl, join, relative, resolve } from "@std/path";
+import { basename, dirname, join, relative, resolve } from "node:path";
+import { fileURLToPath as fromFileUrl } from "node:url";
 import { listCiFiles } from "./ci-files.ts";
 import { runBoundedTest, writeSnipCommandResult } from "./run-with-snip.ts";
 import { mergeTestTimings, orderTestsByTiming, readTestTimings, writeTestTimings } from "./test-timings.js";

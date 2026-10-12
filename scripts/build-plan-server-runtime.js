@@ -15,7 +15,7 @@ import {
  * repository's executable source tree.
  */
 
-import { basename, dirname, join } from "@std/path";
+import { basename, dirname, join } from "node:path";
 import { readWorkspaceStyles } from "../src/ui/workspace/workspace-styles.ts";
 
 const DEFAULT_REMOTE_ENTRY = "src/ui/workspace/remote-server.ts";

@@ -8,7 +8,8 @@ import process from "node:process";
  * Parent/child protocol for subprocess-isolated Golden TUI scenarios.
  */
 
-import { fromFileUrl, join, toFileUrl } from "@std/path";
+import { fileURLToPath as fromFileUrl, pathToFileURL as toFileUrl } from "node:url";
+import { join } from "node:path";
 import { createGoldenIsolatedEnvironment } from "./isolated-environment.js";
 import { GOLDEN_CHILD_READY_MARKER, runGoldenChild } from "./subprocess-runner.js";
 import { releaseProcessGlobalTestLockSync } from "../../../testing/process-global-lock.ts";

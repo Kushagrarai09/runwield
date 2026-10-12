@@ -5,7 +5,8 @@
  * source" means, rather than each carrying its own glob that can drift.
  */
 
-import { dirname, fromFileUrl } from "@std/path";
+import { dirname } from "node:path";
+import { fileURLToPath as fromFileUrl } from "node:url";
 import { listCiFiles } from "./ci-files.ts";
 
 const REPO_ROOT = dirname(dirname(fromFileUrl(import.meta.url)));
