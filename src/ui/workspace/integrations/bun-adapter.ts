@@ -1,10 +1,23 @@
 /** Astro renders requests; RunWield owns HTTP serving and static-asset policy. */
 import type { AstroIntegration } from "astro";
 
-export default function bunAdapter(): AstroIntegration {
+interface WorkspaceAssetManifest {
+    assets: string[];
+}
+
+interface WorkspaceManifestOptions {
+    manifest: WorkspaceAssetManifest;
+}
+
+export default function bunAdapter() {
     return {
         name: "runwield/bun-workspace",
         hooks: {
+            "astro:build:ssr": ({ manifest }: WorkspaceManifestOptions) => {
+                // Astro discovers static files concurrently; their membership order has no meaning.
+                // Canonical ordering keeps independently built release payloads byte-identical.
+                manifest.assets.sort();
+            },
             "astro:config:done": ({ setAdapter }) => {
                 setAdapter({
                     name: "runwield/bun-workspace",
@@ -19,5 +32,5 @@ export default function bunAdapter(): AstroIntegration {
                 });
             },
         },
-    };
+    } satisfies AstroIntegration;
 }
