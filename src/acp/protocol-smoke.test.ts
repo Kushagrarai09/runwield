@@ -9,7 +9,7 @@ import { assertAcpFrameSchema, findAcpSchemaViolations } from "./schema-conforma
 
 test("ACP SDK import exposes agent and NDJSON stream primitives under Deno", () => {
     const app = agent({ name: "RunWield ACP smoke" });
-    const transport = new TransformStream();
+    const transport = new TransformStream<Uint8Array, Uint8Array>();
     const stream = ndJsonStream(transport.writable, transport.readable);
 
     assertEquals(methods.agent.initialize, "initialize");
