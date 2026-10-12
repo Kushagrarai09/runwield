@@ -624,7 +624,7 @@ export async function runReleaseCheck(options, port) {
         await mustRun(
             "Compile release binary",
             "bun",
-            ["run", "compile:bun", output],
+            ["run", "compile", "--output", output],
             {
                 cwd: rootDir,
                 env: compileEnv,

@@ -94,7 +94,7 @@ test("runReleaseCheck propagates build identity to compile and preserves stage o
                 remove: () => Promise.resolve(),
                 async run(command, args, options = {}) {
                     calls.push({ command, args, env: options.env });
-                    if (command === "bun" && args.includes("compile:bun")) {
+                    if (command === "bun" && args.includes("compile")) {
                         stages.push("compile");
                         await fsWriteFile(
                             join(root, "src", "shared", "version.js"),
@@ -307,7 +307,7 @@ test("runReleaseCheck restores generated version after binary version mismatch",
                         makeTempDir: () => Promise.resolve("release-temp"),
                         remove: () => Promise.resolve(),
                         async run(command, args) {
-                            if (command === "bun" && args.includes("compile:bun")) {
+                            if (command === "bun" && args.includes("compile")) {
                                 stages.push("compile");
                                 await fsWriteFile(
                                     join(root, "src", "shared", "version.js"),
@@ -523,7 +523,12 @@ test("Bun release gate compiles and checks the Bun runtime without invoking the 
             },
         );
         assertEquals(calls[0].command, "bun");
-        assertEquals(calls[0].args.slice(0, 2), ["run", "compile:bun"]);
+        assertEquals(calls[0].args, [
+            "run",
+            "compile",
+            "--output",
+            join("release-temp", process.platform === "win32" ? "wld.exe" : "wld"),
+        ]);
         assertEquals(calls[1], {
             command: "bun",
             args: ["run", "scripts/assert-workspace-review-runtime.js", "--bun"],

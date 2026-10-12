@@ -9,7 +9,7 @@ createdAt: "2026-10-12"
 # Complete the Bun toolchain migration
 
 Carlos is dogfooding v0.12.0-rc.1 and requested phase 2: tooling, containers and replacement of direct `@std/` dependencies.
-The RC is a Bun executable; the repository still requires Deno for several developer and delivery paths.
+The RC is a Bun executable. This plan records retirement of the remaining Deno developer/build/container paths.
 This work starts at `9d4bb0374` in an isolated checkout. Preserve the primary checkout, installed executable, live Sessions,
 published RC and Stable channel. Publication is a draft PR only; merging and another release are not authorized.
 
@@ -25,8 +25,8 @@ published RC and Stable channel. Publication is a draft PR only; merging and ano
    type/lint/format rules, dependency age and disabled install scripts. Replace Deno-based build identity inputs.
 3. Migrate PR/release/docs workflows and remote Workspace container builds. Build reproducibly with Bun 1.4.3 and frozen
    root/docs lockfiles. Preserve package smoke tests, Stable/Candidate separation, immutable release recovery, WinGet pause,
-   unprivileged container execution, durable `/data`, and restricted filesystem access. Deno permission flags cannot simply
-   disappear without an equivalent enforced container boundary.
+   unprivileged container execution and durable `/data`. Carlos subsequently approved removing Deno permissions from
+   these test-only containers; production-equivalent hardening is deferred.
 4. Remove obsolete root/docs Deno manifests after their consumers are migrated. Audit runtime selection, prototype
    tooling, source fixtures, generated bundles, container assertions, docs reconciliation and developer instructions.
    Historical documents and example projects may discuss Deno; they are not active toolchain requirements.
@@ -69,10 +69,8 @@ and its filesystem boundary are not yet qualified. The initial cloud run passed 
 and macOS/Linux/Windows x64 package checks; source shard 1 exposed a missing JSONC module in a copied fixture, fixed in
 `ca52c5c2a`. Cloud qualification is rerunning on the repaired branch.
 
-Remaining before completion: final cloud source/Golden/platform qualification, Deno-free container qualification,
-the restricted remote container conversion, and removal of the root Deno manifests after their last consumer migrates.
-Bun has no equivalent per-process filesystem permissions. Preserve that boundary as described below; non-root execution
-and a read-only root alone are not equivalent. Do not describe phase 2 as complete or publish another release while these remain.
+At that checkpoint, cloud qualification and container conversion remained. The later owner decision below supersedes
+the permission-equivalence blocker. Another release or merge remains unauthorized.
 
 ## Container boundary and historical docs follow-up
 
@@ -82,7 +80,7 @@ allowed. Replacing the command with Bun would remove the per-process filesystem 
 and a read-only root filesystem restrict writes but do not deny reads of other readable files or newly mounted secrets.
 That option is not an equivalent boundary and is not being adopted.
 
-No user decision is required to keep the existing policy. The safe continuation is to qualify an OS-enforced allowlist
+Before the later owner decision, the safe continuation was to qualify an OS-enforced allowlist
 with Bun, failing closed when enforcement is unavailable; otherwise the remote image remains on its existing runtime.
 A choice is needed only to accept a weaker boundary or a new hosting/kernel requirement. Linux Landlock can restrict an
 unprivileged process and its future children, but its ABI, runtime loader/filesystem needs and subprocess behavior require
@@ -125,5 +123,28 @@ host policy would need to enforce them. A JavaScript allowlist or replaceable li
 
 Therefore a Landlock-only Bun image cannot be called equivalent. The remaining choice is whether to retain a Deno-only
 exception for this restricted image, or accept a new host-managed sandbox requirement whose full filesystem and subprocess
-policy must then be qualified. Neither a weaker policy nor extra host privileges have been adopted. The image conversion
-and final root-manifest retirement remain blocked on that decision; independent tooling qualification continues.
+policy must then be qualified. Neither a weaker policy nor extra host privileges have been adopted. That was the decision pending at the previous checkpoint; the owner decision below resolves it for these test images.
+
+
+## Owner-approved test container scope and original task names
+
+Carlos resolved the container decision: “No need to find equality with that one. Just replace it with bun. We can worry
+about that later. For now those containers are tests.” The Bun image is explicitly test-only and non-hardened; equivalent
+Deno filesystem/subprocess permission enforcement is deferred. This authorizes no deployed host or production access changes.
+
+Both remote image stages now use Bun 1.4.3 with frozen, lifecycle-disabled installation. The final image contains only
+bundled runtime/passive assets, preserves numeric UID 1993 and `/data`, and runs without root. Compose retains loopback
+publishing and adds a read-only root, dropped capabilities, no-new-privileges, and temporary scratch space. These measures
+are practical container protections, not equivalent Deno permissions. Its health check now uses Bun. The last root
+`deno.json`/`deno.lock` consumers are removed; Dependabot tracks root/docs Bun graphs. Historical release interoperability
+checks deliberately retain Deno in separate CI lanes, as required by the acceptance criteria.
+
+Carlos also clarified that public task names must stay the same as under Deno. All 49 names were audited; none is missing.
+Canonical commands now own implementation and are used in ordinary CI/release tooling. The sole historical build fallback
+uses `compile:bun` for immutable RC1 checkouts that lack the new named compiler. See the
+[complete argument and exception audit](bun-task-compatibility.md). Compile named arguments, test name filtering, compound
+argument boundaries, and failed build prerequisite propagation have focused regression coverage.
+
+Qualification for these final changes must include the remote image's runtime files, nonroot user, absent Deno runtime,
+health/readiness, built HTML/CSS, SQLite persistence across restart, graceful shutdown and read-only application directory.
+The draft PR stays unmerged and no release is published.

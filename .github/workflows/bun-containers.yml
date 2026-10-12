@@ -65,3 +65,21 @@ jobs:
                     wld --version
                     command -v mnemoteca cymbal ketch agent-browser snip
                   '
+
+    remote-image:
+        name: Bun remote test container
+        if: github.event.repository.private == false
+        runs-on: ubuntu-latest
+        timeout-minutes: 25
+        steps:
+            - uses: actions/checkout@v5
+              with:
+                  submodules: recursive
+                  persist-credentials: false
+            - uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version-file: .bun-version
+            - name: Build the Bun remote test image
+              run: docker build -f Containerfile -t runwield-plan-server:ci .
+            - name: Qualify startup, assets, persistence and container protections
+              run: bun scripts/check-remote-container.ts docker runwield-plan-server:ci

@@ -40,7 +40,7 @@ jobs:
             - name: Compile Windows binary
               env:
                   WLD_BUILD_VERSION: v0.10.1-rc.9
-              run: bun run compile:bun wld.exe bun-windows-x64
+              run: bun run compile --output wld.exe --target bun-windows-x64
 
             - name: Package Windows artifact
               run: bun run package:windows --tag v0.10.1-rc.9 --binary wld.exe --output .

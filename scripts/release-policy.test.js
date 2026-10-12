@@ -58,7 +58,10 @@ test("release workflow keeps tag publication and manual recovery channel-safe", 
     assertStringIncludes(workflow, "workflow_dispatch:");
     assertMatch(workflow, /workflow_dispatch:[\s\S]*tag:[\s\S]*required: true/);
     assertStringIncludes(workflow, "RELEASE_TAG: ${{ inputs.tag || github.ref_name }}");
-    assertStringIncludes(workflow.slice(workflow.indexOf("    metadata:"), workflow.indexOf("    ci-shards:")), "ref: ${{ github.sha }}");
+    assertStringIncludes(
+        workflow.slice(workflow.indexOf("    metadata:"), workflow.indexOf("    ci-shards:")),
+        "ref: ${{ github.sha }}",
+    );
     assertMatch(workflow, /release-check:[\s\S]*ref: \$\{\{ needs\.metadata\.outputs\.tag \}\}/);
     assertMatch(workflow, /build:[\s\S]*ref: \$\{\{ needs\.metadata\.outputs\.tag \}\}/);
     assertMatch(workflow, /release:[\s\S]*ref: \$\{\{ needs\.metadata\.outputs\.tag \}\}/);
@@ -154,7 +157,10 @@ test("release workflow runs source, Golden, and binary qualification in parallel
 
     assertStringIncludes(releaseCheck, '["run", "test:golden-tui:extensive"]');
     assertStringIncludes(workflow, "bun scripts/release-check.js --runtime bun --binary-only --build-version");
-    assertStringIncludes(workflow, "bun scripts/run-tests.js --isolated src/ui/tui/testing src/ui/tui/golden-scenarios --fail-fast --timings-file");
+    assertStringIncludes(
+        workflow,
+        "bun scripts/run-tests.js --isolated src/ui/tui/testing src/ui/tui/golden-scenarios --fail-fast --timings-file",
+    );
     assertMatch(workflow, /golden-shards:\n[\s\S]*?needs: metadata/);
     assertMatch(workflow, /release-check:\n[\s\S]*?needs: metadata/);
     const build = workflow.slice(workflow.indexOf("    build:"), workflow.indexOf("    assets:"));
@@ -263,6 +269,9 @@ test("release executables use pinned Bun while native package and Stable channel
     const binaryGate = workflow.slice(workflow.indexOf("    release-check:"), workflow.indexOf("    build:"));
     assertStringIncludes(build, "bun-version-file: .bun-version");
     assertStringIncludes(build, "bun run install:locked");
+    assertStringIncludes(build, "if [ -f scripts/compile-command.ts ]; then");
+    assertStringIncludes(build, 'bun run compile --output "${{ matrix.binary_name }}" --target "${{ matrix.target }}"');
+    // Historical tag recovery must use the Bun command that exists in RC1.
     assertStringIncludes(build, 'bun run compile:bun "${{ matrix.binary_name }}" "${{ matrix.bun_target }}"');
     assertEquals(build.includes("scripts/compile.js"), false);
     assertStringIncludes(build, 'embedded.runtime !== "bun"');

@@ -319,7 +319,9 @@ document surfaces should feel consistent while keeping Plan lifecycle controls s
 
 ### Shared Plan collaboration
 
-**Scope and maturity:** Current self-hosted baseline; hosted deployment and additional browser actions remain deferred.
+**Scope and maturity:** Current self-hosted collaboration protocol. The repository's Bun container definitions are
+for testing and are not production-hardened; equivalent runtime filesystem/subprocess isolation is deferred.
+Hosted deployment and additional browser actions remain deferred.
 
 **Requirement: Share review revisions with explicit access.**
 
