@@ -79,6 +79,8 @@ jobs:
             - uses: oven-sh/setup-bun@v2
               with:
                   bun-version-file: .bun-version
+            - name: Validate test Compose configuration
+              run: docker compose -f compose.yml config --quiet
             - name: Build the Bun remote test image
               run: docker build -f Containerfile -t runwield-plan-server:ci .
             - name: Qualify startup, assets, persistence and container protections
