@@ -131,6 +131,7 @@
     "src/cmd/theme/index.test.ts",
     "src/cmd/update/index.test.ts",
     "src/cmd/update/installer-process.test.ts",
+    "src/cmd/update/terminal.test.ts",
     "src/cmd/workspace/workspace.test.ts",
     "src/cmd/wr/index.test.ts",
     "src/constants-portable.test.ts",

@@ -2049,6 +2049,18 @@ Future/open requirements:
 Windows WinGet support; public package availability is pending owner publication/submission. Remote development runtime
 preparation is a connection-only development-build subset, not a qualified production release.
 
+**Requirement: Honor the displayed Candidate update confirmation default.**
+
+For shell-installed RunWield, `wld update --rc` and its `wld upgrade --rc` alias accept Enter at `[Y/n]` as Yes.
+Explicit `y` or `yes` accepts without regard to case; No, unrecognized input, and end-of-input cancel before downloading
+or running the installer. `--yes` bypasses this confirmation.
+
+**Acceptance scenarios:**
+
+- Given an available Candidate and an interactive terminal, pressing Enter or typing Yes starts the selected update.
+- Given No, unrecognized input, or Ctrl-D, the update is canceled and the installer is neither downloaded nor run.
+- Given `--yes`, the selected update proceeds without requesting terminal input.
+
 **Requirement: Prepare only a matching remote development runtime.**
 
 For the current `wld remote` connection view, build the launcher and Linux artifacts explicitly from the same unchanged
