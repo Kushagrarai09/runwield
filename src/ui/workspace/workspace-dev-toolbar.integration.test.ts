@@ -13,7 +13,7 @@ test("Astro dev toolbar remains loadable after Workspace navigation modules load
     const repoRoot = new URL("../../../", import.meta.url);
     const script = `
         import { dev } from ${JSON.stringify(import.meta.resolve("astro"))};
-        import { assertEquals, assertExists } from ${JSON.stringify(import.meta.resolve("@std/assert"))};
+        import { assertEquals, assertExists } from ${JSON.stringify(import.meta.resolve("../../testing/assertions.ts"))};
         const server = await dev({
             root: ${JSON.stringify(fileURLToPath(new URL("src/ui/workspace/", repoRoot)))},
             configFile: "astro.config.mjs",

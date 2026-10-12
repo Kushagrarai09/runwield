@@ -50,7 +50,7 @@ interface BunBuildRuntime {
 }
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const PASSIVE_PATHS = [
+export const PASSIVE_PATHS = [
     "src/ui/workspace/static",
     "src/ui/design-system/tokens.css",
     "src/ui/design-system/components.css",
@@ -98,7 +98,12 @@ export function bunArtifactTarget(target: string): string {
     return canonical;
 }
 
-export async function compileBun(output: string, target?: string, runtime?: string): Promise<void> {
+export async function compileBun(
+    output: string,
+    target?: string,
+    runtime?: string,
+    expectedBuildId?: string,
+): Promise<void> {
     requirePinnedBun();
     const compileTarget =
         target || `bun-${process.platform === "win32" ? "windows" : process.platform}-${process.arch}`;
@@ -188,6 +193,9 @@ export async function compileBun(output: string, target?: string, runtime?: stri
             ],
             false,
         );
+        if (expectedBuildId && buildId !== expectedBuildId) {
+            throw new Error(`Build identity mismatch: expected ${expectedBuildId}, got ${buildId}`);
+        }
         // Bun directory assets retain their top directory name. Staging only
         // approved passive paths preserves src/ and dist/ without embedding tests.
         // https://bun.com/docs/bundler/executables#embed-directories
@@ -232,7 +240,7 @@ export async function compileBun(output: string, target?: string, runtime?: stri
 }
 
 if (import.meta.main) {
-    const [output = process.platform === "win32" ? "bin/wld-bun.exe" : "bin/wld-bun", target, runtime, ...extra] =
+    const [output = process.platform === "win32" ? "bin/wld.exe" : "bin/wld", target, runtime, ...extra] =
         argv.slice(2);
     if (extra.length) {
         throw new Error(

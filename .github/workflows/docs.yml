@@ -71,10 +71,13 @@ jobs:
                   git fetch --force origin "refs/tags/$tag:refs/tags/$tag"
                   echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-            - name: Setup Deno
-              uses: denoland/setup-deno@v2
+            - name: Setup Bun
+              uses: oven-sh/setup-bun@v2
               with:
-                  deno-version: v2.9.7
+                  bun-version-file: .bun-version
+
+            - name: Install frozen dependencies
+              run: bun run install:locked
 
             - name: Verify complete qualified release assets
               env:
@@ -84,7 +87,7 @@ jobs:
                   set -euo pipefail
                   gh release download "$RELEASE_TAG" --dir "$RUNNER_TEMP/docs-release-assets"
                   gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > "$RUNNER_TEMP/docs-release.json"
-                  deno run -A scripts/release-assets.js \
+                  bun scripts/release-assets.js \
                     "$RUNNER_TEMP/docs-release-assets" "$RUNNER_TEMP/verified-docs-release" \
                     "$RELEASE_TAG" published "$RUNNER_TEMP/docs-release.json"
 

@@ -18,7 +18,7 @@ test("Astro dev serves local and owner Plan Boards with canonical Plan data", as
     const repoRoot = new URL("../../../", import.meta.url);
     const script = `
         import { dev } from ${JSON.stringify(new URL("node_modules/astro/dist/core/index.js", repoRoot).href)};
-        import { assertEquals, assertStringIncludes } from ${JSON.stringify(import.meta.resolve("@std/assert"))};
+        import { assertEquals, assertStringIncludes } from ${JSON.stringify(import.meta.resolve("../../testing/assertions.ts"))};
         const server = await dev({
             root: ${JSON.stringify(fileURLToPath(new URL("src/ui/workspace/", repoRoot)))},
             configFile: "astro.config.mjs",

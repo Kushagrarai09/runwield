@@ -478,7 +478,7 @@ test(
             await fsWriteFile(
                 child,
                 `import { assertEquals, assertStringIncludes } from ${JSON.stringify(
-                    import.meta.resolve("@std/assert"),
+                    import.meta.resolve("../../testing/assertions.ts"),
                 )};\n` +
                     `import { runUpdateCommand } from ${JSON.stringify(new URL("./index.ts", import.meta.url).href)};\n` +
                     `const calls = [];\n` +

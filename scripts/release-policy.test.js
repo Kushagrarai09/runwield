@@ -58,11 +58,11 @@ test("release workflow keeps tag publication and manual recovery channel-safe", 
     assertStringIncludes(workflow, "workflow_dispatch:");
     assertMatch(workflow, /workflow_dispatch:[\s\S]*tag:[\s\S]*required: true/);
     assertStringIncludes(workflow, "RELEASE_TAG: ${{ inputs.tag || github.ref_name }}");
-    assertStringIncludes(workflow, "ref: ${{ inputs.tag || github.ref }}");
+    assertStringIncludes(workflow.slice(workflow.indexOf("    metadata:"), workflow.indexOf("    ci-shards:")), "ref: ${{ github.sha }}");
     assertMatch(workflow, /release-check:[\s\S]*ref: \$\{\{ needs\.metadata\.outputs\.tag \}\}/);
     assertMatch(workflow, /build:[\s\S]*ref: \$\{\{ needs\.metadata\.outputs\.tag \}\}/);
     assertMatch(workflow, /release:[\s\S]*ref: \$\{\{ needs\.metadata\.outputs\.tag \}\}/);
-    assertStringIncludes(workflow, "deno task release:metadata --tag");
+    assertStringIncludes(workflow, "bun run release:metadata --tag");
     assertStringIncludes(workflow, "WLD_BUILD_VERSION");
     assertStringIncludes(workflow, "prerelease: ${{ needs.metadata.outputs.prerelease }}");
     assertStringIncludes(workflow, "make_latest: ${{ needs.metadata.outputs.make_latest }}");
@@ -88,7 +88,7 @@ test("release publication requires native Windows package qualification", async 
 
     assertEquals(windowsJob.includes("if: ${{ false }}"), false);
     assertStringIncludes(windowsJob, "runs-on: windows-latest");
-    assertStringIncludes(windowsJob, "deno task package:windows:check --package");
+    assertStringIncludes(windowsJob, "bun run package:windows:check --package");
     assertMatch(releaseJob, /needs:[\s\S]*- windows-package-check/);
 });
 
@@ -107,7 +107,7 @@ test("WinGet submission stays disabled while Stable manifest preparation remains
     assertMatch(submitJob, /\n {8}if: \$\{\{ false \}\}\n/);
     const packageJob = workflow.slice(workflow.indexOf("    winget-package:"), submitStart);
     assertStringIncludes(packageJob, "needs.metadata.outputs.kind == 'stable'");
-    assertStringIncludes(packageJob, "deno task package:winget");
+    assertStringIncludes(packageJob, "bun run package:winget");
     const qualification = workflow.slice(workflow.indexOf("    homebrew-check:"), workflow.indexOf("    release:"));
     assertEquals(qualification.includes("WINGET_CREATE_GITHUB_TOKEN"), false);
     assertStringIncludes(submitJob, "- winget-package");
@@ -124,7 +124,7 @@ test("Stable releases validate on macOS before publishing the Homebrew tap", asy
     const jobStart = workflow.indexOf("    homebrew-package:");
     const job = workflow.slice(jobStart);
     const dependencyTapIndex = job.indexOf("brew tap 1broseidon/tap");
-    const checkIndex = job.indexOf("deno task package:homebrew:check --tap homebrew-tap");
+    const checkIndex = job.indexOf("bun run package:homebrew:check --tap homebrew-tap");
     const pushIndex = job.indexOf("git push origin HEAD:main");
 
     assertEquals(jobStart >= 0, true);
@@ -139,9 +139,9 @@ test("Stable releases validate on macOS before publishing the Homebrew tap", asy
 });
 
 test("release-tier Golden TUI alias does not run TODO goldens", async () => {
-    const config = JSON.parse(await fsReadFile("deno.json", "utf8"));
-    const normalTest = String(config.tasks?.test || "");
-    const extensiveGoldenTest = String(config.tasks?.["test:golden-tui:extensive"] || "");
+    const config = JSON.parse(await fsReadFile("package.json", "utf8"));
+    const normalTest = String(config.scripts?.test || "");
+    const extensiveGoldenTest = String(config.scripts?.["test:golden-tui:extensive"] || "");
 
     assertEquals(normalTest.includes("RUNWIELD_RUN_TODO_GOLDENS"), false);
     assertEquals(extensiveGoldenTest.includes("RUNWIELD_RUN_TODO_GOLDENS"), false);
@@ -152,9 +152,9 @@ test("release workflow runs source, Golden, and binary qualification in parallel
     const releaseCheck = await fsReadFile(new URL("./release-check.js", import.meta.url), "utf8");
     const workflow = await fsReadFile(".github/workflows/release.yml", "utf8");
 
-    assertStringIncludes(releaseCheck, '["task", "test:golden-tui:extensive"]');
+    assertStringIncludes(releaseCheck, '["run", "test:golden-tui:extensive"]');
     assertStringIncludes(workflow, "bun scripts/release-check.js --runtime bun --binary-only --build-version");
-    assertStringIncludes(workflow, "deno task test:golden-tui:extensive --fail-fast --timings-file");
+    assertStringIncludes(workflow, "bun scripts/run-tests.js --isolated src/ui/tui/testing src/ui/tui/golden-scenarios --fail-fast --timings-file");
     assertMatch(workflow, /golden-shards:\n[\s\S]*?needs: metadata/);
     assertMatch(workflow, /release-check:\n[\s\S]*?needs: metadata/);
     const build = workflow.slice(workflow.indexOf("    build:"), workflow.indexOf("    assets:"));
@@ -225,7 +225,7 @@ for (const jobName of ["homebrew-check", "homebrew-package"]) {
         const updateIndex = job.indexOf("brew update\n");
         const tapIndex = job.indexOf("brew tap 1broseidon/tap");
         const trustIndex = job.indexOf("brew trust --formula 1broseidon/tap/cymbal\n");
-        const checkIndex = job.indexOf("deno task package:homebrew:check");
+        const checkIndex = job.indexOf("bun run package:homebrew:check");
         assertEquals(updateIndex >= 0, true, "Explicitly refresh Core metadata even when auto-update is disabled");
         assertEquals(tapIndex > updateIndex, true);
         assertEquals(trustIndex > tapIndex, true, "Trust Cymbal after registering its tap");
@@ -252,6 +252,9 @@ test("manual recovery preserves workflow source checks and tagged product qualif
     assertEquals(ci.includes("ref: ${{ needs.metadata.outputs.tag }}"), false);
     const golden = workflow.slice(workflow.indexOf("    golden-shards:"), workflow.indexOf("    release-check:"));
     assertStringIncludes(golden, "ref: ${{ needs.metadata.outputs.tag }}");
+    // Existing immutable RCs have the isolated runner but predate package Golden aliases.
+    assertStringIncludes(golden, "bun scripts/run-tests.js --isolated src/ui/tui/testing src/ui/tui/golden-scenarios");
+    assertEquals(golden.includes("bun run test:golden"), false);
 });
 
 test("release executables use pinned Bun while native package and Stable channel gates remain", async () => {

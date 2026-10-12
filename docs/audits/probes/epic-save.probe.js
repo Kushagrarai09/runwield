@@ -1,6 +1,6 @@
 // Historical audit probe; run explicitly through scripts/run-tests.js.
 // See ../2026-09-07-plan-workflow-transitions.md.
-import { assertEquals } from "@std/assert";
+import { assertEquals } from "../../../src/testing/assertions.ts";
 import { loadPlan } from "../../../src/plan-store.js";
 import { HostedSession } from "../../../src/shared/session/hosted-session.js";
 import { listPendingWorkflowToolEvents } from "../../../src/shared/workflow/workflow-tool-events.ts";

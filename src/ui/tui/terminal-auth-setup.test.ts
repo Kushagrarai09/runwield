@@ -367,7 +367,7 @@ test("terminal auth setup succeeds against a temporary source mutation where cre
         const childScript = join(tempRoot, "mutation-proof.ts");
         await fsWriteFile(
             childScript,
-            `import { assertEquals } from ${JSON.stringify(import.meta.resolve("@std/assert"))};\n` +
+            `import { assertEquals } from ${JSON.stringify(import.meta.resolve("../../testing/assertions.ts"))};\n` +
                 `import { TuiMainScreen } from "@earendil-works/pi-tui";\n` +
                 `import { withRuntimeCommandFixture } from "./src/cmd/testing/runtime-command-fixture.ts";\n` +
                 `import { getModelRegistry } from "./src/shared/models/model-registry.ts";\n` +

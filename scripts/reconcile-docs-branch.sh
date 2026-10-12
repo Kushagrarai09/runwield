@@ -12,8 +12,8 @@ if git ls-remote --exit-code --heads origin docs/stable >/dev/null 2>&1; then
   git fetch origin docs/stable:refs/remotes/origin/docs/stable
   read -r previous_tag previous_source_ref < <(
     git show refs/remotes/origin/docs/stable:docs-site/release.json |
-      deno eval '
-const release = JSON.parse(await new Response(Deno.stdin.readable).text());
+      bun -e '
+const release = JSON.parse((await import("node:fs")).readFileSync(0, "utf8"));
 if (typeof release.version !== "string" || !/^v\d+\.\d+\.\d+$/.test(release.version)) {
   throw new Error("docs/stable has no valid Stable version");
 }
@@ -60,14 +60,14 @@ if ! git diff --cached --quiet; then
   git commit -m "docs: prepare $tag"
 fi
 source_ref=$(git rev-parse HEAD)
-deno eval '
-const [tag, sourceRef] = Deno.args;
+bun -e '
+const [tag, sourceRef] = process.argv.slice(1);
 const path = "docs-site/release.json";
-const release = JSON.parse(await Deno.readTextFile(path));
+const release = JSON.parse(await Bun.file(path).text());
 release.version = tag;
 release.sourceRef = sourceRef;
 release.releaseUrl = `https://github.com/gandazgul/runwield/releases/tag/${encodeURIComponent(tag)}`;
-await Deno.writeTextFile(path, `${JSON.stringify(release, null, 2)}\n`);
+await Bun.write(path, `${JSON.stringify(release, null, 2)}\n`);
 ' "$tag" "$source_ref"
 
 git add docs-site/release.json

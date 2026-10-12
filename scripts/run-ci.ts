@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run -A
+#!/usr/bin/env bun
 import { mkdir as fsMkdir, writeFile as fsWriteFile } from "node:fs/promises";
 import process from "node:process";
 
@@ -99,7 +99,7 @@ function formatElapsed(elapsedMs: number): string {
 
 if (import.meta.main) {
     if (process.argv.slice(2).some((arg) => arg !== "--source-only" && arg !== "--fail-fast")) {
-        throw new Error("usage: deno task ci [--source-only] [--fail-fast]");
+        throw new Error("usage: bun run ci [--source-only] [--fail-fast]");
     }
     const start = performance.now();
     const timings: CiTaskResult[] = [];

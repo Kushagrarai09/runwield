@@ -101,7 +101,8 @@ jobs:
                   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
                   & "$bin/bun.exe" -e 'if (process.arch !== "${{ matrix.arch }}" || process.versions.bun !== "1.4.3") throw new Error("Wrong native Bun runtime")'
                   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            - name: Install current production Deno for interoperability and tool fixtures
+            - name: Install legacy Deno only for release interoperability
+              if: matrix.phase == 'package'
               uses: denoland/setup-deno@v2
               with:
                   deno-version: v2.9.7
