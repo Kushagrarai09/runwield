@@ -20,6 +20,12 @@ async function run(...args: string[]): Promise<string> {
     return stdout.trim();
 }
 
+async function publishedBase(): Promise<string> {
+    const address = (await run("port", name, "8080/tcp")).split("\n")[0];
+    ok(/^127\.0\.0\.1:\d+$/.test(address), `Unexpected published address: ${address}`);
+    return `http://${address}`;
+}
+
 async function ready(base: string): Promise<void> {
     let detail = "no response";
     for (let attempt = 0; attempt < 100; attempt++) {
@@ -33,7 +39,7 @@ async function ready(base: string): Promise<void> {
             await delay(200);
         }
     }
-    throw new Error(`Remote container never became ready: ${detail}`);
+    throw new Error(`Remote container never became ready at ${base}: ${detail}`);
 }
 
 try {
@@ -67,9 +73,7 @@ try {
         "-ec",
         'test "$(id -u)" = 1993; test "$(bun --version)" = 1.4.3; if command -v deno; then exit 1; fi',
     );
-    const address = (await run("port", name, "8080/tcp")).split("\n")[0];
-    ok(/^127\.0\.0\.1:\d+$/.test(address), `Unexpected published address: ${address}`);
-    const base = `http://${address}`;
+    let base = await publishedBase();
     await ready(base);
     const health = await fetch(`${base}/healthz`);
     strictEqual(health.status, 200);
@@ -129,6 +133,8 @@ try {
     await run("stop", "--time", "10", name);
     strictEqual(await run("inspect", "--format", "{{.State.ExitCode}}", name), "0", "Shutdown must be graceful");
     await run("start", name);
+    // Engines may assign a different ephemeral host port when a stopped container restarts.
+    base = await publishedBase();
     await ready(base);
     await assertRevision();
     console.log(
