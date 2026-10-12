@@ -70,7 +70,30 @@ and macOS/Linux/Windows x64 package checks; source shard 1 exposed a missing JSO
 `ca52c5c2a`. Cloud qualification is rerunning on the repaired branch.
 
 Remaining before completion: full cloud source/Golden/platform qualification; container build conversion;
-legacy compiler and memory diagnostic retirement; historical docs deployment conversion; then removal of root/docs Deno
+legacy compiler and memory diagnostic retirement; historical docs deployment qualification; then removal of root/docs Deno
 manifests. Bun has no equivalent per-process filesystem permissions. The container boundary decision is pending: enforced
 non-root/read-only filesystem with `/data` writable, or retaining Deno until an OS sandbox is qualified. Do not describe
 phase 2 as complete or publish another release while these remain.
+
+## Container boundary and historical docs follow-up
+
+The existing remote image runs as `deno` and grants application filesystem reads only under `/app` and `/data`, writes
+only under `/data`, and no subprocess permission. Network, environment and system-information permissions are already
+allowed. Replacing the command with Bun would remove the per-process filesystem and subprocess checks. Non-root execution
+and a read-only root filesystem restrict writes but do not deny reads of other readable files or newly mounted secrets.
+That option is not an equivalent boundary and is not being adopted.
+
+No user decision is required to keep the existing policy. The safe continuation is to qualify an OS-enforced allowlist
+with Bun, failing closed when enforcement is unavailable; otherwise the remote image remains on its existing runtime.
+A choice is needed only to accept a weaker boundary or a new hosting/kernel requirement. Linux Landlock can restrict an
+unprivileged process and its future children, but its ABI, runtime loader/filesystem needs and subprocess behavior require
+qualification before this image can switch. See [the kernel documentation](https://docs.kernel.org/userspace-api/landlock.html)
+and [Bun's filesystem permission request](https://github.com/oven-sh/bun/issues/26637). The checked-in image has not changed.
+A compatibility experiment also confirmed that Bun's generated bundles cannot simply replace the old Deno bundles:
+Bun-target output uses Bun-specific builtins, and Node-target output still has an unresolved dynamic dependency under Deno.
+
+Historical docs deployment now separates the exact Stable/docs-corrections checkout from current Bun tooling. Sync records
+an immutable tooling SHA; direct docs corrections use current default-branch tooling. The source dependency declarations
+must match the frozen docs graph before that graph is copied into the separate source tree. No old Stable task scripts run.
+The actual `v0.11.8` site passed all 21 route checks with this workflow's builder, without publishing anything. The real Git
+integration also checks retained documentation corrections, newer Stable content, stale source rejection and conflict stops.
