@@ -26,7 +26,9 @@ jobs:
                   submodules: recursive
                   persist-credentials: false
             - name: Trust the mounted checkout
-              run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+              # Nested runner tests replace HOME. Keep the exact mounted checkout
+              # trusted in this disposable container across those isolated homes.
+              run: git config --system --add safe.directory "$GITHUB_WORKSPACE"
             - name: Assert Deno is absent
               run: |
                   if command -v deno; then echo "Deno must be absent from this qualification" >&2; exit 1; fi
@@ -45,6 +47,27 @@ jobs:
               run: bun scripts/run-bun-tests.ts scripts/bun-remote-runtime.test.ts scripts/compile-entrypoint.test.ts
             - name: Qualify migrated tooling and Astro development without Deno
               run: bun run test:suite scripts/check-owned-runtime.test.ts scripts/task-compatibility.test.ts scripts/ci-policy.test.ts src/ui/workspace/workspace-dev-imports.integration.test.ts src/shared/http-server.test.ts src/shared/native-file-lock.test.ts src/shared/foreground-process.test.ts
+            - name: Print toolchain failure logs
+              if: failure()
+              run: |
+                  for log in /tmp/*-failure-*.log; do
+                    if [ -f "$log" ]; then
+                      echo "::group::$log"
+                      cat "$log"
+                      echo "::endgroup::"
+                    fi
+                  done
+            - name: Retain toolchain test evidence
+              if: always()
+              uses: actions/upload-artifact@v5
+              with:
+                  name: deno-free-toolchain-${{ github.run_attempt }}
+                  include-hidden-files: true
+                  if-no-files-found: ignore
+                  path: |
+                      .ci-cache/
+                      /tmp/*-failure-*.log
+                      /tmp/runwield-test-sandboxes-*-evidence/**
 
     ux-image:
         name: Deno-free UX container
