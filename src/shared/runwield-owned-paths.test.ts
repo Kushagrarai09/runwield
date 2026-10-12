@@ -90,35 +90,31 @@ test("legacy runtime hazards cover only the bounded old catalog and temp-file sh
         assertEquals(isRunWieldOwnedRuntimePath(path), true, `${path} is aggregate`);
     }
 
-    for (
-        const path of [
-            ".wld/plan-locks/demo.lock",
-            ".wld/plan-transitions/transition.json",
-            ".wld/plan-backups/recovery.json",
-            ".wld/plan-staging/attempt-1/state.json",
-            ".wld/worktrees/child",
-            ".wld/debug/log.txt",
-            ".wld/controller/plans/demo.json",
-            ".wld/worktrees.json.dea8f5f0-04a1-4bb4-ab80-a22496a5a593.tmp",
-            "./.wld/worktrees.json.abc.tmp",
-            ".wld/collaboration-secrets.json.dea8f5f0-04a1-4bb4-ab80-a22496a5a593.tmp",
-        ]
-    ) {
+    for (const path of [
+        ".wld/plan-locks/demo.lock",
+        ".wld/plan-transitions/transition.json",
+        ".wld/plan-backups/recovery.json",
+        ".wld/plan-staging/attempt-1/state.json",
+        ".wld/worktrees/child",
+        ".wld/debug/log.txt",
+        ".wld/controller/plans/demo.json",
+        ".wld/worktrees.json.dea8f5f0-04a1-4bb4-ab80-a22496a5a593.tmp",
+        "./.wld/worktrees.json.abc.tmp",
+        ".wld/collaboration-secrets.json.dea8f5f0-04a1-4bb4-ab80-a22496a5a593.tmp",
+    ]) {
         assertEquals(isCurrentProjectRuntimePath(path), false, `${path} is not current`);
         assertEquals(isLegacyProjectRuntimeHazardPath(path), true, `${path} is legacy`);
         assertEquals(isRunWieldOwnedRuntimePath(path), true, `${path} is aggregate`);
     }
 
-    for (
-        const path of [
-            ".wld/plan-locks-other/demo.lock",
-            ".wld/worktrees.json.tmp",
-            ".wld/worktrees.json.abc.tmp/child.json",
-            ".wld/collaboration-secrets.json.tmp",
-            ".wld/collaboration-secrets.json.abc.tmp/child.json",
-            ".wld/work-record-supersession.lock/child.json",
-        ]
-    ) {
+    for (const path of [
+        ".wld/plan-locks-other/demo.lock",
+        ".wld/worktrees.json.tmp",
+        ".wld/worktrees.json.abc.tmp/child.json",
+        ".wld/collaboration-secrets.json.tmp",
+        ".wld/collaboration-secrets.json.abc.tmp/child.json",
+        ".wld/work-record-supersession.lock/child.json",
+    ]) {
         assertEquals(isCurrentProjectRuntimePath(path), false, `${path} is not current`);
         assertEquals(isLegacyProjectRuntimeHazardPath(path), false, `${path} is not legacy`);
         assertEquals(isRunWieldOwnedRuntimePath(path), false, `${path} is not aggregate`);
