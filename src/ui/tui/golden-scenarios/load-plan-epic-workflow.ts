@@ -2,7 +2,7 @@
  * Composed Golden /load-plan journeys specific to PROJECT Epics.
  */
 
-import { assert } from "@std/assert";
+import { ok as assert } from "node:assert/strict";
 import { assertEventIncludes, assertScreenIncludes } from "../testing/scenario-runner.js";
 
 interface InteractionRecord {

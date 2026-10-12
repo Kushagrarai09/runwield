@@ -1,13 +1,14 @@
+import { assertEquals } from "../../testing/assertions.ts";
 import process from "node:process";
 import { mkdir as fsMkdir, mkdtemp as fsMkdtemp, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
 import { test } from "node:test";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { assertEquals, assertStrictEquals } from "@std/assert";
+import { strictEqual as assertStrictEquals } from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { getHomeDir } from "../../constants.js";
-import { dirname } from "@std/path";
+import { dirname } from "node:path";
 import { getWorktreeRegistryPath } from "../../shared/worktree-registry.js";
 import { makeManagedSessionFixture, readTranscriptEvidence } from "../../testing/managed-session-fixture.ts";
 import { savePlan } from "../../plan-store.js";

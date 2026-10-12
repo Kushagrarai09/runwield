@@ -580,14 +580,7 @@ async function resolveRunWieldGuideCommand(cwd) {
     if (await commandExists("wld")) return { command: "wld", args: ["guided-review"] };
     return {
         command: process.execPath,
-        args: isStandaloneExecutable()
-            ? ["guided-review"]
-            : [
-                  "run",
-                  ...(process.versions.deno ? ["-A", "--unstable-no-legacy-abort"] : []),
-                  "src/cli.ts",
-                  "guided-review",
-              ],
+        args: isStandaloneExecutable() ? ["guided-review"] : ["run", ...[], "src/cli.ts", "guided-review"],
         cwd,
     };
 }

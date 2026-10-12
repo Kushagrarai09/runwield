@@ -1,3 +1,4 @@
+import { assertEquals } from "../../testing/assertions.ts";
 import { fileURLToPath } from "node:url";
 import { runtimeSourceArgs } from "../../testing/runtime-source-args.ts";
 import { captureForegroundProcess } from "../../shared/captured-process.ts";
@@ -5,8 +6,7 @@ import { test } from "node:test";
 import { mkdtemp as fsMkdtemp, writeFile as fsWriteFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import process from "node:process";
-import { assertEquals } from "@std/assert";
-import { join } from "@std/path";
+import { join } from "node:path";
 import {
     getCliCommandDefinitions,
     getCommandDefinition,

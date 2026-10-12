@@ -1,3 +1,4 @@
+/** @typedef {import("../front-matter.ts").FrontMatterRecord & { bashAllowedCommands?: import("../bash-command-policy.ts").BashAllowedCommands | null }} AgentDefinitionFrontMatter */
 import { readFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 /**
@@ -5,8 +6,9 @@ import { readdir, readFile } from "node:fs/promises";
  * Agent discovery — scans agent definitions (bundled + overrides) and returns merged metadata.
  */
 
-import { basename, dirname, fromFileUrl, join } from "@std/path";
-import { extractYaml, test as hasFrontMatter } from "@std/front-matter";
+import { basename, dirname, join } from "node:path";
+import { fileURLToPath as fromFileUrl } from "node:url";
+import { extractYaml, test as hasFrontMatter } from "../front-matter.ts";
 import { AGENT_DEFS_DIR, AGENTS, SYSTEM_PROMPT_TEMPLATE_PATH } from "../../constants.js";
 import { directoryExists, fileExists } from "../helpers.ts";
 import {
@@ -608,7 +610,7 @@ async function loadAgentDefFromPaths(agentName, filePaths, projectRoot) {
             throw new Error(`Agent def ${filePath} has no frontmatter`);
         }
 
-        const { attrs, body } = extractYaml(raw);
+        const { attrs, body } = /** @type {import("../front-matter.ts").FrontMatter<AgentDefinitionFrontMatter>} */ (extractYaml(raw));
         if (Object.hasOwn(attrs, "bashAllowedCommands")) {
             attrs.bashAllowedCommands = normalizeBashAllowedCommands(attrs.bashAllowedCommands, filePath);
         }
