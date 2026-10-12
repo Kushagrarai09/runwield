@@ -205,13 +205,24 @@ jobs:
             - name: Print Golden failure logs
               if: failure()
               run: |
-                  for log in /tmp/tests-failure-*.log; do
+                  for log in /tmp/*-failure-*.log; do
                     if [[ -f "$log" ]]; then
                       echo "::group::$log"
                       cat "$log"
                       echo "::endgroup::"
                     fi
                   done
+
+            - name: Retain Golden failure evidence
+              if: failure()
+              uses: actions/upload-artifact@v5
+              with:
+                  name: golden-failure-${{ matrix.shard }}-${{ github.run_attempt }}
+                  include-hidden-files: true
+                  path: |
+                      /tmp/*-failure-*.log
+                      /tmp/runwield-test-sandboxes-*-evidence/**
+                  if-no-files-found: ignore
 
     ci:
         if: always()

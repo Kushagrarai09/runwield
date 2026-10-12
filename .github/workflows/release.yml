@@ -120,7 +120,6 @@ jobs:
                   go-version: "1.25.x"
                   cache: false
 
-
             - name: Restore source timing history
               uses: actions/cache/restore@v4
               with:
@@ -228,7 +227,6 @@ jobs:
                   go-version: "1.25.x"
                   cache: false
 
-
             - name: Restore Golden timing history
               uses: actions/cache/restore@v4
               with:
@@ -279,7 +277,7 @@ jobs:
             - name: Print Golden failure logs
               if: failure()
               run: |
-                  for log in /tmp/tests-failure-*.log; do
+                  for log in /tmp/*-failure-*.log; do
                     if [[ -f "$log" ]]; then
                       echo "::group::$log"
                       cat "$log"
@@ -294,7 +292,7 @@ jobs:
                   name: golden-failure-${{ matrix.shard }}-${{ github.run_attempt }}
                   include-hidden-files: true
                   path: |
-                      /tmp/tests-failure-*.log
+                      /tmp/*-failure-*.log
                       /tmp/runwield-test-sandboxes-*-evidence/**
 
     release-check:

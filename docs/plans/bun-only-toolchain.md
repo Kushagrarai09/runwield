@@ -88,8 +88,11 @@ A choice is needed only to accept a weaker boundary or a new hosting/kernel requ
 unprivileged process and its future children, but its ABI, runtime loader/filesystem needs and subprocess behavior require
 qualification before this image can switch. See [the kernel documentation](https://docs.kernel.org/userspace-api/landlock.html)
 and [Bun's filesystem permission request](https://github.com/oven-sh/bun/issues/26637). The checked-in image has not changed.
-A compatibility experiment also confirmed that Bun's generated bundles cannot simply replace the old Deno bundles:
-Bun-target output uses Bun-specific builtins, and Node-target output still has an unresolved dynamic dependency under Deno.
+Bun-target bundles use Bun-specific builtins and cannot run under Deno. A later isolated compatibility experiment resolved
+Node-target bundling's dynamic dependency by selecting jsonc-parser's ESM entrypoint. Bun-built Node bundles then passed
+remote health/readiness, review HTML, CSS and graceful shutdown under Deno 2.9.7 with the existing permission categories.
+This proves a Bun-build/Deno-runtime fallback is feasible; it is not implemented in the production image and does not
+resolve the pending decision about retaining that runtime exception.
 
 Historical docs deployment now separates the exact Stable/docs-corrections checkout from current Bun tooling. Sync records
 an immutable tooling SHA; direct docs corrections use current default-branch tooling. The source dependency declarations
