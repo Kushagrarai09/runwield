@@ -292,6 +292,9 @@ test("docs deployment separates historical source from frozen Bun tooling", asyn
     assertStringIncludes(deploy, "bun tooling/scripts/build-stable-docs.ts source");
     assertStringIncludes(deploy, "path: source/dist/docs");
     for (const step of ["Verify documentation source and qualified release", "Reject stale build before deployment"]) {
+        const stepStart = deploy.indexOf(`            - name: ${step}\n`);
+        const stepBody = deploy.slice(stepStart).split(/\n {12}- name:/)[0];
+        assertStringIncludes(stepBody, "working-directory: source");
         const command = stepRun(deploy, step);
         assertStringIncludes(command, "bun ../tooling/scripts/verify-docs-source.ts");
         assertStringIncludes(command, "git rev-parse HEAD");

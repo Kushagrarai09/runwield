@@ -385,7 +385,7 @@ test("source remote help works without a generated identity and connection expla
             console.log = originalLog;
         }
         assertStringIncludes(help, "Usage: wld remote");
-        await assertRejects(() => module.runRemoteCommand(["example"]), Error, "scripts/compile.js --output bin/wld");
+        await assertRejects(() => module.runRemoteCommand(["example"]), Error, "bun run compile --output bin/wld");
     } finally {
         await fsRm(root, { recursive: true });
     }
@@ -422,7 +422,7 @@ test("remote CLI resolves a host home without initializing a local project and r
         const result = await run(["remote-alias"]);
         assertEquals(result.code, 1);
         assertStringIncludes(result.stderr, "Missing x86_64-unknown-linux-gnu artifact");
-        assertStringIncludes(result.stderr, "scripts/compile.js --target x86_64-unknown-linux-gnu");
+        assertStringIncludes(result.stderr, "bun run compile --target x86_64-unknown-linux-gnu");
         assertEquals((await fsReadFile(sshLog, "utf8")).split("\n").slice(0, 3), ["-T", "--", "remote-alias"]);
         assertEquals(await exists(join(local, ".wld")), false);
         assertEquals(await exists(join(local, ".git")), false);

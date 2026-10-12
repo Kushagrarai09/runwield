@@ -2,7 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { argv, versions } from "node:process";
 import { fileURLToPath } from "node:url";
 import { requirePinnedBun } from "./check-bun-runtime.ts";
@@ -103,8 +103,14 @@ export async function compileBun(
     target?: string,
     runtime?: string,
     expectedBuildId?: string,
+    entrypoint = "src/cli.ts",
 ): Promise<void> {
     requirePinnedBun();
+    const entry = resolve(ROOT, entrypoint);
+    const relativeEntry = relative(ROOT, entry);
+    if (relativeEntry.startsWith("..") || !relativeEntry)
+        throw new Error("Compile entrypoint must be inside the repository");
+    await stat(entry);
     const compileTarget =
         target || `bun-${process.platform === "win32" ? "windows" : process.platform}-${process.arch}`;
     const artifactTarget = bunArtifactTarget(compileTarget);
@@ -186,6 +192,8 @@ export async function compileBun(
             `bun:${versions.bun}`,
             [
                 "bun-compile-v1",
+                `entry:${relativeEntry.replaceAll("\\", "/")}`,
+                `entry-sha256:${await sha256File(entry)}`,
                 `lock:${await sha256File(join(ROOT, "bun.lock"))}`,
                 `package:${await sha256File(join(ROOT, "package.json"))}`,
                 `payload:${await stagedPayloadIdentity(staging)}`,
@@ -201,7 +209,7 @@ export async function compileBun(
         // https://bun.com/docs/bundler/executables#embed-directories
         await mkdir(dirname(outfile), { recursive: true });
         await build({
-            entrypoints: [join(ROOT, "src/cli.ts"), join(ROOT, "src/utils/image-resize-worker.ts")],
+            entrypoints: [entry, join(ROOT, "src/utils/image-resize-worker.ts")],
             root: ROOT,
             target: "bun",
             format: "esm",

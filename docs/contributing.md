@@ -55,6 +55,18 @@ harness tests; `test:golden-tui:extensive` runs the same complete portfolio. Alw
 `bun scripts/run-tests.js <test paths or runner options>`; never invoke `bun test` directly. Each file gets a separate
 process, HOME, temporary directory, and Mnemoteca database.
 
+Workspace memory diagnostics use the same Bun compiler and embedded payload as the CLI:
+
+```bash
+bun run workspace:build
+bun scripts/workspace-memory-check.ts --scenario renderer
+bun scripts/workspace-memory-check.ts --scenario operations
+bun scripts/workspace-memory-check.ts --scenario combined
+```
+
+Each scenario measures source and standalone execution, with and without forced collection, in disposable homes.
+Historical Deno memory measurements remain historical baselines; the current diagnostic reports Bun measurements.
+
 Interactive RunWield sessions expect these helper binaries in `PATH`:
 
 - [`mnemoteca`](https://github.com/gandazgul/mnemoteca) for memory-backed agent behavior.
@@ -258,11 +270,11 @@ Use this checklist after changing packaging or collaboration behavior:
 4. Run `bun run ci` for code changes.
 5. For docs-only or config-only changes, run `bun run fmt:check <changed-files>` at minimum.
 6. Open a PR with:
-   - a summary,
-   - the affected routing intent or flow (`INQUIRY`, `IDEATION`, `OPERATION`, `QUICK_FIX`, `PLANNED_CHANGE`, or
-     `PROJECT`),
-   - validation notes,
-   - any follow-up work or known gaps.
+    - a summary,
+    - the affected routing intent or flow (`INQUIRY`, `IDEATION`, `OPERATION`, `QUICK_FIX`, `PLANNED_CHANGE`, or
+      `PROJECT`),
+    - validation notes,
+    - any follow-up work or known gaps.
 
 ## Workflow expectations
 

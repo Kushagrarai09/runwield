@@ -14,7 +14,7 @@
   "scripts/ci-policy.test.ts",
   "scripts/compile-bun.test.ts",
   "scripts/compile-command.test.ts",
-  "scripts/compile.test.js",
+  "scripts/compile-entrypoint.test.ts",
   "scripts/curate-router-judgement-csv.test.js",
   "scripts/docs-branch-integration.test.ts",
   "scripts/docs-workflow.test.ts",
