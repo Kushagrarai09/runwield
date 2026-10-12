@@ -1,7 +1,7 @@
 /* Common, content-based identity for explicit local and GNU/Linux builds.
  * This is build tooling, not a Git-commit or VERSION comparison.
  */
-import { join } from "@std/path";
+import { join } from "node:path";
 import { lstat, readdir, readFile } from "node:fs/promises";
 
 export const REMOTE_PROTOCOL_VERSION = 1;

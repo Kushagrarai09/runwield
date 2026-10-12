@@ -20,7 +20,7 @@ import process from "node:process";
  * opts out.
  */
 
-import { fromFileUrl } from "@std/path";
+import { fileURLToPath as fromFileUrl } from "node:url";
 
 const BASELINE_PATH = new URL("./skill-sync-baseline.json", import.meta.url);
 const REPO_ROOT = new URL("../", import.meta.url);

@@ -1,7 +1,7 @@
 // @ts-nocheck: Deno test imports are checked by scripts/run-tests.js, not Astro check.
 import { readFile as fsReadFile } from "node:fs/promises";
 import { test } from "node:test";
-import { assertStringIncludes } from "@std/assert";
+import { assertStringIncludes } from "../../testing/assertions.ts";
 
 test("local and owner Plan Board routes share one page composition", async () => {
     const local = await fsReadFile(new URL("./pages/index.astro", import.meta.url), "utf8");

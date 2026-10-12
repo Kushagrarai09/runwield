@@ -18,8 +18,10 @@ import {
     writeFile as fsWriteFile,
 } from "node:fs/promises";
 import process from "node:process";
-import { assert, assertEquals, assertRejects } from "@std/assert";
-import { fromFileUrl, join } from "@std/path";
+import { ok as assert } from "node:assert/strict";
+import { assertEquals, assertRejects } from "../../../testing/assertions.ts";
+import { fileURLToPath as fromFileUrl } from "node:url";
+import { join } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { withProcessGlobalTestLock } from "../../../testing/process-global-lock.ts";
 import { AGENTS, SUBAGENTS } from "../../../constants.js";

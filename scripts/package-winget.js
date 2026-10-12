@@ -13,7 +13,7 @@ import process from "node:process";
  * Generate WinGet manifests for a published RunWield Windows ZIP.
  */
 
-import { join } from "@std/path";
+import { join } from "node:path";
 import { parseReleaseTag } from "./release.js";
 import { sha256 } from "./package-windows.js";
 

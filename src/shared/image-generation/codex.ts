@@ -3,7 +3,7 @@ import { mkdtemp } from "node:fs/promises";
 import nodeProcess from "node:process";
 import { readFile as fsReadFile, realpath as fsRealpath, rm as fsRm, stat as fsStat } from "node:fs/promises";
 import { Buffer } from "node:buffer";
-import { isAbsolute, join, relative } from "@std/path";
+import { isAbsolute, join, relative } from "node:path";
 import type { ImageContent } from "@earendil-works/pi-ai";
 import { getHomeDir } from "../../constants.js";
 import { spawnForegroundProcess } from "../foreground-process.ts";

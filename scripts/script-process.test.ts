@@ -2,7 +2,7 @@ import { test } from "node:test";
 import { spawn } from "node:child_process";
 import { constants } from "node:os";
 import process from "node:process";
-import { assertEquals, assertRejects } from "@std/assert";
+import { assertEquals, assertRejects } from "../src/testing/assertions.ts";
 import { captureScriptProcess, waitForScriptExit } from "./script-process.ts";
 
 test("script processes preserve signal exit codes across capture and inherited I/O", {

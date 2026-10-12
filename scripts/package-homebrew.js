@@ -4,7 +4,7 @@ import process from "node:process";
  * Render the owner Homebrew tap from immutable RunWield and Mnemoteca release assets.
  */
 
-import { basename, join } from "@std/path";
+import { basename, join } from "node:path";
 import { parseReleaseTag } from "./release.js";
 
 const RUNWIELD_REPO = "gandazgul/runwield";

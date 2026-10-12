@@ -17,7 +17,7 @@ import { isStandaloneExecutable } from "./shared/runtime-identity.ts";
 
 import { argv, env, exit, versions } from "node:process";
 import { createRequire } from "node:module";
-import { parseArgs } from "@std/cli/parse-args";
+import { parseArgs } from "./shared/cli-args.ts";
 const cliArgs = argv.slice(2);
 
 // Keep private runtime entries ahead of helper exposure, browser startup and

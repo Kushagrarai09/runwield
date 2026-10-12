@@ -15,8 +15,8 @@ import {
 } from "node:fs/promises";
 import { test } from "node:test";
 import { tmpdir } from "node:os";
-import { assertEquals, assertThrows } from "@std/assert";
-import { join } from "@std/path";
+import { assertEquals, assertThrows } from "../../testing/assertions.ts";
+import { join } from "node:path";
 import { withProcessGlobalTestLock } from "../../testing/process-global-lock.ts";
 import { __resetSettingsForTests, getCustomSetting, getSettingsManager, setCustomSetting } from "../settings.js";
 import { configureRemotePersonalResources, PersonalResourcePathError } from "./personal-resources.ts";

@@ -15,8 +15,10 @@ import {
     writeFile as fsWriteFile,
 } from "node:fs/promises";
 import process from "node:process";
-import { assert, assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
-import { dirname, fromFileUrl, join, resolve } from "@std/path";
+import { ok as assert } from "node:assert/strict";
+import { assertEquals, assertRejects, assertStringIncludes } from "../src/testing/assertions.ts";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath as fromFileUrl } from "node:url";
 import { PUBLIC_DOCS, stagePublicDocs } from "./public-docs.ts";
 import { verifyDocsSource } from "./verify-docs-source.ts";
 

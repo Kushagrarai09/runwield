@@ -14,8 +14,10 @@ import {
     writeFile as fsWriteFile,
 } from "node:fs/promises";
 import process from "node:process";
-import { assert, assertEquals, assertStringIncludes } from "@std/assert";
-import { dirname, fromFileUrl, join, resolve } from "@std/path";
+import { ok as assert } from "node:assert/strict";
+import { assertEquals, assertStringIncludes } from "../../testing/assertions.ts";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath as fromFileUrl } from "node:url";
 import { TuiMainScreen } from "@earendil-works/pi-tui";
 import {
     registerScriptedOAuthProvider,

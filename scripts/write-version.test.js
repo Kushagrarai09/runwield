@@ -5,7 +5,7 @@ import { test } from "node:test";
  * @module scripts/write-version.test
  */
 
-import { assertEquals, assertThrows } from "@std/assert";
+import { assertEquals, assertThrows } from "../src/testing/assertions.ts";
 import { getExplicitBuildVersion, getGitHubTagName, resolveBuildVersion, writeVersionFile } from "./write-version.js";
 
 /**

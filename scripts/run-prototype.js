@@ -9,7 +9,7 @@ import process from "node:process";
  * @module run-prototype
  */
 
-import { join, normalize, relative, resolve } from "@std/path";
+import { join, normalize, relative, resolve } from "node:path";
 
 const SAFE_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const THROWAWAY_MARKER = ["THROWAWAY", "PROTOTYPE"].join(" ");

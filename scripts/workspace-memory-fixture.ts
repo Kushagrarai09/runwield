@@ -5,7 +5,7 @@ import process from "node:process";
 // Disposable real Workspace page and saved-operation handlers. This file is
 // also the entry point of the standalone diagnostic executable. Do not import application modules until
 // HOME and MNEMOTECA_DB_PATH have been set by the parent process.
-import { join } from "@std/path";
+import { join } from "node:path";
 
 interface Fixture {
     routes: Array<{ path: string; marker: string }>;

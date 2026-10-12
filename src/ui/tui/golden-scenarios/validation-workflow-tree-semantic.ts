@@ -1,5 +1,5 @@
+import { assertEquals } from "../../../testing/assertions.ts";
 import process from "node:process";
-import { assertEquals } from "@std/assert";
 import {
     plannedChangeNonGitInPlaceScenario,
     plannedChangeReviewRepairValidationScenario,

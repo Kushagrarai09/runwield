@@ -10,8 +10,8 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import process from "node:process";
-import { assertEquals, assertStringIncludes } from "@std/assert";
-import { dirname, join } from "@std/path";
+import { assertEquals, assertStringIncludes } from "../../testing/assertions.ts";
+import { dirname, join } from "node:path";
 import { getCwd, getHomeDir } from "../../constants.js";
 import { withProcessGlobalTestLock } from "../../testing/process-global-lock.ts";
 import { resolveCodexExecutable } from "./codex-executable.ts";

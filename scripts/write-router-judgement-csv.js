@@ -6,8 +6,8 @@ import process from "node:process";
  * Generate a human-reviewable Router judgement CSV from extracted Router decisions.
  */
 
-import { parseArgs } from "@std/cli/parse-args";
-import { dirname, join } from "@std/path";
+import { parseArgs } from "../src/shared/cli-args.ts";
+import { dirname, join } from "node:path";
 import { getHomeDir } from "../src/constants.js";
 import {
     indexRowsByDecisionId,

@@ -5,7 +5,7 @@ import { mkdtemp as fsMkdtemp, readFile as fsReadFile, rm as fsRm, writeFile as 
 import { test } from "node:test";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
+import { assertEquals, assertRejects, assertStringIncludes } from "../../testing/assertions.ts";
 import { HostedSession } from "./hosted-session.js";
 import { BackgroundTasks } from "./background-tasks.ts";
 import { createRunWieldReadToolDefinition } from "../../tools/read.js";

@@ -19,9 +19,6 @@ const PLANNOTATOR_DIR = resolve(ROOT_DIR, "third_party/plannotator");
 const STD_EXTERNALS = [
     "@std/assert",
     "@std/cli",
-    "@std/cli/parse-args",
-    "@std/front-matter",
-    "@std/jsonc",
     "@std/path",
 ];
 

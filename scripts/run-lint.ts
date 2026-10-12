@@ -1,7 +1,8 @@
 #!/usr/bin/env -S deno run -A
 import process from "node:process";
 
-import { dirname, fromFileUrl } from "@std/path";
+import { dirname } from "node:path";
+import { fileURLToPath as fromFileUrl } from "node:url";
 import { listCiFiles } from "./ci-files.ts";
 import { runWithSnip, writeSnipCommandResult } from "./run-with-snip.ts";
 

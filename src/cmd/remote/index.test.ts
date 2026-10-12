@@ -19,8 +19,9 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import process from "node:process";
-import { assertEquals, assertRejects, assertStringIncludes, assertThrows } from "@std/assert";
-import { fromFileUrl, join, toFileUrl } from "@std/path";
+import { assertEquals, assertRejects, assertStringIncludes, assertThrows } from "../../testing/assertions.ts";
+import { fileURLToPath as fromFileUrl, pathToFileURL as toFileUrl } from "node:url";
+import { join } from "node:path";
 import { parseRemoteDestination } from "./index.ts";
 
 const cli = fromFileUrl(new URL("../../cli.ts", import.meta.url));

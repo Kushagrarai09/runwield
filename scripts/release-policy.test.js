@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import { readFile as fsReadFile } from "node:fs/promises";
-import { assertEquals, assertMatch, assertStringIncludes } from "@std/assert";
+import { match as assertMatch } from "node:assert/strict";
+import { assertEquals, assertStringIncludes } from "../src/testing/assertions.ts";
 
 test("release prompt starts with the three release choices before policy discovery", async () => {
     const prompt = await fsReadFile(new URL("../src/prompt-templates/release.md", import.meta.url), "utf8");

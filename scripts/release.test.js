@@ -10,7 +10,7 @@ import {
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { test } from "node:test";
-import { assertEquals, assertRejects, assertStringIncludes, assertThrows } from "@std/assert";
+import { assertEquals, assertRejects, assertStringIncludes, assertThrows } from "../src/testing/assertions.ts";
 import { defineCommittedGitFixture } from "../src/shared/git-test-fixture.ts";
 
 import {

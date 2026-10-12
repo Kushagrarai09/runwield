@@ -1,5 +1,5 @@
 import { test } from "node:test";
-import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
+import { assertEquals, assertStringIncludes, assertThrows } from "../src/testing/assertions.ts";
 import {
     assertCompileDenoVersion,
     buildCompileArgs,
