@@ -3,6 +3,7 @@
   "scripts/assert-workspace-review-runtime.test.js",
   "scripts/build-metadata.test.js",
   "scripts/build-plan-server-runtime.test.js",
+  "scripts/build-stable-docs.test.ts",
   "scripts/build-workspace-runtime.test.js",
   "scripts/bun-lint.test.ts",
   "scripts/bun-remote-runtime.test.ts",
