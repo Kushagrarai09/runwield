@@ -152,6 +152,7 @@ async function prewarmDenoDir(env, testArgs) {
  * @property {string | undefined} timingsFile timing history input and output path
  * @property {string | undefined} shard one-based shard index/count
  * @property {string | undefined} reportDir directory for per-test JUnit reports
+ * @property {string | undefined} filter Deno-compatible test name substring or /regular expression/
  * @property {string[]} rest every remaining argument, in the order it was given
  */
 
@@ -165,11 +166,17 @@ export function parseRunnerArguments(args) {
     /** @type {string[]} */
     const rest = [];
     let failFast = false;
+    let filter;
     let timingsFile;
     let reportDir;
     let shard = process.env["WLD_TEST_SHARD"];
     for (let index = 0; index < args.length; index += 1) {
         const arg = args[index];
+        if (arg === "--filter" || arg.startsWith("--filter=")) {
+            filter = arg === "--filter" ? args[++index] : arg.slice("--filter=".length);
+            if (filter === undefined || filter.startsWith("--")) throw new Error("--filter requires a value.");
+            continue;
+        }
         if (arg === "--fail-fast") {
             failFast = true;
             continue;
@@ -199,7 +206,7 @@ export function parseRunnerArguments(args) {
         if (!value) throw new Error("--exclude requires a test file or directory.");
         excludedPaths.push(resolve(REPO_ROOT, value));
     }
-    return { excludedPaths, failFast, timingsFile, reportDir, shard, rest };
+    return { excludedPaths, failFast, timingsFile, reportDir, shard, filter, rest };
 }
 
 /**
@@ -252,6 +259,7 @@ function isExcluded(file, excludedPaths) {
  * @property {string} [timingsFile]
  * @property {string} [reportDir]
  * @property {string} [shard]
+ * @property {string} [filter]
  */
 
 /**
@@ -362,6 +370,17 @@ async function runIsolatedSuite(sandboxRoot, denoDir, roots = [REPO_ROOT], exclu
                       ]
                     : ["--junit-path", join(options.reportDir, `${name.replace(/[^a-zA-Z0-9.-]/g, "_")}.xml`)]
                 : [];
+            const filterArgs =
+                options.filter === undefined
+                    ? []
+                    : process.versions.bun
+                      ? [
+                            "--test-name-pattern",
+                            options.filter.startsWith("/") && options.filter.endsWith("/")
+                                ? options.filter.slice(1, -1)
+                                : options.filter.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+                        ]
+                      : ["--filter", options.filter];
             const testArgs = process.versions.bun
                 ? [
                       "test",
@@ -373,9 +392,19 @@ async function runIsolatedSuite(sandboxRoot, denoDir, roots = [REPO_ROOT], exclu
                       "--timeout",
                       String(TEST_FILE_TIMEOUT_MS),
                       ...reportArgs,
+                      ...filterArgs,
                       file,
                   ]
-                : ["test", "-A", "--no-check", "--node-modules-dir=manual", "--quiet", ...reportArgs, file];
+                : [
+                      "test",
+                      "-A",
+                      "--no-check",
+                      "--node-modules-dir=manual",
+                      "--quiet",
+                      ...reportArgs,
+                      ...filterArgs,
+                      file,
+                  ];
             const result = await runBoundedTest(testArgs, {
                 command: process.execPath,
                 clearEnv: Boolean(process.versions.bun),
@@ -437,12 +466,24 @@ export async function main(args = process.argv.slice(2)) {
     const {
         excludedPaths,
         failFast,
+        filter,
         shard,
         timingsFile: requestedTimingsFile,
         reportDir: requestedReportDir,
         rest: runnerArgs,
     } = parseRunnerArguments(args);
     selectTestShard([], shard);
+    if (process.versions.bun) {
+        const unsupported = runnerArgs.filter(
+            (arg, index) => arg.startsWith("-") && !(index === 0 && arg === "--isolated"),
+        );
+        if (unsupported.length) {
+            throw new Error(
+                `Unsupported Bun test runner options: ${unsupported.join(", ")}. ` +
+                    "Deno runtime flags cannot be ignored. See docs/contributing.md#task-compatibility.",
+            );
+        }
+    }
     const sandboxRoot = await fsMkdtemp(join(tmpdir(), "runwield-test-sandboxes-"));
     const denoDir = process.env["WLD_TEST_DENO_DIR"] || join(sandboxRoot, "deno-dir");
     await fsMkdir(denoDir, { recursive: true });
@@ -465,16 +506,15 @@ export async function main(args = process.argv.slice(2)) {
             if (roots.length === 0) throw new Error("--isolated requires at least one test file or directory.");
             exitCode = await runIsolatedSuite(sandboxRoot, denoDir, roots, excludedPaths, {
                 failFast,
+                filter,
                 timingsFile,
                 reportDir,
                 shard,
             });
         } else if (process.versions.bun && runnerArgs.length > 0) {
-            if (runnerArgs.some((arg) => arg.startsWith("-"))) {
-                throw new Error("Bun tests require isolated paths; Deno permission flags cannot be ignored.");
-            }
             exitCode = await runIsolatedSuite(sandboxRoot, denoDir, runnerArgs, excludedPaths, {
                 failFast,
+                filter,
                 timingsFile,
                 reportDir,
                 shard,
@@ -489,7 +529,8 @@ export async function main(args = process.argv.slice(2)) {
             const hasPermissionFlags = runnerArgs.some(
                 (arg) => arg === "-A" || arg === "--allow-all" || arg.startsWith("--allow-"),
             );
-            const testArgs = hasPermissionFlags ? runnerArgs : ["-A", ...runnerArgs];
+            const filteredArgs = filter === undefined ? runnerArgs : [...runnerArgs, "--filter", filter];
+            const testArgs = hasPermissionFlags ? filteredArgs : ["-A", ...filteredArgs];
             // Match the full-suite path (runIsolatedSuite) and every task invocation
             // (test:golden-tui, workspace:test) by running tests with `--no-check`
             // unless the caller already asked for type-checking. Type-checking here
@@ -518,6 +559,7 @@ export async function main(args = process.argv.slice(2)) {
         } else {
             exitCode = await runIsolatedSuite(sandboxRoot, denoDir, [REPO_ROOT], excludedPaths, {
                 failFast,
+                filter,
                 timingsFile,
                 reportDir,
                 shard,

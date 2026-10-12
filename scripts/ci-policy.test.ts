@@ -111,21 +111,23 @@ test("isolated shards execute the whole fixture portfolio exactly once with real
                 });\n`,
             );
         }
-        const results = await Promise.all([1, 2, 3, 4].map((index) =>
-            captureScriptProcess(process.execPath, {
-                args: runtimeSourceArgs([
-                    "run",
-                    "-A",
-                    "scripts/run-tests.js",
-                    "--isolated",
-                    root,
-                    "--shard",
-                    `${index}/4`,
-                ]),
-                stdout: "piped",
-                stderr: "piped",
-            })
-        ));
+        const results = await Promise.all(
+            [1, 2, 3, 4].map((index) =>
+                captureScriptProcess(process.execPath, {
+                    args: runtimeSourceArgs([
+                        "run",
+                        "-A",
+                        "scripts/run-tests.js",
+                        "--isolated",
+                        root,
+                        "--shard",
+                        `${index}/4`,
+                    ]),
+                    stdout: "piped",
+                    stderr: "piped",
+                }),
+            ),
+        );
         for (const result of results) {
             assertEquals(result.code, 0, new TextDecoder().decode(result.stderr));
         }
@@ -146,9 +148,9 @@ test("prepared dependencies preserve isolated execution and changed-source failu
         for (const name of ["a", "b"]) {
             await fsWriteFile(
                 join(root, `${name}.test.ts`),
-                `import { test } from "node:test"; import { writeFile } from "node:fs/promises"; import chalk from ${
-                    JSON.stringify(import.meta.resolve("chalk"))
-                };
+                `import { test } from "node:test"; import { writeFile } from "node:fs/promises"; import chalk from ${JSON.stringify(
+                    import.meta.resolve("chalk"),
+                )};
                 import { value } from "./value.ts";
                 test("${name}", async () => {
                     const { default: stripAnsi } = await import(${JSON.stringify(import.meta.resolve("strip-ansi"))});
@@ -218,5 +220,49 @@ test("release and PR require all source and Golden shards without cancelling sib
             assertStringIncludes(workflow, `    ${gate}:\n        if: always()\n        needs: ${job}`);
             assertStringIncludes(workflow, "run: test '$" + `{{ needs.${job}.result }}' = 'success'`);
         }
+    }
+});
+
+test("test --filter preserves literal and regex selection through the real isolated runner", async () => {
+    const root = await fsMkdtemp(join(tmpdir(), "runwield-filter-policy-"));
+    try {
+        const file = join(root, "selection.test.ts");
+        const marker = join(root, "selected.txt");
+        await fsWriteFile(
+            file,
+            `
+            import { test } from "node:test";
+            import { appendFileSync } from "node:fs";
+            test("prefix literal [name] suffix", async (t) => {
+                appendFileSync(${JSON.stringify(marker)}, "parent\\n");
+                await t.test("child step", () => appendFileSync(${JSON.stringify(marker)}, "child\\n"));
+            });
+            test("literal n", () => { throw new Error("literal filter was treated as a regex"); });
+            test("unselected", () => { throw new Error("filter was lost"); });
+        `,
+        );
+        for (const filter of [["--filter", "literal [name]"], ["--filter=/^prefix literal \\[name\\] suffix$/"]]) {
+            await fsWriteFile(marker, "");
+            const result = await captureScriptProcess(process.execPath, {
+                args: ["run", "test:suite", file, ...filter],
+                stdout: "piped",
+                stderr: "piped",
+            });
+            assertEquals(
+                result.code,
+                0,
+                new TextDecoder().decode(result.stdout) + new TextDecoder().decode(result.stderr),
+            );
+            assertEquals(await fsReadFile(marker, "utf8"), "parent\nchild\n");
+        }
+        for (const prefix of [[], ["--isolated"]]) {
+            const result = await captureScriptProcess(process.execPath, {
+                args: ["run", "test:suite", ...prefix, file, "--deny-read=/private"],
+            });
+            assertEquals(result.code, 1);
+            assertStringIncludes(new TextDecoder().decode(result.stderr), "Deno runtime flags cannot be ignored");
+        }
+    } finally {
+        await fsRm(root, { recursive: true, force: true });
     }
 });

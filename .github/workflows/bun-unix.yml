@@ -55,7 +55,7 @@ jobs:
             - name: Check source and test types
               run: bun run check
             - name: Build embedded Workspace for source integration tests
-              run: bun run workspace:build:bun
+              run: bun run workspace:build
             - name: Run isolated Bun inventory shard
               env:
                   BUN_SHARD: ${{ matrix.shard }}

@@ -30,3 +30,17 @@ test("development compile preserves named output, canonical target and expected 
         throws(() => parseCompileCommand(args));
     }
 });
+
+test("compile accepts every original platform target and rejects dependency reload explicitly", () => {
+    for (const [canonical, bun] of [
+        ["aarch64-apple-darwin", "bun-darwin-arm64"],
+        ["x86_64-apple-darwin", "bun-darwin-x64"],
+        ["aarch64-unknown-linux-gnu", "bun-linux-arm64"],
+        ["x86_64-unknown-linux-gnu", "bun-linux-x64"],
+        ["aarch64-pc-windows-msvc", "bun-windows-arm64"],
+        ["x86_64-pc-windows-msvc", "bun-windows-x64"],
+    ]) {
+        deepStrictEqual(parseCompileCommand(["--target", canonical]).target, bun);
+    }
+    throws(() => parseCompileCommand(["--reload"]), /Deno-specific.*frozen-install/);
+});

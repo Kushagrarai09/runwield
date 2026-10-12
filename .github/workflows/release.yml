@@ -369,7 +369,13 @@ jobs:
               env:
                   WLD_BUILD_VERSION: ${{ needs.metadata.outputs.build_version }}
                   ASTRO_KEY: ${{ needs.metadata.outputs.astro_key }}
-              run: bun run compile:bun "${{ matrix.binary_name }}" "${{ matrix.bun_target }}"
+              run: |
+                  if [ -f scripts/compile-command.ts ]; then
+                    bun run compile --output "${{ matrix.binary_name }}" --target "${{ matrix.target }}"
+                  else
+                    # Immutable RC1 checkouts predate the Bun implementation of `compile`.
+                    bun run compile:bun "${{ matrix.binary_name }}" "${{ matrix.bun_target }}"
+                  fi
 
             - name: Smoke test native binary
               if: matrix.target == 'x86_64-unknown-linux-gnu'

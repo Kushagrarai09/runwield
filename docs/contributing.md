@@ -85,6 +85,23 @@ wld snip-filters install
 wld snip-filters cleanup
 ```
 
+## Task compatibility
+
+Use the established task names with Bun: `bun run compile`, `bun run ci`, `bun run workspace:build`, and so on.
+All 49 original Deno task names remain available. See the [complete task audit](plans/bun-task-compatibility.md) for
+per-task argument contracts and explicit runtime-specific exceptions.
+
+```bash
+bun run compile --output "bin/my wld" --target x86_64-unknown-linux-gnu
+bun run test:suite src/shared/example.test.ts --filter "test name"
+bun run test:suite src/shared/example.test.ts --filter '/^test name$/'
+```
+
+`compile --reload` has no frozen-install equivalent and fails explicitly; install locked dependencies before compiling.
+Deno-specific test flags are rejected, including permissions, coverage, watch and shuffle options. The portable runner
+options remain available. Workspace development/build commands require explicitly exported environment variables;
+ambient `.env` loading is disabled. Production-equivalent container sandboxing is deferred for the test images.
+
 ## Codebase guide
 
 Use this as an orientation map, not a directory inventory:
@@ -232,6 +249,11 @@ checkout:
 - Run `bun run workspace:check` to confirm the `@plannotator/*` imports resolve.
 
 ## Plan Server development
+
+The checked-in Bun containers are for testing, with equivalent Deno runtime permission enforcement deferred.
+They are not hardened production definitions. Compose keeps loopback publishing, a nonroot process, a read-only root,
+dropped capabilities and no-new-privileges. These controls do not recreate Deno's filesystem or subprocess allowlists.
+Do not mount sensitive host paths or credentials into this test image.
 
 Run the collaboration Plan Server from source without a container:
 
