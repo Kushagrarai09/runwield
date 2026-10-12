@@ -25,6 +25,8 @@ jobs:
               with:
                   submodules: recursive
                   persist-credentials: false
+            - name: Trust the mounted checkout
+              run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
             - name: Assert Deno is absent
               run: |
                   if command -v deno; then echo "Deno must be absent from this qualification" >&2; exit 1; fi
