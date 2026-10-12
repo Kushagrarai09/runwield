@@ -61,6 +61,8 @@ function workerHarness() {
     const messages = [];
     /** @type {Request[]} */
     const requests = [];
+    /** @type {RequestInit[]} */
+    const forwardingOptions = [];
     let available = true;
     let networkResponse = new Response("current server content");
     const context = {
@@ -81,6 +83,7 @@ function workerHarness() {
         AbortSignal,
         fetch: (/** @type {Request} */ request, /** @type {RequestInit} */ options) => {
             requests.push(request);
+            forwardingOptions.push(options);
             assertEquals(options.cache, "no-store");
             if (!available) return Promise.reject(new TypeError("Network unavailable"));
             return Promise.resolve(networkResponse.clone());
@@ -97,6 +100,7 @@ function workerHarness() {
     return {
         messages,
         requests,
+        forwardingOptions,
         offline: () => {
             available = false;
         },
@@ -151,6 +155,28 @@ Deno.test("installed Workspace opens a connection page offline and retries the o
     assertEquals(worker.messages.at(-1).connected, true);
     assertEquals(worker.requests.length, 3);
     assert(worker.requests.every((sent) => sent.url === request.url));
+});
+
+Deno.test("Workspace worker forwards review referrers and preserves requests that suppress them", async () => {
+    const worker = workerHarness();
+    const referrer =
+        "https://workspace.test/projects/project/sessions/session/review/code?operation=review&interaction=code";
+    await worker.request(
+        new Request("https://workspace.test/api/file-content?path=modified.ts", {
+            referrer,
+            referrerPolicy: "same-origin",
+        }),
+    );
+    assertEquals(worker.forwardingOptions[0].referrer, referrer);
+    assertEquals(worker.forwardingOptions[0].referrerPolicy, "same-origin");
+    await worker.request(
+        new Request("https://workspace.test/api/owner/dashboard", {
+            referrer: "",
+            referrerPolicy: "no-referrer",
+        }),
+    );
+    assertEquals(worker.forwardingOptions[1].referrer, "");
+    assertEquals(worker.forwardingOptions[1].referrerPolicy, "no-referrer");
 });
 
 Deno.test("failed Workspace writes are reported once, never queued or replayed", async () => {

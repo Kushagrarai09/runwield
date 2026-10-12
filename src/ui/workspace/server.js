@@ -281,7 +281,12 @@ export function createOwnerWorkspaceApp(options) {
             ) {
                 response = renewDeviceCookies(ctx.req, response, ctx.state, ctx.state.ownerDevice.deviceId);
             }
-            return withOwnerSecurityHeaders(response);
+            response = withOwnerSecurityHeaders(response);
+            // File-content requests need the live review context, but never send it to another origin.
+            if (/^\/projects\/[^/]+\/sessions\/[^/]+\/review\/code$/.test(path)) {
+                response.headers.set("referrer-policy", "same-origin");
+            }
+            return response;
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             if (ctx.url.pathname.startsWith("/api/")) return ownerJsonResponse({ error: message }, 403);

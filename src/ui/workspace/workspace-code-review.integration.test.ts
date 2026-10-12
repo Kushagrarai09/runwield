@@ -302,6 +302,9 @@ Deno.test("Workspace live Code Review reads execution worktree files and merge-b
         const referer =
             `${origin}/projects/${project.projectId}/sessions/session-files/review/code?operation=operation-files&interaction=interaction-files`;
         const handler = app.handler();
+        const page = await handler(new Request(referer, { headers: { cookie } }));
+        assertEquals(page.headers.get("referrer-policy"), "same-origin");
+        await page.body?.cancel();
         const response = await handler(
             new Request(`${origin}/api/file-content?path=review.ts`, {
                 headers: { cookie, referer },
