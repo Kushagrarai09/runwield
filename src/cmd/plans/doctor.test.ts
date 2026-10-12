@@ -765,7 +765,7 @@ test("plans doctor --repair fixes provable registry drift without touching Git a
         });
         await fsWriteFile(registryPath, `${JSON.stringify(registry, null, 2)}\n`);
 
-        await assertRejects(() => listPlans(cwd), Error, "execution Plan is missing");
+        assertEquals((await listPlans(cwd)).map((plan) => plan.name), ["legacy-plan"]);
 
         const report = await runPlansDoctor(cwd, true);
         assertEquals(report.repaired >= 2, true, `expected both drifts repaired, got ${report.repaired}`);

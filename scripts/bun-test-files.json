@@ -141,6 +141,7 @@
   "src/extensions/mnemoteca/tools.test.ts",
   "src/extensions/re-anchor/index.test.ts",
   "src/extensions/snip/index.test.js",
+  "src/plan-catalog-isolation.test.ts",
   "src/plan-store-locks.test.ts",
   "src/plan-store-yaml.test.ts",
   "src/plan-store.test.js",
