@@ -132,7 +132,7 @@ export async function main(argv) {
 
     if (args.help) {
         console.log([
-            "Usage: deno run -A scripts/curate-router-judgement-csv.js [options]",
+            "Usage: bun scripts/curate-router-judgement-csv.js [options]",
             "",
             "Options:",
             `  --in, -i <path>   CSV to curate (default: ${getDefaultRouterJudgementCsvPath()})`,

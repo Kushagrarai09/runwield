@@ -3,7 +3,7 @@
  *
  * Build-time helper: writes the current release tag or git short hash into
  * `src/shared/version.js` so the compiled binary reports its build version.
- * Run before `deno compile`. Falls back to "dev" if git is unavailable
+ * Run before the Bun compiler. Falls back to "dev" if git is unavailable
  * or the working tree is not a repo.
  */
 

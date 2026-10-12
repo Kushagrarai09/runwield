@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run -A
+#!/usr/bin/env bun
 import { captureScriptProcess, type ScriptProcessOutput } from "./script-process.ts";
 import { writeFile as fsWriteFile } from "node:fs/promises";
 import process from "node:process";

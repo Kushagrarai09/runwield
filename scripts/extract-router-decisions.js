@@ -324,7 +324,7 @@ export async function main(argv) {
 
     if (args.help) {
         console.log([
-            "Usage: deno run -A scripts/extract-router-decisions.js [options]",
+            "Usage: bun scripts/extract-router-decisions.js [options]",
             "",
             "Options:",
             "  --sessions-dir <dir>  Session directory to read",

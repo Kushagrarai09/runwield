@@ -99,7 +99,7 @@ export async function main(argv) {
 
     if (args.help) {
         console.log([
-            "Usage: deno run -A scripts/write-router-judgement-csv.js --in router-decisions.jsonl --out router-judgements.csv",
+            "Usage: bun scripts/write-router-judgement-csv.js --in router-decisions.jsonl --out router-judgements.csv",
             "",
             "Options:",
             `  --in, -i <path>       Extracted Router decisions JSONL (default: ${DEFAULT_INPUT})`,
