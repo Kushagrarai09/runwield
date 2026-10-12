@@ -109,3 +109,18 @@ Nineteen deliberate regressions across the migration have been detected by the f
 The separate UX image now starts from Debian without Deno and preserves UID 1993 and `/home/deno` for existing mounts.
 New cloud jobs qualify that installer image and the compiler/remote bundles in an image with no Deno executable. The
 restricted remote `Containerfile` remains unchanged and unqualified on this branch; the draft is not merge-ready.
+
+## Exact remote sandbox obstacle
+
+The filesystem boundary includes metadata operations, not only opening file contents. A disposable Deno 2.9.7 probe
+using the image's permission shape allowed its approved fixture read and denied outside reads, `stat`, `chmod`, `utime`,
+writes and subprocess execution. No real user data was used. Linux's
+[Landlock documentation](https://docs.kernel.org/userspace-api/landlock.html#filesystem-flags) explicitly lists `stat`,
+`chmod`, `chown`, `utime`, `access` and other operations that Landlock cannot restrict. Adding a deny-exec seccomp filter
+does not close that filesystem gap. Classic seccomp filters cannot inspect pathname strings safely; a separate broker or
+host policy would need to enforce them. A JavaScript allowlist or replaceable libc wrapper would not be an enforced boundary.
+
+Therefore a Landlock-only Bun image cannot be called equivalent. The remaining choice is whether to retain a Deno-only
+exception for this restricted image, or accept a new host-managed sandbox requirement whose full filesystem and subprocess
+policy must then be qualified. Neither a weaker policy nor extra host privileges have been adopted. The image conversion
+and final root-manifest retirement remain blocked on that decision; independent tooling qualification continues.

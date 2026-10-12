@@ -12,49 +12,24 @@ import {
 } from "node:fs/promises";
 import process from "node:process";
 /**
- * Runs the test suite with each file in its own process and its own sandbox.
+ * Runs the test suite with each file in its own process and disposable home.
  *
- * `deno test --parallel` runs every test file in one process, giving each its
- * own module realm but sharing cwd, environment and the filesystem. Realms are
- * initialized at arbitrary moments, so one file's `Deno.chdir` or `Deno.env.set`
- * is visible to every other file — and a module-scope snapshot taken during that
- * window keeps the wrong value for the life of the realm. That is the root of
- * every flake and every stray write this runner exists to prevent, including
- * test runs rewriting the developer's real ~/.wld and mnemoteca database.
- *
- * One process per file removes the sharing instead of policing it, and no child
- * can reach the real HOME or the real mnemoteca database.
- *
- * Every file gets a fresh HOME and temporary directory, including files sharing
- * a worker slot. Only dependency caches and immutable fixture templates may be
- * shared; mutable settings, stores, registry entries, and locks stay isolated.
- *
- * DENO_DIR is shared across all slot sandboxes for one run, but it is still a
- * temp directory owned by this runner rather than the developer's real cache.
- * The shared cache is prewarmed once with `deno test --no-run` before isolated
- * children start, so slot-local HOME does not force every child through a
- * separate cold module cache.
- * Prewarming also installs npm dependencies. Workers use that node_modules
- * directory in manual mode, avoiding repeated installation scans in every file.
+ * Each file gets a fresh HOME, temporary directory and Mnemoteca database, even
+ * when worker slots are reused. Only dependency caches and immutable fixture
+ * templates may be shared. Mutable settings, stores, registries and locks stay
+ * isolated; process-global environment or cwd changes cannot affect other files.
  *
  * Usage:
- *   deno run -A scripts/run-tests.js                    isolated run of every test file
- *   deno run -A scripts/run-tests.js --isolated <paths> isolated parallel run of matching files
- *   deno run -A scripts/run-tests.js <deno test args>   single sandboxed `deno test` (subsets, filters)
+ *   bun scripts/run-tests.js                    isolated run of every test file
+ *   bun scripts/run-tests.js --isolated <paths>  isolated run of matching files
  *
- * `--exclude <path>` drops a file or directory from the discovered set. It is how
- * `deno task test` leaves the Golden TUI portfolio to `deno task test:golden-tui`,
- * while `deno task ci` includes both in one worker pool. It applies to
- * discovery only, so it has no effect on the passthrough `deno test` form.
+ * `--exclude <path>` removes matching files from discovery. `bun run test`
+ * excludes the Golden portfolio; `bun run ci` includes source and Golden tests.
+ * Type checking is a separate `bun run check` gate.
  *
- * The passthrough form injects `-A` unless the caller passed their own
- * permission flags: without env access the sandbox marker in src/constants.js
- * is unreadable and its guard misfires, blaming a direct `deno test` run.
- * It also injects `--no-check` (matching the full-suite path and every task
- * invocation) unless the caller passed it: type-checking here resolves
- * deno.json's `compilerOptions.types` graph, whose `"vite/client"` entry pulls
- * npm:vite on every run — a large registry download on cold caches. The type
- * gate is `deno task check`, not these sandboxed executions.
+ * The legacy Deno branch retains its disposable, prewarmed DENO_DIR and explicit
+ * permission handling for compatibility. Bun refuses Deno permission flags
+ * instead of silently dropping their restrictions.
  */
 import { retainTestEvidence } from "./retain-test-evidence.js";
 import { basename, dirname, join, relative, resolve } from "node:path";

@@ -101,7 +101,7 @@ export async function main(argv) {
 
     if (args.help) {
         console.log([
-            "Usage: deno run -A scripts/evaluate-router-judgements.js [options]",
+            "Usage: bun scripts/evaluate-router-judgements.js [options]",
             "",
             "Fill humanJudgement in router-judgements.csv with one of:",
             "  INQUIRY, IDEATION, OPERATION, QUICK_FIX, FEATURE, PROJECT",

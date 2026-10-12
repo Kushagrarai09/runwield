@@ -472,7 +472,7 @@ export async function main(argv) {
 
     if (args.help) {
         console.log([
-            "Usage: deno run -A scripts/run-router-golden-set.js [options]",
+            "Usage: bun scripts/run-router-golden-set.js [options]",
             "",
             "Runs the real Router against labelled Router judgement rows.",
             "",

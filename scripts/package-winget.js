@@ -56,7 +56,7 @@ function assetBaseUrl(tag, baseUrl) {
 
 /** @param {string} version */
 function renderVersionManifest(version) {
-    return `# Created by deno task package:winget
+    return `# Created by bun run package:winget
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.10.0.schema.json
 PackageIdentifier: ${PACKAGE_ID}
 PackageVersion: ${version}
@@ -68,7 +68,7 @@ ManifestVersion: 1.10.0
 
 /** @param {string} version */
 function renderLocaleManifest(version) {
-    return `# Created by deno task package:winget
+    return `# Created by bun run package:winget
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.10.0.schema.json
 PackageIdentifier: ${PACKAGE_ID}
 PackageVersion: ${version}
@@ -95,7 +95,7 @@ ManifestVersion: 1.10.0
 
 /** @param {string} version @param {string} url @param {string} checksum */
 function renderInstallerManifest(version, url, checksum) {
-    return `# Created by deno task package:winget
+    return `# Created by bun run package:winget
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.10.0.schema.json
 PackageIdentifier: ${PACKAGE_ID}
 PackageVersion: ${version}

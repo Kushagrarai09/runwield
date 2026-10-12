@@ -317,8 +317,8 @@ The RunWield formula uses Homebrew's \`:cannot_represent\` metadata because the 
 Regenerate from this repository with:
 
 \`\`\`sh
-deno task package:homebrew --wld-tag <stable-tag> --mnemoteca-tag <stable-tag> --output <dir>
-deno task package:homebrew --mnemoteca-tag <stable-tag> --output <existing-tap-dir>
+bun run package:homebrew --wld-tag <stable-tag> --mnemoteca-tag <stable-tag> --output <dir>
+bun run package:homebrew --mnemoteca-tag <stable-tag> --output <existing-tap-dir>
 \`\`\`
 `;
 }
