@@ -14,18 +14,18 @@ import process from "node:process";
 import { assertEquals, assertStringIncludes } from "../src/testing/assertions.ts";
 import { join } from "node:path";
 
-interface DenoConfig {
-    tasks: Record<string, string>;
+interface PackageConfig {
+    scripts: Record<string, string>;
 }
 
 const GOLDEN_TUI_DIRS = ["src/ui/tui/golden-scenarios", "src/ui/tui/testing"];
 
-async function readDenoConfig(): Promise<DenoConfig> {
-    return JSON.parse(await fsReadFile(new URL("../deno.json", import.meta.url), "utf8")) as DenoConfig;
+async function readPackageConfig(): Promise<PackageConfig> {
+    return JSON.parse(await fsReadFile(new URL("../package.json", import.meta.url), "utf8")) as PackageConfig;
 }
 
 test("the everyday test task leaves the Golden TUI portfolio to its own task", async () => {
-    const { tasks } = await readDenoConfig();
+    const { scripts: tasks } = await readPackageConfig();
 
     for (const dir of GOLDEN_TUI_DIRS) {
         assertStringIncludes(tasks["test:suite"], `--exclude ${dir}`);
@@ -34,16 +34,16 @@ test("the everyday test task leaves the Golden TUI portfolio to its own task", a
 });
 
 test("the PR gate runs source quality and Golden TUI jobs in parallel", async () => {
-    const { tasks } = await readDenoConfig();
+    const { scripts: tasks } = await readPackageConfig();
     const workflow = await fsReadFile(new URL("../.github/workflows/pr.yml", import.meta.url), "utf8");
 
-    assertEquals(tasks["pr:check"], "deno task ci");
+    assertEquals(tasks["pr:check"], "bun run ci");
     assertStringIncludes(workflow, "pull_request:");
     assertStringIncludes(workflow, "    ci:");
-    assertStringIncludes(workflow, "run: deno task ci --source-only");
+    assertStringIncludes(workflow, "run: bun run ci --source-only");
     assertEquals(tasks["test:all:suite"].includes("--exclude"), false);
     assertStringIncludes(workflow, "    golden:");
-    assertStringIncludes(workflow, "run: deno task test:golden-tui --timings-file");
+    assertStringIncludes(workflow, "run: bun run test:golden-tui --timings-file");
 });
 
 test("the test runner skips excluded paths it would otherwise discover", async () => {

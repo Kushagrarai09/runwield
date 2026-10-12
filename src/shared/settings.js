@@ -495,7 +495,7 @@ export function __resetSettingsForTests() {
 
 /**
  * Strip JSONC comments/trailing commas from a raw string, producing valid JSON.
- * Uses @std/jsonc parse then re-serializes for callers that expect clean JSON.
+ * Uses the shared JSONC parser then re-serializes for callers that expect clean JSON.
  *
  * @param {string} raw
  * @returns {string}

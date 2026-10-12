@@ -48,3 +48,22 @@ The Node assertion/path/URL APIs are the default replacements. Parser behavior i
 and the maintained upstream documentation for [yargs-parser](https://github.com/yargs/yargs-parser),
 [js-yaml](https://github.com/nodeca/js-yaml), [jsonc-parser](https://github.com/microsoft/node-jsonc-parser), and
 [Sinon fake timers](https://github.com/sinonjs/fake-timers). Existing locked parser versions are preferred to unrelated upgrades.
+
+## Delivery checkpoint
+
+The dependency replacement is committed as `77ec91f36`. Direct source/test imports now use Node builtins plus
+js-yaml, jsonc-parser, yargs-parser and Sinon clocks. The next slice removes root @std aliases and the Deno Astro adapter,
+adds default Bun commands and named compile compatibility, migrates prototype execution and the staged formatting hook,
+and moves source/Golden/release qualification and metadata identity to Bun. Historical tag recovery keeps tagged Golden
+qualification and uses commands already present in RC1.
+
+Local evidence: 1,324 source/test entries type-check; lint and zero-seam gates pass. Focused parser, storage, model,
+prototype, hook, build identity, release and docs tests pass. Thirteen intentional regressions are detected, and the real
+compiler rejects an expected-build-identity mismatch before emitting an artifact. A relocated native macOS package passed
+CLI onboarding/cancel, Plan entry, worker/WASM, image conversion, Workspace assets/auth and shutdown.
+
+Remaining before completion: full cloud source/Golden/platform qualification; remote Workspace/container build conversion;
+legacy compiler and memory diagnostic retirement; historical docs deployment conversion; then removal of root/docs Deno
+manifests. Bun has no equivalent per-process filesystem permissions. The container boundary decision is pending: enforced
+non-root/read-only filesystem with `/data` writable, or retaining Deno until an OS sandbox is qualified. Do not describe
+phase 2 as complete or publish another release while these remain.

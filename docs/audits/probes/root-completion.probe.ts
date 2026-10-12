@@ -1,5 +1,5 @@
 // Historical audit probe; run explicitly through scripts/run-tests.js. See ../2026-09-07-plan-workflow-transitions.md.
-import { assertEquals } from "@std/assert";
+import { assertEquals } from "../../../src/testing/assertions.ts";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool, SessionManager, type ToolDefinition } from "@earendil-works/pi-coding-agent";
