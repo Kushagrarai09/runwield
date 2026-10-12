@@ -173,38 +173,14 @@ tee "$SSH_LOG.json" | /bin/sh -c "$4"
         // A development launcher requires a local Linux artifact, regardless of the release build version.
         const version = join(root, "version.js");
         await fsWriteFile(version, 'export const VERSION = "development";\n');
-        const config = join(root, "deno.json");
-        const projectConfig = new URL("../../../deno.json", import.meta.url);
-        const { imports } = JSON.parse(await fsReadFile(projectConfig, "utf8"));
-        await fsWriteFile(
-            config,
-            JSON.stringify({
-                extends: fromFileUrl(projectConfig),
-                // The isolated CLI config has no project lockfile; resolve the just-upgraded Pi packages.
-                minimumDependencyAge: 0,
-                imports: {
-                    ...Object.fromEntries(
-                        Object.entries(imports).map(([key, value]) => [
-                            key,
-                            typeof value === "string" && value.startsWith("./")
-                                ? new URL(value, projectConfig).href
-                                : value,
-                        ]),
-                    ),
-                    [new URL("../../shared/build-identity.js", import.meta.url).href]: toFileUrl(identity).href,
-                    [new URL("../../shared/version.js", import.meta.url).href]: toFileUrl(version).href,
-                },
-            }),
-        );
         const preload = join(root, "build-boundary.ts");
-        if (!process.versions.deno) {
-            const replacements = {
-                [fromFileUrl(new URL("../../shared/build-identity.js", import.meta.url))]: identity,
-                [fromFileUrl(new URL("../../shared/version.js", import.meta.url))]: version,
-            };
-            await fsWriteFile(
-                preload,
-                `import { plugin } from "bun";
+        const replacements = {
+            [fromFileUrl(new URL("../../shared/build-identity.js", import.meta.url))]: identity,
+            [fromFileUrl(new URL("../../shared/version.js", import.meta.url))]: version,
+        };
+        await fsWriteFile(
+            preload,
+            `import { plugin } from "bun";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 const replacements = ${JSON.stringify(replacements)};
@@ -216,12 +192,13 @@ plugin({ name: "fixture-build-boundary", setup(build) {
     });
 }});
 `,
-            );
-        }
-        const cliArgs = (args: string[]) =>
-            process.versions.deno
-                ? runtimeSourceArgs(["run", "-A", "--quiet", "--config", config, cli, "remote", ...args])
-                : ["run", "--preload", preload, ...runtimeSourceArgs(["run", "-A", cli, "remote", ...args]).slice(1)];
+        );
+        const cliArgs = (args: string[]) => [
+            "run",
+            "--preload",
+            preload,
+            ...runtimeSourceArgs(["run", "-A", cli, "remote", ...args]).slice(1),
+        ];
         const cliEnv = (proof?: string) => ({
             ...process.env,
             HOME: local,
