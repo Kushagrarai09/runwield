@@ -69,11 +69,10 @@ and its filesystem boundary are not yet qualified. The initial cloud run passed 
 and macOS/Linux/Windows x64 package checks; source shard 1 exposed a missing JSONC module in a copied fixture, fixed in
 `ca52c5c2a`. Cloud qualification is rerunning on the repaired branch.
 
-Remaining before completion: full cloud source/Golden/platform qualification; container build conversion;
-legacy compiler and memory diagnostic retirement; historical docs deployment qualification; then removal of root/docs Deno
-manifests. Bun has no equivalent per-process filesystem permissions. The container boundary decision is pending: enforced
-non-root/read-only filesystem with `/data` writable, or retaining Deno until an OS sandbox is qualified. Do not describe
-phase 2 as complete or publish another release while these remain.
+Remaining before completion: final cloud source/Golden/platform qualification, Deno-free container qualification,
+the restricted remote container conversion, and removal of the root Deno manifests after their last consumer migrates.
+Bun has no equivalent per-process filesystem permissions. Preserve that boundary as described below; non-root execution
+and a read-only root alone are not equivalent. Do not describe phase 2 as complete or publish another release while these remain.
 
 ## Container boundary and historical docs follow-up
 
@@ -97,3 +96,16 @@ an immutable tooling SHA; direct docs corrections use current default-branch too
 must match the frozen docs graph before that graph is copied into the separate source tree. No old Stable task scripts run.
 The actual `v0.11.8` site passed all 21 route checks with this workflow's builder, without publishing anything. The real Git
 integration also checks retained documentation corrections, newer Stable content, stale source rejection and conflict stops.
+
+## Legacy tooling retirement
+
+The unused Deno compiler, type checker and linter entrypoints, plus the docs Deno manifests, are removed. Root Deno tasks
+temporarily forward to their Bun package commands; the root manifest and lock remain while the remote container still
+references them. Source contract tests now inspect the active package manifest. The memory diagnostic compiles its real
+entrypoint with the production Bun payload builder, includes entrypoint bytes in build identity, and uses Bun collection.
+Renderer, saved-operation and combined scenarios passed in both source and standalone modes, with and without collection.
+Nineteen deliberate regressions across the migration have been detected by the focused tests.
+
+The separate UX image now starts from Debian without Deno and preserves UID 1993 and `/home/deno` for existing mounts.
+New cloud jobs qualify that installer image and the compiler/remote bundles in an image with no Deno executable. The
+restricted remote `Containerfile` remains unchanged and unqualified on this branch; the draft is not merge-ready.

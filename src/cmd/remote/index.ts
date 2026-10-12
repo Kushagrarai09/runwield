@@ -198,7 +198,7 @@ export async function runRemoteCommand(args: string[]): Promise<void> {
                 ("code" in error && ["ERR_MODULE_NOT_FOUND", "MODULE_NOT_FOUND"].includes(String(error.code))));
         if (!missingIdentity) throw error;
         throw new Error(
-            "No launcher build identity. Build the launcher and matching Linux artifact explicitly with deno run -A scripts/compile.js --output bin/wld.",
+            "No launcher build identity. Build the launcher and matching Linux artifact explicitly with bun run compile --output bin/wld.",
         );
     }
     const { BUILD_ID, REMOTE_PROTOCOL_VERSION } = identity;

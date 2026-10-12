@@ -37,7 +37,7 @@ async function fixture() {
         "image-resize-worker.js",
         "src/cli.ts",
         "src/shared/version.js",
-        "scripts/compile.js",
+        "scripts/compile-bun.ts",
         "dist/workspace-runtime/server.mjs",
         "node_modules/@earendil-works/pi-coding-agent/dist/utils/worker.js",
     ]) {
