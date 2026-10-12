@@ -52,17 +52,24 @@ and the maintained upstream documentation for [yargs-parser](https://github.com/
 ## Delivery checkpoint
 
 The dependency replacement is committed as `77ec91f36`. Direct source/test imports now use Node builtins plus
-js-yaml, jsonc-parser, yargs-parser and Sinon clocks. The next slice removes root @std aliases and the Deno Astro adapter,
+js-yaml, jsonc-parser, yargs-parser and Sinon clocks. Commit `16af8b4a1` removes root @std aliases and the Deno Astro adapter,
 adds default Bun commands and named compile compatibility, migrates prototype execution and the staged formatting hook,
 and moves source/Golden/release qualification and metadata identity to Bun. Historical tag recovery keeps tagged Golden
 qualification and uses commands already present in RC1.
 
-Local evidence: 1,324 source/test entries type-check; lint and zero-seam gates pass. Focused parser, storage, model,
-prototype, hook, build identity, release and docs tests pass. Thirteen intentional regressions are detected, and the real
+Local evidence: 1,325 source/test entries type-check; lint and zero-seam gates pass. Focused parser, storage, model,
+prototype, hook, build identity, release and docs tests pass. Fifteen intentional regressions are detected, and the real
 compiler rejects an expected-build-identity mismatch before emitting an artifact. A relocated native macOS package passed
 CLI onboarding/cancel, Plan entry, worker/WASM, image conversion, Workspace assets/auth and shutdown.
 
-Remaining before completion: full cloud source/Golden/platform qualification; remote Workspace/container build conversion;
+The remote Workspace and Plan Server bundlers now use Bun through `bun run workspace:remote:build`. A real compiler
+contract test executes relocated bundles with SQLite after deleting their source tree. The full remote bundle passed
+health/readiness, review-page rendering, CSS delivery and clean shutdown with a disposable database. Container execution
+and its filesystem boundary are not yet qualified. The initial cloud run passed all Golden shards, six Unix source shards
+and macOS/Linux/Windows x64 package checks; source shard 1 exposed a missing JSONC module in a copied fixture, fixed in
+`ca52c5c2a`. Cloud qualification is rerunning on the repaired branch.
+
+Remaining before completion: full cloud source/Golden/platform qualification; container build conversion;
 legacy compiler and memory diagnostic retirement; historical docs deployment conversion; then removal of root/docs Deno
 manifests. Bun has no equivalent per-process filesystem permissions. The container boundary decision is pending: enforced
 non-root/read-only filesystem with `/data` writable, or retaining Deno until an OS sandbox is qualified. Do not describe
