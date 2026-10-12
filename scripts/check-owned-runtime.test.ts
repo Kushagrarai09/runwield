@@ -1,11 +1,40 @@
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
-import { auditRuntimeSource } from "./check-owned-runtime.ts";
+import { auditRuntimeSource, checkOwnedRuntime } from "./check-owned-runtime.ts";
 import { cp, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { captureScriptProcess } from "./script-process.ts";
+import { defineCommittedGitFixture } from "../src/shared/git-test-fixture.ts";
+
+const missedRuntimePaths = defineCommittedGitFixture({
+    "package.json": JSON.stringify({ scripts: { check: "deno check main.ts" } }),
+    "docs-site/package.json": JSON.stringify({ scripts: { dev: "deno task dev" } }),
+    ".wld/settings.json": JSON.stringify({ verification_command: "deno task ci" }),
+    ".claude/settings.json": JSON.stringify({
+        hooks: { PostToolUse: [{ hooks: [{ command: "deno task seams:check" }] }] },
+    }),
+    "brand/tool.ts": "Deno.writeTextFile('out', 'content');",
+    "pages/review.astro": "---\nconst mode = globalThis.Deno.env.get('MODE');\n---\n<p>Review</p>",
+});
+
+test("owned-runtime discovery includes hidden command defaults, docs, brand and Astro code", async () => {
+    const root = await missedRuntimePaths.checkout({ prefix: "runwield-runtime-audit-" });
+    try {
+        const diagnostics = await checkOwnedRuntime(root);
+        assert.deepEqual([...new Set(diagnostics.map((diagnostic) => diagnostic.file))].sort(), [
+            ".claude/settings.json",
+            ".wld/settings.json",
+            "brand/tool.ts",
+            "docs-site/package.json",
+            "package.json",
+            "pages/review.astro",
+        ]);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
 
 test("owned-runtime guard rejects executable APIs, concealed lookups, registry imports and runtime launches", () => {
     const regressions = [
