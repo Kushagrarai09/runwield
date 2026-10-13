@@ -73,6 +73,7 @@ Other surfaces reference these requirements and add only their own user experien
 - [Plan lifecycle](#plan-lifecycle)
 - [Epic decomposition and hold](#epic-decomposition-and-hold)
 - [Execution, validation, and recovery](#execution-validation-and-recovery)
+- [Standalone code review](#standalone-code-review)
 - [Semantic review and repair](#semantic-review-and-repair)
 - [Frontend engineering and pair execution](#frontend-engineering-and-pair-execution)
 - [Theme selection](#theme-selection)
@@ -1072,6 +1073,63 @@ global edit does not replace an explicit project override.
 - Given a reused worktree with unrelated staged or unstaged ignore rules, preparation preserves both versions and
   classifies them as implementation rather than silently committing them. Ordinary and Tutorial execution share this
   rule.
+
+### Standalone code review
+
+**Scope: Current local CLI behavior.** Standalone Code Review does not require a Plan and does not write Plan lifecycle
+or Delivery Evidence. The validation gate remains owned by
+[Execution, validation, and recovery](#execution-validation-and-recovery).
+
+**Requirement: Review three local sources.** `wld review` compares HEAD with staged, unstaged, and untracked changes.
+`wld review <branch>` compares the named local branch with its merge base against the current checkout. A PR/MR URL
+compares the fetched head with the merge base of its target branch. Its host and repository path must match a remote of
+the current checkout. RunWield never clones another repository. Missing or unauthenticated Forge CLIs stop PR resolution
+with the required `gh auth login` or `glab auth login` command.
+
+**Requirement: Discuss and edit without a Plan.** The shared Code Review page provides Guided Review and chat with the
+normal Engineer. One saved Engineer Session serves the review and can be resumed. PR and branch reviews use refs until
+the first Engineer request. Only then does RunWield create or reuse a review worktree, outside the Plan registry.
+Uncommitted review uses the current checkout. Users direct Engineer commits and pushes.
+
+**Requirement: Explicit source-specific actions.** PR review offers Post to PR and Engineer destinations. Post comments
+submits a neutral review; Approve submits annotations and approval. Global notes and feedback become the review body.
+File and line comments retain their scope and side. Request changes is not offered. Posting is disabled when local edits
+no longer match the PR head. A moved remote head refuses posting and refreshes the review, clears old annotations, and
+marks retained Guided Review prose as stale. Users select current lines to add annotations again. An unchanged clean
+review worktree advances only by fast-forward from the previously reviewed head; local work and rewritten history are
+preserved with a recovery reason. Branch review offers Engineer feedback only. Uncommitted review offers Approve &
+Commit: the Operator follows the bundled commit rules, commits, and pushes, setting `origin HEAD` as upstream when
+needed. RunWield checks a clean tree, changed HEAD, and upstream equality. Detached HEAD disables that action. Failed
+pushes keep commits and leave the review usable. A retry keeps the original approval baseline and publishes an existing
+commit without creating another commit when the tree is clean. Partial GitLab submissions report failed comments without
+replaying mutations.
+
+**Requirement: Protect review work.** Closing the review makes no Forge or Git publication. On completion, cancellation,
+or interruption, RunWield closes its Sessions and removes only its own clean worktrees whose HEAD equals upstream. It
+also removes unchanged unused worktrees after checkout setup fails. Incomplete checkout setup cannot start the Engineer;
+a later request retries setup when no local work needs protection. RunWield keeps dirty or unpushed work, reports the
+path and branch, and never removes reused or primary checkouts. The terminal prints the review link, progress, result,
+cleanup outcome, and Engineer Session id.
+
+**Acceptance scenarios**
+
+- Given staged, unstaged, and untracked edits, no-target review shows all three and Guided Review explains the diff.
+- Given a different local branch, review initially creates no worktree; an Engineer request creates or reuses one and
+  the next diff includes its edits. No Approve or Open PR action appears.
+- Given a PR in a matching remote, review works before workspace creation; Post comments and Approve have real Forge
+  effects. A foreign repository is rejected without fetching or cloning.
+- Given missing or signed-out `gh` or `glab`, PR resolution names that CLI and its sign-in command.
+- Given a remote head change, posting refuses and refreshes, removes old annotation anchors, and marks the retained
+  Guide stale. A clean unchanged worktree advances to a descendant head; local edits, local commits, and rewritten
+  history remain protected. Local Engineer changes disable posting until pushed.
+- Given checkout setup failure, an unchanged unused worktree is removed and the next Engineer request retries checkout.
+  Changes made during failed setup remain protected; no Engineer starts in an incomplete checkout.
+- Given a lazy worktree created after the review page opened, subsequent Guided Review jobs use that worktree directory.
+- Given uncommitted work, Approve & Commit succeeds only after the commit and upstream checks pass. A failed push keeps
+  the commit and reports the failed check. A successful push retry completes approval without a second commit; detached
+  HEAD starts no Operator.
+- Given review exit during PR metadata lookup, no Forge submission starts. A clean created checkout at upstream is
+  removed; dirty, unpushed, reused, and primary checkouts remain accessible.
 
 ### Semantic review and repair
 
