@@ -192,11 +192,13 @@ test("buildReAnchorMessage names the Epic for Architect", () => {
 
 test("buildReAnchorMessage gives both Plan executors only the parsed Plan body", () => {
     for (const agentName of ["plan-engineer", "frontend-engineer"]) {
-        const message = String(buildReAnchorMessage({
-            agentName,
-            planName: "some-plan",
-            planBody: "---\nsummary: SECRET\n---\n# Body\n\nVerification Plan",
-        }));
+        const message = String(
+            buildReAnchorMessage({
+                agentName,
+                planName: "some-plan",
+                planBody: "---\nsummary: SECRET\n---\n# Body\n\nVerification Plan",
+            }),
+        );
 
         assertStringIncludes(message, "## Approved Plan Body");
         assertStringIncludes(message, "# Body");
@@ -220,12 +222,14 @@ test("buildReAnchorMessage re-anchors no Plan for the Quick Fix Engineer", () =>
 });
 
 test("buildReAnchorMessage carries open review issues for a repair turn", () => {
-    const message = String(buildReAnchorMessage({
-        agentName: "reviewer-feedback-engineer",
-        planName: "some-plan",
-        planBody: "# Repair body",
-        openReviewItems: "R1-1 — Seam check never runs\n  Plan requirement: Verification Plan step 3",
-    }));
+    const message = String(
+        buildReAnchorMessage({
+            agentName: "reviewer-feedback-engineer",
+            planName: "some-plan",
+            planBody: "# Repair body",
+            openReviewItems: "R1-1 — Seam check never runs\n  Plan requirement: Verification Plan step 3",
+        }),
+    );
 
     assertStringIncludes(message, "# Repair body");
     assertStringIncludes(message, "## Open Review Issue Ledger");
@@ -233,12 +237,14 @@ test("buildReAnchorMessage carries open review issues for a repair turn", () => 
 });
 
 test("buildReAnchorMessage omits an empty Review Issue Ledger", () => {
-    const message = String(buildReAnchorMessage({
-        agentName: "reviewer-feedback-engineer",
-        planName: "some-plan",
-        planBody: "# Repair body",
-        openReviewItems: "(none)",
-    }));
+    const message = String(
+        buildReAnchorMessage({
+            agentName: "reviewer-feedback-engineer",
+            planName: "some-plan",
+            planBody: "# Repair body",
+            openReviewItems: "(none)",
+        }),
+    );
 
     assertStringIncludes(message, "# Repair body");
     if (message.includes("Open Review Issue Ledger")) {
