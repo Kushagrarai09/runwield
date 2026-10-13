@@ -581,6 +581,10 @@ export function collectSeamNames(text) {
     ) {
         const member = finalMemberName(fallback[1]);
         const implementation = finalMemberName(fallback[2]);
+        // A field read can supply data even when the option name is a verb:
+        // `options.clearAttachedContext || payload.standaloneReview` is a Boolean
+        // condition, not an implementation fallback. Method-shaped members still count.
+        if (fallback[2].includes(".") && !isBehavioralCollaborator(implementation)) continue;
         if (substitutesImplementation(member, member, implementation, true)) names.add(member);
     }
 
