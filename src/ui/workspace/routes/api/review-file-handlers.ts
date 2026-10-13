@@ -53,6 +53,7 @@ export function resolveWorkspaceFile(
 
 export interface ReviewFileContentOptions {
     cwd?: string;
+    headRef?: string;
 }
 
 interface WorkspaceTextFile {
@@ -61,7 +62,7 @@ interface WorkspaceTextFile {
 }
 
 /**
- * Return the current working-tree content when it is safely available.
+ * Return the selected Git ref or current working-tree content when it is safely available.
  * The workflow diff's baseline tree is intentionally not guessed here, so
  * oldContent remains null instead of showing content from the wrong revision.
  */
@@ -84,7 +85,9 @@ export async function reviewFileContentApi(
     }
 
     try {
-        const file = await readWorkspaceTextFile(cwd, filePath, baseDir);
+        const file = options.headRef
+            ? await readRefTextFile(cwd, options.headRef, filePath, baseDir)
+            : await readWorkspaceTextFile(cwd, filePath, baseDir);
         return Response.json({
             oldContent: null,
             newContent: file?.contents ?? null,
@@ -136,6 +139,26 @@ function candidatePaths(cwd: string, filePath: string, baseDir: string): string[
         candidates.push(resolve(cwd, baseDir, filePath));
     }
     return [...new Set(candidates)];
+}
+
+async function readRefTextFile(
+    cwd: string,
+    headRef: string,
+    filePath: string,
+    baseDir: string,
+): Promise<WorkspaceTextFile | null> {
+    for (const candidate of candidatePaths(cwd, filePath, baseDir)) {
+        if (!isPathInside(candidate, cwd)) continue;
+        const path = relative(cwd, candidate).replaceAll("\\", "/");
+        const result = await new Deno.Command("git", {
+            cwd,
+            args: ["show", `${headRef}:${path}`],
+            stdout: "piped",
+            stderr: "piped",
+        }).output();
+        if (result.success) return { path, contents: new TextDecoder().decode(result.stdout) };
+    }
+    return null;
 }
 
 async function readWorkspaceTextFile(

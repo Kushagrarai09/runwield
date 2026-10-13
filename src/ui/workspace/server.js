@@ -19,7 +19,7 @@ import { parseWorkRecordMarkdown } from "../../shared/work-records/markdown.js";
 import { workRecordNotices } from "../../shared/work-records/list.ts";
 import { isEpicArtifactPlanName } from "../../shared/epic-artifacts.ts";
 import { RUNWIELD_ROOT, RUNWIELD_SOURCE_ROOT } from "../../../runtime-root.js";
-import { PLAN_UI_TOKEN_HEADER, PLAN_UI_TOKEN_QUERY } from "../../constants.js";
+import { getCwd, PLAN_UI_TOKEN_HEADER, PLAN_UI_TOKEN_QUERY } from "../../constants.js";
 import { getWorktreeReviewDiff, WorktreeReviewComparisonError } from "../../shared/workflow/git-snapshot.ts";
 import {
     boardApi,
@@ -424,7 +424,7 @@ function createLocalWorkspaceApp({ cwd, token, skipTokenCheck = false, mnemoteca
 }
 
 /**
- * @param {{ cwd: string, token: string, reviewPayload: Record<string, unknown>, reviewType: "plan" | "code", reviewConversation?: { id: string, agentLabel: string, revision: number, events: Array<{ type: string, delta: string, messageId: string, agentName: string }> } }} options
+ * @param {{ cwd: string, token: string, reviewPayload: Record<string, unknown>, reviewType: "plan" | "code", reviewConversation?: import("../review/review-launcher.ts").ReviewConversation }} options
  */
 /**
  * @param {{ cwd: string, token: string, questionPayload: Record<string, unknown>, answerQuestion: (request: Request) => Promise<Response>|Response }} options
@@ -560,6 +560,15 @@ function linkedDocumentKind(path) {
     return "document";
 }
 
+/**
+ * @typedef {Object} ReviewWorkspaceAppOptions
+ * @property {string} cwd
+ * @property {string} token
+ * @property {Record<string, unknown>} reviewPayload
+ * @property {"plan" | "code"} reviewType
+ * @property {import("../review/review-launcher.ts").ReviewConversation} [reviewConversation]
+ */
+/** @param {ReviewWorkspaceAppOptions} options */
 export function createReviewWorkspaceApp({ cwd, token, reviewPayload, reviewType, reviewConversation }) {
     const reviewAgentState = reviewType === "code"
         ? createReviewAgentState({ cwd, token, reviewPayload, runGuideCommand: runConfiguredGuideCommand })
@@ -587,7 +596,14 @@ export function createReviewWorkspaceApp({ cwd, token, reviewPayload, reviewType
                     if (!hasReviewAssetToken(request, token)) {
                         return new Response("Review token required.", { status: 401 });
                     }
-                    return await reviewFileContentApi(request, { cwd });
+                    const source = reviewPayload.standaloneReview;
+                    return await reviewFileContentApi(request, {
+                        cwd: source && typeof reviewPayload.agentCwd === "string" ? reviewPayload.agentCwd : cwd,
+                        headRef: source && typeof source === "object" && "headRef" in source &&
+                                typeof source.headRef === "string"
+                            ? source.headRef
+                            : undefined,
+                    });
                 }
                 if (request.method === "GET" && url.pathname === "/api/open-in/apps") {
                     if (!hasReviewAssetToken(request, token)) {
@@ -601,11 +617,25 @@ export function createReviewWorkspaceApp({ cwd, token, reviewPayload, reviewType
                     }
                     return reviewLocalConfigApi();
                 }
+                if (
+                    request.method === "POST" && url.pathname === "/api/review/exit" &&
+                    reviewPayload.standaloneReview && reviewConversation?.onExit
+                ) {
+                    if (!hasReviewAssetToken(request, token)) {
+                        return new Response("Review token required.", { status: 401 });
+                    }
+                    reviewConversation.onExit();
+                    return Response.json({ ok: true });
+                }
                 if (request.method === "GET" && url.pathname === "/api/review/conversation") {
                     if (!reviewConversation || !hasReviewAssetToken(request, token)) {
                         return new Response("Review conversation unavailable.", { status: 404 });
                     }
+                    if (reviewConversation.completed) reviewConversation.completionDelivered = true;
                     return Response.json({
+                        completed: reviewConversation.completed,
+                        resultMessage: reviewConversation.resultMessage,
+                        standaloneReview: reviewPayload.standaloneReview,
                         agentLabel: reviewConversation.agentLabel,
                         revision: reviewConversation.revision,
                         sequenceDocuments: reviewPayload.sequenceDocuments,
@@ -1405,7 +1435,7 @@ export function startSessionQuestionWorkspaceServer(options) {
 }
 
 /**
- * @param {{ cwd?: string, token: string, reviewPayload: Record<string, unknown>, reviewType: "plan" | "code", reviewConversation?: { id: string, agentLabel: string, revision: number, events: Array<{ type: string, delta: string, messageId: string, agentName: string }> }, host?: string, port?: number, signal?: AbortSignal, onOutput?: ReviewServerOutputListener }} options
+ * @param {{ cwd?: string, token: string, reviewPayload: Record<string, unknown>, reviewType: "plan" | "code", reviewConversation?: import("../review/review-launcher.ts").ReviewConversation, host?: string, port?: number, signal?: AbortSignal, onOutput?: ReviewServerOutputListener }} options
  */
 export function startReviewWorkspaceServer(options) {
     const cwd = options.cwd ?? getCwd();

@@ -379,6 +379,13 @@ compares the approved Plan with the full proposed branch patch from the recorded
 current execution-worktree files. TUI and Workspace progress copy calls this **AI review**. _Avoid_: Code Review, Forge
 review, automated tests
 
+**Standalone Code Review**: Code Review of a PR, branch, or uncommitted changes without a Plan or Plan lifecycle.
+Started with `wld review`. The gate **Code Review** still means the Plan validation gate.
+
+**Review Worktree**: A worktree created on demand for Standalone Code Review, outside the Plan worktree registry.
+RunWield preserves it when it holds uncommitted or unpushed work. An existing branch checkout can be reused but is not
+owned or removed by Standalone Code Review.
+
 **Code Review**: The optional RunWield gate where a person reviews the same full proposed branch patch used by Semantic
 Review before delivery. Reload recomputes it from the recorded target, execution HEAD, and current worktree files. The
 user approves the diff or sends feedback. Internal compatibility identifiers can still use `humanReview` or
