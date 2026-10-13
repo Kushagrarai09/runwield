@@ -561,6 +561,31 @@ Deno.test("collectSeamNames detects optional capability properties with producti
     assertEquals(names, ["browser", "commandRegistry", "git", "localCI"]);
 });
 
+Deno.test("collectSeamNames leaves behavioral flags combined with payload data alone", () => {
+    assertEquals(
+        collectSeamNames(`
+            function applyRevision(options) {
+                if (options.clearAttachedContext || initialPayload.standaloneReview) {
+                    setAnnotations([]);
+                }
+            }
+        `),
+        [],
+    );
+});
+
+Deno.test("collectSeamNames detects behavioral member implementations in ordinary options", () => {
+    assertEquals(
+        collectSeamNames(`
+            const read = options.readTextFile || Deno.readTextFile;
+            const clear = options.clearAttachedContext || context.clear;
+            read(path);
+            clear();
+        `),
+        ["clearAttachedContext", "readTextFile"],
+    );
+});
+
 Deno.test("collectSeamNames leaves ordinary optional data fallbacks alone", () => {
     const names = collectSeamNames(`
         const interval = options.interval || DEFAULT_POLL_INTERVAL_MS;

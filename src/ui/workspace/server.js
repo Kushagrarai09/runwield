@@ -592,7 +592,14 @@ export function createReviewWorkspaceApp({ cwd, token, reviewPayload, reviewType
                     if (!hasReviewAssetToken(request, token)) {
                         return new Response("Review token required.", { status: 401 });
                     }
-                    return await reviewFileContentApi(request, { cwd });
+                    const source = reviewPayload.standaloneReview;
+                    return await reviewFileContentApi(request, {
+                        cwd: source && typeof reviewPayload.agentCwd === "string" ? reviewPayload.agentCwd : cwd,
+                        headRef: source && typeof source === "object" && "headRef" in source &&
+                                typeof source.headRef === "string"
+                            ? source.headRef
+                            : undefined,
+                    });
                 }
                 if (request.method === "GET" && url.pathname === "/api/open-in/apps") {
                     if (!hasReviewAssetToken(request, token)) {

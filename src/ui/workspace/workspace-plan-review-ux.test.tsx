@@ -175,11 +175,11 @@ Deno.test("Plan review offers a reusable Planner conversation without replacing 
 Deno.test("Code feedback action matches the Plan annotation sidebar treatment", async () => {
     const surface = await Deno.readTextFile(CODE_SURFACE_PATH);
     const sidebarIndex = surface.indexOf('className="rw-code-review-annotation-sidebar"');
-    const actionIndex = surface.indexOf('label="Send Annotations"');
+    const actionIndex = surface.indexOf(': "Send Annotations"');
     const listIndex = surface.indexOf("<ReviewSidebar", sidebarIndex);
 
     assertStringIncludes(surface, 'className="rw-review-feedback-action rw-review-action');
-    assertStringIncludes(surface, 'label="Send Annotations"');
+    assertStringIncludes(surface, ': "Send Annotations"');
     if (sidebarIndex < 0 || actionIndex < sidebarIndex || listIndex < actionIndex) {
         throw new Error("Code Review's Send Annotations action must sit above the annotation list");
     }
@@ -200,7 +200,7 @@ Deno.test("Code Review reuses artifact chat and reloads the republished file dif
     assertStringIncludes(surface, "waitForWorkspaceCodeReview");
     assertStringIncludes(surface, "setActiveRawPatch(options.rawPatch)");
     assertStringIncludes(surface, "conversationTurn: true");
-    assertStringIncludes(surface, 'label="Send Annotations"');
+    assertStringIncludes(surface, ': "Send Annotations"');
 });
 
 Deno.test("Code Review uses the Workspace header when embedded and preserves standalone controls", async () => {

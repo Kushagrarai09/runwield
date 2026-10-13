@@ -12,6 +12,25 @@ declare namespace Deno {
         recursive?: boolean;
     }
 
+    interface WorkspaceCommandOptions {
+        cwd?: string | URL;
+        args?: string[];
+        stdout?: "piped" | "inherit" | "null";
+        stderr?: "piped" | "inherit" | "null";
+    }
+
+    interface WorkspaceCommandOutput {
+        success: boolean;
+        code: number;
+        stdout: Uint8Array<ArrayBuffer>;
+        stderr: Uint8Array<ArrayBuffer>;
+    }
+
+    class Command {
+        constructor(command: string | URL, options?: WorkspaceCommandOptions);
+        output(): Promise<WorkspaceCommandOutput>;
+    }
+
     function cwd(): string;
     function realPath(path: string | URL): Promise<string>;
     function stat(path: string | URL): Promise<WorkspaceFileInfo>;

@@ -38,17 +38,24 @@ export async function runStandaloneReview(
         controller.abort();
         if (sessionId) void runtime.cancelSession(sessionId);
     }
-    const interrupt = interruptReview;
-    Deno.addSignalListener("SIGINT", interrupt);
-    Deno.addSignalListener("SIGTERM", interrupt);
+    const signals: Deno.Signal[] = [];
     let resultMessage = "";
     const approvalState: ApprovalPublicationState = {};
     try {
+        for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+            try {
+                Deno.addSignalListener(signal, interruptReview);
+                signals.push(signal);
+            } catch {
+                // Windows and some hosts do not support every signal.
+            }
+        }
         while (!controller.signal.aborted) {
             const cwd = target.worktree?.path || target.projectRoot;
             const diffText = await target.computeDiff(cwd);
             const payload: StandaloneReviewPayload = {
                 mode: target.mode,
+                headRef: target.worktree || target.mode === "uncommitted" ? undefined : target.gitRef,
                 reviewContext: target.reviewContext,
                 resultMessage,
             };
@@ -205,8 +212,7 @@ export async function runStandaloneReview(
                 try {
                     print((await settleReviewWorktree(target.worktree)).message);
                 } finally {
-                    Deno.removeSignalListener("SIGINT", interrupt);
-                    Deno.removeSignalListener("SIGTERM", interrupt);
+                    for (const signal of signals) Deno.removeSignalListener(signal, interruptReview);
                 }
             }
         }

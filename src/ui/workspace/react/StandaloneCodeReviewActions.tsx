@@ -24,6 +24,7 @@ export function StandaloneCodeReviewActions(
             {review.mode === "pr" && (
                 <RunWieldSegmentedControl aria-label="Review destination">
                     <button
+                        type="button"
                         title="Post to PR"
                         aria-pressed={destination === "forge"}
                         onClick={() => onDestination("forge")}
@@ -42,6 +43,7 @@ export function StandaloneCodeReviewActions(
                         <span>Post to PR</span>
                     </button>
                     <button
+                        type="button"
                         title="Engineer"
                         aria-pressed={destination === "engineer"}
                         onClick={() => onDestination("engineer")}

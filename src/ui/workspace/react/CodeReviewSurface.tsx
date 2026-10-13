@@ -879,9 +879,11 @@ export function CodeReviewSurface({ payload, presentation = "standalone" }) {
         setGuide((current) => current ? { ...current, moved: true } : current);
         setViewedFiles(new Set());
         setFileNavigationTarget(null);
-        if (options.clearAttachedContext) {
+        if (options.clearAttachedContext || initialPayload.standaloneReview) {
             setAnnotations([]);
             setSelectedAnnotationId(null);
+            setScrollTargetAnnotation(null);
+            setPendingSelection(null);
             setConversationContextAttached(false);
         }
     }

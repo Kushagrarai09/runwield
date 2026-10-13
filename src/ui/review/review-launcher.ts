@@ -120,6 +120,8 @@ export interface StandaloneCommitState {
 }
 export interface StandaloneReviewPayload {
     mode: "pr" | "branch" | "uncommitted";
+    /** Selected commit before the Engineer worktree exists. */
+    headRef?: string;
     forge?: StandaloneForgeState;
     commit?: StandaloneCommitState;
     reviewContext?: string;

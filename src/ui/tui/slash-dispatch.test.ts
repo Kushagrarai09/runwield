@@ -33,7 +33,7 @@ async function writeCatalogFixtures(projectRoot: string, options: SlashFixtureOp
         const promptDir = join(projectRoot, ".wld", "prompts");
         await Deno.mkdir(promptDir, { recursive: true });
         await Deno.writeTextFile(
-            join(promptDir, "review.md"),
+            join(promptDir, "review-fixture.md"),
             ["---", 'description: "Review fixture"', "---", "Review the fixture carefully."].join("\n"),
         );
     }
@@ -259,11 +259,13 @@ Deno.test("handleSlashCommand keeps hidden init reserved instead of dispatching 
 Deno.test("handleSlashCommand shows expanded prompt template text from the Core runtime", async () => {
     await withSlashFixture({ promptTemplate: true }, async ({ context, submittedRequests }, projectRoot) => {
         await setCustomSetting("workflowMetrics", true, "project", projectRoot);
-        assertEquals(await handleSlashCommand(context("/review focus on tests")), true);
+        assertEquals(await handleSlashCommand(context("/review-fixture focus on tests")), true);
         assertEquals(submittedRequests, ["Review the fixture carefully.\n\nfocus on tests"]);
         await drainWorkflowMetrics();
         const rows = (await Deno.readTextFile(getWorkflowMetricsFilePath(projectRoot))).trim().split("\n")
-            .map((line) => JSON.parse(line)).filter((row) => row.category === "command" && row.command === "review");
+            .map((line) => JSON.parse(line)).filter((row) =>
+                row.category === "command" && row.command === "review-fixture"
+            );
         assertEquals(rows.map((row) => row.event), ["command_started", "command_finished"]);
         assertEquals(new Set(rows.map((row) => row.commandId)).size, 1);
         assertEquals(rows[0].sourceSurface, "tui");

@@ -1,4 +1,4 @@
-import { fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { withRuntimeCommandFixture } from "../../cmd/testing/runtime-command-fixture.ts";
 import { defineGitFixture, git } from "../git-test-fixture.ts";
@@ -8,7 +8,12 @@ const fixture = defineGitFixture(async (cwd) => {
     await Deno.writeTextFile(`${cwd}/base.txt`, "base\n");
     await git(cwd, ["add", "."]);
     await git(cwd, ["commit", "-m", "base"]);
-    await git(cwd, ["branch", "topic"]);
+    await git(cwd, ["switch", "-c", "topic"]);
+    await Deno.writeTextFile(`${cwd}/base.txt`, "selected head\n");
+    await Deno.writeTextFile(`${cwd}/topic-only.txt`, "topic only\n");
+    await git(cwd, ["add", "."]);
+    await git(cwd, ["commit", "-m", "topic content"]);
+    await git(cwd, ["switch", "main"]);
     await git(cwd, ["branch", "--set-upstream-to=main", "topic"]);
 });
 interface ConversationStatus {
@@ -37,15 +42,20 @@ Deno.test("Engineer uses one real saved Session and refreshes its edited worktre
         try {
             const target = await resolveReviewTarget(cwd, "topic");
             setModelResponseFactories([
-                async () => {
+                () => {
                     path = target.worktree!.path;
-                    await Deno.writeTextFile(`${path}/engineer.txt`, "Engineer change\n");
-                    return fauxAssistantMessage("I changed the file.");
+                    return fauxAssistantMessage(fauxToolCall("write", {
+                        path: "engineer.txt",
+                        content: "Engineer change\n",
+                    }));
                 },
-                async () => {
-                    await Deno.writeTextFile(`${path}/engineer.txt`, "Engineer change\nFollow-up edit\n");
-                    return fauxAssistantMessage("I kept the earlier edit and applied the follow-up.");
-                },
+                () => fauxAssistantMessage("I changed the file."),
+                () =>
+                    fauxAssistantMessage(fauxToolCall("write", {
+                        path: "engineer.txt",
+                        content: "Engineer change\nFollow-up edit\n",
+                    })),
+                () => fauxAssistantMessage("I kept the earlier edit and applied the follow-up."),
             ]);
             await runStandaloneReview(target, {
                 print: (text) => output.push(text),
@@ -54,12 +64,27 @@ Deno.test("Engineer uses one real saved Session and refreshes its edited worktre
                         browserRun = (async () => {
                             const url = new URL(link);
                             const before = await status(url);
+                            for (
+                                const [file, contents] of [["base.txt", "selected head\n"], [
+                                    "topic-only.txt",
+                                    "topic only\n",
+                                ]]
+                            ) {
+                                const response = await fetch(
+                                    new URL(`/api/file-content${url.search}&path=${file}`, url),
+                                );
+                                assertEquals((await response.json()).newContent, contents);
+                            }
                             await decide(url, "deny", { conversationTurn: true, feedback: "Change the file" });
                             for (let i = 0; i < 300; i++) {
                                 const next = await status(url);
                                 if (next.revision > before.revision) {
                                     try {
                                         assertStringIncludes(next.rawPatch, "+Engineer change");
+                                        const response = await fetch(
+                                            new URL(`/api/file-content${url.search}&path=engineer.txt`, url),
+                                        );
+                                        assertEquals((await response.json()).newContent, "Engineer change\n");
                                         assertStringIncludes(
                                             next.events.map((event) => event.delta).join(""),
                                             "I changed the file.",
@@ -95,12 +120,15 @@ Deno.test("Engineer uses one real saved Session and refreshes its edited worktre
                             throw new Error("Engineer did not refresh the diff.");
                         })();
                         // Attach rejection immediately; the assertion is awaited below.
-                        browserRun.catch(() => {});
+                        browserRun.catch(async () => {
+                            await decide(new URL(link), "exit", {}).catch(() => {});
+                        });
                         return Promise.resolve(true);
                     },
                 },
             });
             await browserRun;
+            assertEquals(await git(cwd, ["status", "--porcelain", "--", "engineer.txt"]), "");
             assertEquals(output.filter((line) => line.startsWith("Engineer Session:")).length, 1);
             assertStringIncludes(output.join("\n"), "wld resume");
             assertStringIncludes(output.join("\n"), "kept:");
@@ -166,7 +194,9 @@ Deno.test("Post comments submits once, shows completion, and ends without Engine
                         }
                         throw new Error("No completed result.");
                     })();
-                    browserRun.catch(() => {});
+                    browserRun.catch(async () => {
+                        await decide(new URL(link), "exit", {}).catch(() => {});
+                    });
                     return Promise.resolve(true);
                 },
             },
@@ -197,6 +227,10 @@ Deno.test("a changed PR head refuses submission, refreshes the diff, and stays o
                     browserRun = (async () => {
                         const url = new URL(link);
                         const before = await status(url);
+                        const selectedContent = await fetch(
+                            new URL(`/api/file-content${url.search}&path=base.txt`, url),
+                        );
+                        assertEquals((await selectedContent.json()).newContent, "selected head\n");
                         await git(cwd, ["switch", "topic"]);
                         await Deno.writeTextFile(`${cwd}/moved.txt`, "remote head change\n");
                         await git(cwd, ["add", "."]);
@@ -211,6 +245,10 @@ Deno.test("a changed PR head refuses submission, refreshes the diff, and stays o
                             if (next.revision > before.revision) {
                                 try {
                                     assertStringIncludes(next.rawPatch, "+remote head change");
+                                    const selectedContent = await fetch(
+                                        new URL(`/api/file-content${url.search}&path=moved.txt`, url),
+                                    );
+                                    assertEquals((await selectedContent.json()).newContent, "remote head change\n");
                                 } finally {
                                     await decide(url, "exit", {});
                                 }
@@ -221,7 +259,9 @@ Deno.test("a changed PR head refuses submission, refreshes the diff, and stays o
                         await decide(url, "exit", {});
                         throw new Error("Review did not refresh after refusal.");
                     })();
-                    browserRun.catch(() => {});
+                    browserRun.catch(async () => {
+                        await decide(new URL(link), "exit", {}).catch(() => {});
+                    });
                     return Promise.resolve(true);
                 },
             },

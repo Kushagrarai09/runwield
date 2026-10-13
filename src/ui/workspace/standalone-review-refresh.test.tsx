@@ -5,7 +5,7 @@ import { act } from "react";
 import { build, stop } from "esbuild";
 import { fromFileUrl } from "@std/path";
 
-Deno.test("refused PR post invalidates old annotations and marks the retained guide stale", async () => {
+async function withReviewSurface(standaloneReview, verify) {
     const bundle = await build({
         entryPoints: [fromFileUrl(new URL("./react/CodeReviewSurface.tsx", import.meta.url))],
         banner: {
@@ -26,7 +26,9 @@ Deno.test("refused PR post invalidates old annotations and marks the retained gu
             "@plannotator/core": fromFileUrl(
                 new URL("../../../third_party/plannotator/packages/core", import.meta.url),
             ),
-            "@plannotator/ui": fromFileUrl(new URL("../../../third_party/plannotator/packages/ui", import.meta.url)),
+            "@plannotator/ui": fromFileUrl(
+                new URL("../../../third_party/plannotator/packages/ui", import.meta.url),
+            ),
             "@plannotator/guide-viewer": fromFileUrl(
                 new URL("../../../third_party/plannotator/packages/guide-viewer", import.meta.url),
             ),
@@ -95,7 +97,7 @@ Deno.test("refused PR post invalidates old annotations and marks the retained gu
             Object.defineProperty(globalThis, name, { configurable: true, writable: true, value });
         }
         globalThis.fetch = (url, options) => {
-            if (String(url).includes("/feedback")) {
+            if (String(url).includes("/feedback") || String(url).includes("/deny")) {
                 submitted.push(JSON.parse(options.body));
                 revision++;
                 return Promise.resolve(Response.json({ ok: true }));
@@ -121,8 +123,8 @@ Deno.test("refused PR post invalidates old annotations and marks the retained gu
         browser.document.body.append(container);
         const { createRoot } = await import("react-dom/client");
         root = createRoot(container);
-        await act(() =>
-            root.render(
+        await act(async () =>
+            await root.render(
                 <CodeReviewSurface
                     payload={{
                         mode: "standalone",
@@ -131,8 +133,9 @@ Deno.test("refused PR post invalidates old annotations and marks the retained gu
                         gitRef: "old-head",
                         conversationStatusUrl: "/status",
                         feedbackUrl: "/feedback",
+                        denyUrl: "/deny",
                         agentLabel: "Engineer",
-                        standaloneReview: { mode: "pr", forge: { available: true, postEnabled: true } },
+                        standaloneReview,
                         guidedReview: { mode: "manual" },
                         guidedReviewFixture: {
                             schemaVersion: "1.0",
@@ -146,25 +149,7 @@ Deno.test("refused PR post invalidates old annotations and marks the retained gu
         );
         const button = (text) =>
             [...container.querySelectorAll("button")].find((node) => node.textContent.trim() === text);
-        await act(() => button("Global comment").click());
-        const input = browser.document.querySelector('textarea[placeholder="Add a global comment..."]');
-        await act(() => {
-            Object.getOwnPropertyDescriptor(browser.HTMLTextAreaElement.prototype, "value").set.call(
-                input,
-                "old anchored note",
-            );
-            input.dispatchEvent(new browser.Event("input", { bubbles: true }));
-        });
-        const add = [...browser.document.querySelectorAll("button")].find((node) => node.textContent.trim() === "Add");
-        await act(() => add.click());
-        assertStringIncludes(container.textContent, "old anchored note");
-        await act(() => button("Post comments").click());
-        assertEquals(submitted[0].annotations.length, 1);
-        assertEquals(container.textContent.includes("old anchored note"), false);
-        await act(() => button("Guided Review ready").click());
-        assertStringIncludes(container.textContent, "Generated on a different version of this branch");
-        await act(() => button("Post comments").click());
-        assertEquals(submitted[1].annotations, []);
+        await verify({ browser, container, button, submitted });
         await act(() => root.unmount());
         root = null;
     } finally {
@@ -175,4 +160,126 @@ Deno.test("refused PR post invalidates old annotations and marks the retained gu
         }
         await browser.happyDOM.close();
     }
+}
+
+async function verifyRefresh(engineerTurn) {
+    await withReviewSurface(
+        { mode: "pr", forge: { available: true, postEnabled: true } },
+        async ({ browser, container, button, submitted }) => {
+            await act(() => button("Global comment").click());
+            const input = browser.document.querySelector('textarea[placeholder="Add a global comment..."]');
+            await act(() => {
+                Object.getOwnPropertyDescriptor(browser.HTMLTextAreaElement.prototype, "value").set.call(
+                    input,
+                    "old anchored note",
+                );
+                input.dispatchEvent(new browser.Event("input", { bubbles: true }));
+            });
+            const add = [...browser.document.querySelectorAll("button")].find((node) =>
+                node.textContent.trim() === "Add"
+            );
+            await act(() => add.click());
+            assertStringIncludes(container.textContent, "old anchored note");
+            if (engineerTurn) {
+                await act(() => container.querySelector('button[role="tab"][title="Engineer"]').click());
+                const composer = browser.document.querySelector('textarea[placeholder="Message Engineer…"]');
+                await act(() => {
+                    Object.getOwnPropertyDescriptor(browser.HTMLTextAreaElement.prototype, "value").set.call(
+                        composer,
+                        "Edit, commit, and push the file",
+                    );
+                    composer.dispatchEvent(new browser.Event("input", { bubbles: true }));
+                });
+                await act(() => button("Send to Engineer").click());
+                assertEquals(submitted[0].annotations, []);
+                await act(() => container.querySelector('button[role="tab"][title="Annotations"]').click());
+            } else {
+                await act(() => button("Post comments").click());
+                assertEquals(submitted[0].annotations.length, 1);
+            }
+            assertEquals(container.textContent.includes("old anchored note"), false);
+            await act(() => button("Guided Review ready").click());
+            assertStringIncludes(container.textContent, "Generated on a different version of this branch");
+            await act(() => button("Post comments").click());
+            assertEquals(submitted[1].annotations, []);
+        },
+    );
+}
+
+Deno.test("refused PR post invalidates old annotations and marks the retained guide stale", () => verifyRefresh(false));
+Deno.test("unattached Engineer turn clears retained annotations before posting", () => verifyRefresh(true));
+
+async function addModeAnnotation({ browser, button }) {
+    await act(() => button("Global comment").click());
+    const input = browser.document.querySelector('textarea[placeholder="Add a global comment..."]');
+    await act(() => {
+        Object.getOwnPropertyDescriptor(browser.HTMLTextAreaElement.prototype, "value").set.call(
+            input,
+            "Mode review note",
+        );
+        input.dispatchEvent(new browser.Event("input", { bubbles: true }));
+    });
+    await act(() =>
+        [...browser.document.querySelectorAll("button")].find((node) => node.textContent.trim() === "Add").click()
+    );
+}
+
+function actionLabels(container) {
+    return [...container.querySelectorAll(".rw-plannotator-actions button, .rw-review-feedback-action button")]
+        .map((node) => node.textContent.trim());
+}
+
+Deno.test("Code Review PR destination keeps only Forge actions, then switches to Engineer feedback", async () => {
+    await withReviewSurface(
+        { mode: "pr", forge: { available: true, postEnabled: true } },
+        async ({ browser, container, button }) => {
+            await addModeAnnotation({ browser, button });
+            assertEquals(actionLabels(container), ["Post to PR", "Engineer", "Post comments", "Approve"]);
+            await act(() => button("Engineer").click());
+            assertEquals(actionLabels(container), [
+                "Post to PR",
+                "Engineer",
+                "Send to Engineer",
+                "Send to Engineer",
+                "Add to Engineer chat",
+            ]);
+        },
+    );
+});
+
+Deno.test("Code Review branch page has Engineer feedback and no approval or Open PR", async () => {
+    await withReviewSurface({ mode: "branch" }, async ({ browser, container, button }) => {
+        await addModeAnnotation({ browser, button });
+        assertEquals(actionLabels(container), ["Send to Engineer", "Send to Engineer", "Add to Engineer chat"]);
+        assertEquals(container.textContent.includes("Open PR"), false);
+    });
+});
+
+Deno.test("Code Review uncommitted page has Engineer feedback and Operator approval", async () => {
+    await withReviewSurface(
+        { mode: "uncommitted", commit: { enabled: true } },
+        async ({ browser, container, button }) => {
+            await addModeAnnotation({ browser, button });
+            assertEquals(actionLabels(container), [
+                "Send to Engineer",
+                "Approve & Commit",
+                "Send to Engineer",
+                "Add to Engineer chat",
+            ]);
+            assertEquals(button("Approve & Commit").disabled, false);
+            assertEquals(
+                button("Approve & Commit").title,
+                "The Operator writes a commit message, commits, and pushes these changes.",
+            );
+        },
+    );
+});
+
+Deno.test("Code Review validation page retains approval and annotation feedback", async () => {
+    await withReviewSurface(undefined, async ({ browser, container, button }) => {
+        await addModeAnnotation({ browser, button });
+        assertEquals(actionLabels(container), ["OKApprove", "Send Annotations", "Add to Engineer chat"]);
+        assertEquals(button("OKApprove").disabled, false);
+        assertEquals(button("Send Annotations").disabled, false);
+    });
 });
