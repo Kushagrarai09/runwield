@@ -1722,7 +1722,7 @@ does not grant authority to change workflow-owned Plans, ADRs, or Work Records. 
 
 Optional Agent and delegated-definition `bashAllowedCommands` front matter limits RunWield-managed shell starts without
 granting the bash tool. Omission inherits a lower definition layer; absent from all layers means unrestricted bash. A
-list replaces the lower list, `[]` denies every command, and `null` resets the definition's inherited list to
+non-empty list adds to the lower list and removes duplicate entries, `[]` denies every command, and `null` resets the definition's inherited list to
 unrestricted. The child delegate's effective list intersects its parent's limit, so neither omission nor `null` can
 remove a parent's restriction. Guide and read delegates have inspection defaults. Read delegates also allow selected
 `gh` and `glab` commands for PR/MR, issue, and repository inspection, not forge mutation or arbitrary API calls. Write
@@ -1738,7 +1738,7 @@ boundary and does not control external CLI Execution Backends' native shells. Se
 - Given `planner.md` with the effective front matter name `Plan Designer`, when any Execution Backend emits Agent
   messages, the message headers and footer show `Plan Designer`; routing and saved Agent identity remain `planner`.
 - Given layered Agent definitions, when a higher layer omits `bashAllowedCommands`, its lower list remains; when it
-  supplies a list it replaces the lower list, `[]` denies all commands, and `null` resets the definition to unrestricted
+  supplies a non-empty list it adds to the lower list without duplicate entries, `[]` denies all commands, and `null` resets the definition to unrestricted
   bash. Invalid values fail with source-specific guidance instead of removing a limit silently.
 - Given Guide or a read-only delegate with effective bash access, when it runs an allowed Git or file inspection
   command, it can inspect the repository; an unapproved or compound command does not start and the denial lists allowed

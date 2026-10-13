@@ -526,7 +526,7 @@ bug-finding. _Avoid_: Unit test writer, test framework specialist
 
 **Agent Definition**: A markdown file with YAML front matter defining an Agent's display name, model, tools, and system
 prompt. An optional `bashAllowedCommands` list limits RunWield-managed bash and background shell starts without granting
-bash. Layered definitions inherit an omitted field, replace with a list, deny all with `[]`, or reset the definition's
+bash. Layered definitions inherit an omitted field, merge non-empty lists without duplicate entries, deny all with `[]`, or reset the definition's
 inherited list with `null`; an absent list means unrestricted bash. This best-effort filter is not a sandbox and does
 not limit external CLI native shells. _Avoid_: Agent def, agent prompt, agent config
 
@@ -883,7 +883,7 @@ _Avoid_: Durable prompt, recoverable continuation, database interaction record
   Proposal**. RunWield asks for a separate decision for each proposed predecessor in the interactive TUI and after
   interactive backfill.
 - Headless completion leaves each **Supersession Proposal** pending and reports `wld wr supersede
-  <successorRecordId>`
+<successorRecordId>`
   for later confirmation or rejection. The command also lists pending proposals and their reasons.
 - **Superseded Work Records** and **Archived Work Records** remain durable but are excluded from default planning
   retrieval. Supersession does not change a Work Record's completion mode or remove its applicable confidence notices
