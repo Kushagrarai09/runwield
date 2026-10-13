@@ -1,25 +1,28 @@
+import { rm, writeFile } from "node:fs/promises";
+import { makeTempDirectory } from "../../testing/temp-file.ts";
+import { test } from "node:test";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
-import { assertEquals } from "@std/assert";
+import { assertEquals } from "../../testing/assertions.ts";
 import { withRuntimeCommandFixture } from "../../cmd/testing/runtime-command-fixture.ts";
 import { defineGitFixture, git } from "../git-test-fixture.ts";
 import { resolveReviewTarget } from "./review-target.ts";
 import { runStandaloneReview } from "./review-loop.ts";
 const fixture = defineGitFixture(async (cwd) => {
-    await Deno.writeTextFile(`${cwd}/base.txt`, "base\n");
+    await writeFile(`${cwd}/base.txt`, "base\n");
     await git(cwd, ["add", "."]);
     await git(cwd, ["commit", "-m", "base"]);
 });
-Deno.test("review remains open after failed push and completes when the existing commit is published", async () => {
+test("review remains open after failed push and completes when the existing commit is published", async () => {
     await withRuntimeCommandFixture("review-publication-", async ({ setModelResponseFactories }) => {
         const cwd = await fixture.checkout();
-        const remote = await Deno.makeTempDir();
+        const remote = await makeTempDirectory();
         let browserRun = Promise.resolve();
         let completed = false;
         try {
             await git(remote, ["init", "--bare"]);
             await git(cwd, ["remote", "add", "origin", remote]);
             await git(cwd, ["push", "-u", "origin", "HEAD"]);
-            await Deno.writeTextFile(`${cwd}/edit.txt`, "approved\n");
+            await writeFile(`${cwd}/edit.txt`, "approved\n");
             setModelResponseFactories([
                 async () => {
                     await git(cwd, ["add", "."]);
@@ -73,8 +76,8 @@ Deno.test("review remains open after failed push and completes when the existing
             assertEquals(completed, true);
             assertEquals(await git(cwd, ["rev-parse", "HEAD"]), await git(cwd, ["rev-parse", "@{u}"]));
         } finally {
-            await Deno.remove(cwd, { recursive: true });
-            await Deno.remove(remote, { recursive: true });
+            await rm(cwd, { recursive: true });
+            await rm(remote, { recursive: true });
         }
     });
 });

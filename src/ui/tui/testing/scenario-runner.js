@@ -17,12 +17,12 @@ import process from "node:process";
  * Golden TUI scenario action runner and diagnostics helpers.
  */
 
-import { dirname, join, relative } from "@std/path";
+import { dirname, join, relative } from "node:path";
 import { createSessionRuntime } from "../../../shared/session/session-runtime.ts";
 import { RuntimeEventTypes } from "../../../shared/session/session-runtime-events.js";
 import { openFileSessionStore } from "../../../shared/session/file-session-store.ts";
-import { assert } from "@std/assert";
-import { extractYaml } from "@std/front-matter";
+import { ok as assert } from "node:assert/strict";
+import { extractYaml } from "../../../shared/front-matter.ts";
 import { PLAN_RUNTIME_FIELDS } from "../../../shared/workflow/controller-state.ts";
 import { readControllerRecord } from "../../../shared/workflow/controller-registry.ts";
 import { getCurrentSystemPrompt, getCurrentTools } from "@earendil-works/pi-ai";

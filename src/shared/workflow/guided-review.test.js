@@ -1,5 +1,5 @@
+import { assertEquals, assertStringIncludes } from "../../testing/assertions.ts";
 import { test } from "node:test";
-import { assertEquals, assertStringIncludes } from "@std/assert";
 import {
     buildFallbackGuidedReviewExplainer,
     buildGuidedReviewPolicy,
@@ -79,17 +79,26 @@ test("buildGuidedReviewPolicy auto-starts for auto recommendations", () => {
 test("buildFallbackGuidedReviewExplainer creates structured explainer blocks", () => {
     const guide = buildFallbackGuidedReviewExplainer({ diffText: DIFF });
     assertEquals(guide.schemaVersion, "1.0");
-    assertEquals(guide.sections[0].blocks.some((block) => block.type === "mermaid"), true);
-    assertEquals(guide.sections[0].blocks.some((block) => block.type === "diff"), true);
+    assertEquals(
+        guide.sections[0].blocks.some((block) => block.type === "mermaid"),
+        true,
+    );
+    assertEquals(
+        guide.sections[0].blocks.some((block) => block.type === "diff"),
+        true,
+    );
 });
 
 test("validateGuidedReviewExplainer adds coverage fallbacks for omitted changed files", () => {
-    const result = validateGuidedReviewExplainer({
-        schemaVersion: "1.0",
-        title: "Partial guide",
-        sections: [{ title: "Core", role: "core", blocks: [{ type: "diff", file: "src/a.js" }] }],
-        everythingElse: [],
-    }, { changedFiles: ["src/a.js", "src/b.js"] });
+    const result = validateGuidedReviewExplainer(
+        {
+            schemaVersion: "1.0",
+            title: "Partial guide",
+            sections: [{ title: "Core", role: "core", blocks: [{ type: "diff", file: "src/a.js" }] }],
+            everythingElse: [],
+        },
+        { changedFiles: ["src/a.js", "src/b.js"] },
+    );
 
     assertEquals(result.ok, true);
     if (!result.ok) throw new Error("expected valid guide");
@@ -97,24 +106,43 @@ test("validateGuidedReviewExplainer adds coverage fallbacks for omitted changed 
 });
 
 test("validateGuidedReviewExplainer rejects unsafe refs and widgets", () => {
-    const result = validateGuidedReviewExplainer({
-        schemaVersion: "1.0",
-        title: "Bad guide",
-        sections: [{
-            title: "Bad",
-            role: "test",
-            blocks: [
-                { type: "diff", file: "src/missing.js" },
-                { type: "widget", id: "bad", entry: "index.html", html: '<img src="https://example.com/x.png">' },
+    const result = validateGuidedReviewExplainer(
+        {
+            schemaVersion: "1.0",
+            title: "Bad guide",
+            sections: [
+                {
+                    title: "Bad",
+                    role: "test",
+                    blocks: [
+                        { type: "diff", file: "src/missing.js" },
+                        {
+                            type: "widget",
+                            id: "bad",
+                            entry: "index.html",
+                            html: '<img src="https://example.com/x.png">',
+                        },
+                    ],
+                },
             ],
-        }],
-    }, { changedFiles: ["src/a.js"] });
+        },
+        { changedFiles: ["src/a.js"] },
+    );
 
     assertEquals(result.ok, false);
     if (result.ok) throw new Error("expected validation failure");
-    assertEquals(result.errors.some((/** @type {string} */ error) => error.includes("changed file")), true);
-    assertEquals(result.errors.some((/** @type {string} */ error) => error.includes("external network")), true);
-    assertEquals(result.errors.some((/** @type {string} */ error) => error.includes("role must be one of")), true);
+    assertEquals(
+        result.errors.some((/** @type {string} */ error) => error.includes("changed file")),
+        true,
+    );
+    assertEquals(
+        result.errors.some((/** @type {string} */ error) => error.includes("external network")),
+        true,
+    );
+    assertEquals(
+        result.errors.some((/** @type {string} */ error) => error.includes("role must be one of")),
+        true,
+    );
 });
 
 test("buildGuidedReviewPrompt asks for strict JSON and Plan-grounded changed-file refs", () => {

@@ -1,17 +1,19 @@
 // @ts-nocheck: browser tests install happy-dom globals around the real React surface.
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { importTestBundle } from "../../testing/import-test-bundle.ts";
+import { test } from "node:test";
+import { assertEquals, assertStringIncludes } from "../../testing/assertions.ts";
 import { Window } from "happy-dom";
 import { act } from "react";
 import { build, stop } from "esbuild";
-import { fromFileUrl } from "@std/path";
+import { fileURLToPath } from "node:url";
 
 async function withReviewSurface(standaloneReview, verify) {
     const bundle = await build({
-        entryPoints: [fromFileUrl(new URL("./react/CodeReviewSurface.tsx", import.meta.url))],
+        entryPoints: [fileURLToPath(new URL("./react/CodeReviewSurface.tsx", import.meta.url))],
         banner: {
-            js: `import { createRequire } from "node:module"; const nodeRequire = createRequire(${
-                JSON.stringify(import.meta.url)
-            }); const require = (id) => nodeRequire(id.startsWith("file:") ? new URL(id).pathname : id);`,
+            js: `import { createRequire } from "node:module"; const nodeRequire = createRequire(${JSON.stringify(
+                import.meta.url,
+            )}); const require = (id) => nodeRequire(id.startsWith("file:") ? new URL(id).pathname : id);`,
         },
         define: { "import.meta.env": "{}" },
         bundle: true,
@@ -20,36 +22,36 @@ async function withReviewSurface(standaloneReview, verify) {
         jsx: "automatic",
         loader: { ".css": "empty", ".png": "dataurl" },
         alias: {
-            "@plannotator/shared": fromFileUrl(
+            "@plannotator/shared": fileURLToPath(
                 new URL("../../../third_party/plannotator/packages/shared", import.meta.url),
             ),
-            "@plannotator/core": fromFileUrl(
+            "@plannotator/core": fileURLToPath(
                 new URL("../../../third_party/plannotator/packages/core", import.meta.url),
             ),
-            "@plannotator/ui": fromFileUrl(
-                new URL("../../../third_party/plannotator/packages/ui", import.meta.url),
-            ),
-            "@plannotator/guide-viewer": fromFileUrl(
+            "@plannotator/ui": fileURLToPath(new URL("../../../third_party/plannotator/packages/ui", import.meta.url)),
+            "@plannotator/guide-viewer": fileURLToPath(
                 new URL("../../../third_party/plannotator/packages/guide-viewer", import.meta.url),
             ),
         },
-        plugins: [{
-            name: "shared-react",
-            setup(builder) {
-                builder.onResolve(
-                    { filter: /\?worker&inline$/ },
-                    (args) => ({ path: args.path, namespace: "browser-worker" }),
-                );
-                builder.onLoad(
-                    { filter: /.*/, namespace: "browser-worker" },
-                    () => ({ contents: "export default Worker;", loader: "js" }),
-                );
-                builder.onResolve(
-                    { filter: /^react(?:-dom)?(?:\/.*)?$/ },
-                    (args) => ({ path: import.meta.resolve(args.path), external: true }),
-                );
+        plugins: [
+            {
+                name: "shared-react",
+                setup(builder) {
+                    builder.onResolve({ filter: /\?worker&inline$/ }, (args) => ({
+                        path: args.path,
+                        namespace: "browser-worker",
+                    }));
+                    builder.onLoad({ filter: /.*/, namespace: "browser-worker" }, () => ({
+                        contents: "export default Worker;",
+                        loader: "js",
+                    }));
+                    builder.onResolve({ filter: /^react(?:-dom)?(?:\/.*)?$/ }, (args) => ({
+                        path: import.meta.resolve(args.path),
+                        external: true,
+                    }));
+                },
             },
-        }],
+        ],
     });
     stop();
     const browser = new Window({ url: "http://localhost/review" });
@@ -89,11 +91,12 @@ async function withReviewSurface(standaloneReview, verify) {
     const patch = "diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-old\n+new\n";
     try {
         for (const name of names) {
-            const value = name === "IS_REACT_ACT_ENVIRONMENT"
-                ? true
-                : typeof browser[name] === "function"
-                ? browser[name].bind(browser)
-                : browser[name];
+            const value =
+                name === "IS_REACT_ACT_ENVIRONMENT"
+                    ? true
+                    : typeof browser[name] === "function"
+                      ? browser[name].bind(browser)
+                      : browser[name];
             Object.defineProperty(globalThis, name, { configurable: true, writable: true, value });
         }
         globalThis.fetch = (url, options) => {
@@ -103,49 +106,50 @@ async function withReviewSurface(standaloneReview, verify) {
                 return Promise.resolve(Response.json({ ok: true }));
             }
             if (String(url).includes("/status")) {
-                return Promise.resolve(Response.json({
-                    revision,
-                    gitRef: revision ? "next-head" : "old-head",
-                    rawPatch: patch,
-                    standaloneReview: {
-                        mode: "pr",
-                        forge: { available: true, postEnabled: true },
-                        resultMessage: "PR head changed",
-                    },
-                }));
+                return Promise.resolve(
+                    Response.json({
+                        revision,
+                        gitRef: revision ? "next-head" : "old-head",
+                        rawPatch: patch,
+                        standaloneReview: {
+                            mode: "pr",
+                            forge: { available: true, postEnabled: true },
+                            resultMessage: "PR head changed",
+                        },
+                    }),
+                );
             }
             return Promise.resolve(Response.json({ available: false, providers: [] }));
         };
-        const { CodeReviewSurface } = await import(
-            `data:text/javascript,${encodeURIComponent(bundle.outputFiles[0].text)}`
-        );
+        const { CodeReviewSurface } = await importTestBundle(bundle.outputFiles[0].text);
         const container = browser.document.createElement("div");
         browser.document.body.append(container);
         const { createRoot } = await import("react-dom/client");
         root = createRoot(container);
-        await act(async () =>
-            await root.render(
-                <CodeReviewSurface
-                    payload={{
-                        mode: "standalone",
-                        token: "fixture",
-                        rawPatch: patch,
-                        gitRef: "old-head",
-                        conversationStatusUrl: "/status",
-                        feedbackUrl: "/feedback",
-                        denyUrl: "/deny",
-                        agentLabel: "Engineer",
-                        standaloneReview,
-                        guidedReview: { mode: "manual" },
-                        guidedReviewFixture: {
-                            schemaVersion: "1.0",
-                            title: "Retained guide",
-                            sections: [],
-                            everythingElse: [],
-                        },
-                    }}
-                />,
-            )
+        await act(
+            async () =>
+                await root.render(
+                    <CodeReviewSurface
+                        payload={{
+                            mode: "standalone",
+                            token: "fixture",
+                            rawPatch: patch,
+                            gitRef: "old-head",
+                            conversationStatusUrl: "/status",
+                            feedbackUrl: "/feedback",
+                            denyUrl: "/deny",
+                            agentLabel: "Engineer",
+                            standaloneReview,
+                            guidedReview: { mode: "manual" },
+                            guidedReviewFixture: {
+                                schemaVersion: "1.0",
+                                title: "Retained guide",
+                                sections: [],
+                                everythingElse: [],
+                            },
+                        }}
+                    />,
+                ),
         );
         const button = (text) =>
             [...container.querySelectorAll("button")].find((node) => node.textContent.trim() === text);
@@ -175,8 +179,8 @@ async function verifyRefresh(engineerTurn) {
                 );
                 input.dispatchEvent(new browser.Event("input", { bubbles: true }));
             });
-            const add = [...browser.document.querySelectorAll("button")].find((node) =>
-                node.textContent.trim() === "Add"
+            const add = [...browser.document.querySelectorAll("button")].find(
+                (node) => node.textContent.trim() === "Add",
             );
             await act(() => add.click());
             assertStringIncludes(container.textContent, "old anchored note");
@@ -206,8 +210,8 @@ async function verifyRefresh(engineerTurn) {
     );
 }
 
-Deno.test("refused PR post invalidates old annotations and marks the retained guide stale", () => verifyRefresh(false));
-Deno.test("unattached Engineer turn clears retained annotations before posting", () => verifyRefresh(true));
+test("refused PR post invalidates old annotations and marks the retained guide stale", () => verifyRefresh(false));
+test("unattached Engineer turn clears retained annotations before posting", () => verifyRefresh(true));
 
 async function addModeAnnotation({ browser, button }) {
     await act(() => button("Global comment").click());
@@ -220,16 +224,17 @@ async function addModeAnnotation({ browser, button }) {
         input.dispatchEvent(new browser.Event("input", { bubbles: true }));
     });
     await act(() =>
-        [...browser.document.querySelectorAll("button")].find((node) => node.textContent.trim() === "Add").click()
+        [...browser.document.querySelectorAll("button")].find((node) => node.textContent.trim() === "Add").click(),
     );
 }
 
 function actionLabels(container) {
-    return [...container.querySelectorAll(".rw-plannotator-actions button, .rw-review-feedback-action button")]
-        .map((node) => node.textContent.trim());
+    return [...container.querySelectorAll(".rw-plannotator-actions button, .rw-review-feedback-action button")].map(
+        (node) => node.textContent.trim(),
+    );
 }
 
-Deno.test("Code Review PR destination keeps only Forge actions, then switches to Engineer feedback", async () => {
+test("Code Review PR destination keeps only Forge actions, then switches to Engineer feedback", async () => {
     await withReviewSurface(
         { mode: "pr", forge: { available: true, postEnabled: true } },
         async ({ browser, container, button }) => {
@@ -247,7 +252,7 @@ Deno.test("Code Review PR destination keeps only Forge actions, then switches to
     );
 });
 
-Deno.test("Code Review branch page has Engineer feedback and no approval or Open PR", async () => {
+test("Code Review branch page has Engineer feedback and no approval or Open PR", async () => {
     await withReviewSurface({ mode: "branch" }, async ({ browser, container, button }) => {
         await addModeAnnotation({ browser, button });
         assertEquals(actionLabels(container), ["Send to Engineer", "Send to Engineer", "Add to Engineer chat"]);
@@ -255,7 +260,7 @@ Deno.test("Code Review branch page has Engineer feedback and no approval or Open
     });
 });
 
-Deno.test("Code Review uncommitted page has Engineer feedback and Operator approval", async () => {
+test("Code Review uncommitted page has Engineer feedback and Operator approval", async () => {
     await withReviewSurface(
         { mode: "uncommitted", commit: { enabled: true } },
         async ({ browser, container, button }) => {
@@ -275,7 +280,7 @@ Deno.test("Code Review uncommitted page has Engineer feedback and Operator appro
     );
 });
 
-Deno.test("Code Review validation page retains approval and annotation feedback", async () => {
+test("Code Review validation page retains approval and annotation feedback", async () => {
     await withReviewSurface(undefined, async ({ browser, container, button }) => {
         await addModeAnnotation({ browser, button });
         assertEquals(actionLabels(container), ["OKApprove", "Send Annotations", "Add to Engineer chat"]);

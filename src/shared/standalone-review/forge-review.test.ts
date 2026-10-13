@@ -1,15 +1,17 @@
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { rm, writeFile } from "node:fs/promises";
+import { test } from "node:test";
+import { assertEquals, assertStringIncludes } from "../../testing/assertions.ts";
 import type { PRRuntime } from "@plannotator/shared/pr-types.ts";
 import { mapReviewAnnotations, postForgeReview } from "./forge-review.ts";
 import { type PRReviewTarget, resolveReviewTargetWithForge } from "./review-target.ts";
 import { defineGitFixture, git } from "../git-test-fixture.ts";
 import { makeForgeFixture } from "./forge-test-fixture.ts";
 const fixture = defineGitFixture(async (cwd) => {
-    await Deno.writeTextFile(`${cwd}/base.txt`, "base\n");
+    await writeFile(`${cwd}/base.txt`, "base\n");
     await git(cwd, ["add", "."]);
     await git(cwd, ["commit", "-m", "base"]);
     await git(cwd, ["switch", "-c", "topic"]);
-    await Deno.writeTextFile(`${cwd}/change.txt`, "change\n");
+    await writeFile(`${cwd}/change.txt`, "change\n");
     await git(cwd, ["add", "."]);
     await git(cwd, ["commit", "-m", "topic"]);
     await git(cwd, ["switch", "main"]);
@@ -25,7 +27,7 @@ async function reviewFixture(cwd: string) {
     if (target.mode !== "pr") throw new Error("Expected PR target.");
     return { ...forge, target };
 }
-Deno.test("annotations preserve ranges, sides, file scope, and global body", () => {
+test("annotations preserve ranges, sides, file scope, and global body", () => {
     const result = mapReviewAnnotations("feedback", [
         { filePath: "a.ts", lineStart: 2, lineEnd: 4, side: "old", text: "range" },
         { filePath: "b.ts", lineStart: 5, lineEnd: 5, side: "new", text: "line" },
@@ -34,18 +36,21 @@ Deno.test("annotations preserve ranges, sides, file scope, and global body", () 
     ]);
     assertEquals(result, {
         body: "feedback\n\nglobal",
-        fileComments: [{ path: "a.ts", line: 4, start_line: 2, start_side: "LEFT", side: "LEFT", body: "range" }, {
-            path: "b.ts",
-            line: 5,
-            side: "RIGHT",
-            body: "line",
-        }],
+        fileComments: [
+            { path: "a.ts", line: 4, start_line: 2, start_side: "LEFT", side: "LEFT", body: "range" },
+            {
+                path: "b.ts",
+                line: 5,
+                side: "RIGHT",
+                body: "line",
+            },
+        ],
         fileLevelComments: [{ path: "c.ts", body: "file" }],
     });
 });
 
 for (const action of ["comment", "approve"] as const) {
-    Deno.test(`${action} submits its matching Forge action`, async () => {
+    test(`${action} submits its matching Forge action`, async () => {
         const cwd = await fixture.checkout();
         try {
             const { target, submissions } = await reviewFixture(cwd);
@@ -54,11 +59,11 @@ for (const action of ["comment", "approve"] as const) {
             assertStringIncludes(submissions[0], action === "comment" ? '"event":"COMMENT"' : '"event":"APPROVE"');
             assertStringIncludes(submissions[0], `"commit_id":"${target.metadata.headSha}"`);
         } finally {
-            await Deno.remove(cwd, { recursive: true });
+            await rm(cwd, { recursive: true });
         }
     });
 }
-Deno.test("changed PR head refuses posting", async () => {
+test("changed PR head refuses posting", async () => {
     const cwd = await fixture.checkout();
     try {
         const { target, submissions, moveHead } = await reviewFixture(cwd);
@@ -68,10 +73,10 @@ Deno.test("changed PR head refuses posting", async () => {
         assertStringIncludes(result.message, "head changed");
         assertEquals(submissions, []);
     } finally {
-        await Deno.remove(cwd, { recursive: true });
+        await rm(cwd, { recursive: true });
     }
 });
-Deno.test("GitLab partial review retains failed comment text", async () => {
+test("GitLab partial review retains failed comment text", async () => {
     const cwd = await fixture.checkout();
     try {
         const { target } = await reviewFixture(cwd);
@@ -82,15 +87,17 @@ Deno.test("GitLab partial review retains failed comment text", async () => {
                 Promise.resolve({
                     exitCode: 0,
                     stderr: "",
-                    stdout: args[1].endsWith("raw_diffs") ? "patch" : JSON.stringify({
-                        title: "MR",
-                        author: { username: "user" },
-                        target_branch: "main",
-                        source_branch: "topic",
-                        diff_refs: { base_sha: base, start_sha: base, head_sha: head },
-                        sha: head,
-                        web_url: "https://gitlab.com/org/repo/-/merge_requests/1",
-                    }),
+                    stdout: args[1].endsWith("raw_diffs")
+                        ? "patch"
+                        : JSON.stringify({
+                              title: "MR",
+                              author: { username: "user" },
+                              target_branch: "main",
+                              source_branch: "topic",
+                              diff_refs: { base_sha: base, start_sha: base, head_sha: head },
+                              sha: head,
+                              web_url: "https://gitlab.com/org/repo/-/merge_requests/1",
+                          }),
                 }),
             runCommandWithInput: (_cmd, args) =>
                 Promise.resolve({
@@ -126,10 +133,10 @@ Deno.test("GitLab partial review retains failed comment text", async () => {
         assertStringIncludes(result.message, "Do not lose this text");
         assertStringIncludes(result.message, "discussion refused");
     } finally {
-        await Deno.remove(cwd, { recursive: true });
+        await rm(cwd, { recursive: true });
     }
 });
-Deno.test("local PR worktree edits prevent Forge posting even when remote head is unchanged", async () => {
+test("local PR worktree edits prevent Forge posting even when remote head is unchanged", async () => {
     const cwd = await fixture.checkout();
     try {
         const { target, submissions } = await reviewFixture(cwd);
@@ -138,17 +145,17 @@ Deno.test("local PR worktree edits prevent Forge posting even when remote head i
         // A branch target reuses this real checkout. PR posting then checks its Git facts.
         const branchTarget = { ...target, mode: "branch" as const, branch: "topic", worktree: undefined };
         target.worktree = await ensureReviewWorktree(branchTarget);
-        await Deno.writeTextFile(`${cwd}/change.txt`, "local Engineer edit\n");
+        await writeFile(`${cwd}/change.txt`, "local Engineer edit\n");
         const result = await postForgeReview(target, { action: "comment", feedback: "notes", annotations: [] });
         assertEquals(result.status, "refused");
         assertStringIncludes(result.message, "Push the Engineer changes");
         assertEquals(submissions, []);
     } finally {
-        await Deno.remove(cwd, { recursive: true });
+        await rm(cwd, { recursive: true });
     }
 });
 
-Deno.test("cancel during metadata lookup prevents Forge submission", async () => {
+test("cancel during metadata lookup prevents Forge submission", async () => {
     const cwd = await fixture.checkout();
     try {
         const { target, submissions } = await reviewFixture(cwd);
@@ -162,17 +169,17 @@ Deno.test("cancel during metadata lookup prevents Forge submission", async () =>
                 return result;
             },
         };
-        const { assertRejects } = await import("@std/assert");
+        const { assertRejects } = await import("../../testing/assertions.ts");
         await assertRejects(() =>
             postForgeReview(target, {
                 action: "approve",
                 feedback: "",
                 annotations: [],
                 signal: controller.signal,
-            })
+            }),
         );
         assertEquals(submissions, []);
     } finally {
-        await Deno.remove(cwd, { recursive: true });
+        await rm(cwd, { recursive: true });
     }
 });

@@ -1,9 +1,12 @@
-import { assertEquals } from "@std/assert";
+import { rm } from "node:fs/promises";
+import { makeTempDirectory } from "../../../../testing/temp-file.ts";
+import { test } from "node:test";
+import { assertEquals } from "../../../../testing/assertions.ts";
 import { cleanupReviewAgentState, createReviewAgentState, reviewAgentApi } from "./review-agent-handlers.js";
 
-Deno.test("Guide uses the current lazy review workspace on each invocation", async () => {
-    const original = await Deno.makeTempDir();
-    const worktree = await Deno.makeTempDir();
+test("Guide uses the current lazy review workspace on each invocation", async () => {
+    const original = await makeTempDirectory();
+    const worktree = await makeTempDirectory();
     const directories: string[] = [];
     const state = createReviewAgentState({
         cwd: original,
@@ -35,7 +38,7 @@ Deno.test("Guide uses the current lazy review workspace on each invocation", asy
         assertEquals(directories, [original, worktree, original, original]);
     } finally {
         await cleanupReviewAgentState(state);
-        await Deno.remove(original, { recursive: true });
-        await Deno.remove(worktree, { recursive: true });
+        await rm(original, { recursive: true });
+        await rm(worktree, { recursive: true });
     }
 });

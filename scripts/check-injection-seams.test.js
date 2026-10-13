@@ -1,8 +1,8 @@
+import { assertEquals } from "../src/testing/assertions.ts";
 import { test } from "node:test";
 import { mkdir as fsMkdir, mkdtemp as fsMkdtemp, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { assertEquals } from "@std/assert";
 import {
     collectConditionalSeamKeys,
     collectConditionalSeams,

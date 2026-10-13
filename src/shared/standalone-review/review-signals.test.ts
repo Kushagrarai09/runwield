@@ -1,19 +1,22 @@
+import process from "node:process";
+import { rm, writeFile } from "node:fs/promises";
+import { test } from "node:test";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assertEquals, assertStringIncludes } from "../../testing/assertions.ts";
 import { withRuntimeCommandFixture } from "../../cmd/testing/runtime-command-fixture.ts";
 import { defineGitFixture, git } from "../git-test-fixture.ts";
 import { resolveReviewTarget } from "./review-target.ts";
 import { runStandaloneReview } from "./review-loop.ts";
 
 const fixture = defineGitFixture(async (cwd) => {
-    await Deno.writeTextFile(`${cwd}/file.txt`, "base\n");
+    await writeFile(`${cwd}/file.txt`, "base\n");
     await git(cwd, ["add", "."]);
     await git(cwd, ["commit", "-m", "base"]);
     await git(cwd, ["branch", "topic"]);
 });
 
 for (const hangup of [false, true]) {
-    Deno.test(
+    test(
         hangup
             ? "terminal hangup closes the Engineer Session and settles its worktree"
             : "unsupported signals do not prevent review startup",
@@ -21,24 +24,25 @@ for (const hangup of [false, true]) {
             await withRuntimeCommandFixture("review-signals-", async ({ setModelResponseFactories }) => {
                 const cwd = await fixture.checkout();
                 const target = await resolveReviewTarget(cwd, "topic");
-                const listeners = new Map<Deno.Signal, () => void>();
-                const add = Deno.addSignalListener;
-                const remove = Deno.removeSignalListener;
+                const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+                const previous = new Map(signals.map((signal) => [signal, process.listeners(signal)]));
+                const add = process.on;
                 const output: string[] = [];
                 let browserRun = Promise.resolve();
-                Deno.addSignalListener = (signal, listener) => {
-                    if (!hangup && signal !== "SIGINT") throw new Error("Signal not supported");
-                    listeners.set(signal, listener);
-                };
-                Deno.removeSignalListener = (signal) => {
-                    assertEquals(listeners.has(signal), true);
-                    listeners.delete(signal);
+                // Unsupported host signals still leave SIGINT on the native event emitter.
+                process.on = function (event: string | symbol, listener: () => void) {
+                    if (!hangup && (event === "SIGTERM" || event === "SIGHUP")) {
+                        throw new Error("Signal not supported");
+                    }
+                    return add.call(this, event, listener);
                 };
                 try {
-                    setModelResponseFactories([async () => {
-                        await Deno.writeTextFile(`${target.worktree!.path}/file.txt`, "Engineer edit\n");
-                        return fauxAssistantMessage("Edited.");
-                    }]);
+                    setModelResponseFactories([
+                        async () => {
+                            await writeFile(`${target.worktree!.path}/file.txt`, "Engineer edit\n");
+                            return fauxAssistantMessage("Edited.");
+                        },
+                    ]);
                     await runStandaloneReview(target, {
                         print: (text) => output.push(text),
                         browser: {
@@ -46,58 +50,51 @@ for (const hangup of [false, true]) {
                                 browserRun = (async () => {
                                     const url = new URL(link);
                                     if (hangup) {
-                                        const response = await fetch(
-                                            new URL(`/api/review/deny${url.search}`, url),
-                                            {
-                                                method: "POST",
-                                                headers: { "content-type": "application/json" },
-                                                body: JSON.stringify({
-                                                    conversationTurn: true,
-                                                    feedback: "Edit the file",
-                                                }),
-                                            },
-                                        );
+                                        const response = await fetch(new URL(`/api/review/deny${url.search}`, url), {
+                                            method: "POST",
+                                            headers: { "content-type": "application/json" },
+                                            body: JSON.stringify({
+                                                conversationTurn: true,
+                                                feedback: "Edit the file",
+                                            }),
+                                        });
                                         await response.text();
                                         for (let i = 0; i < 300; i++) {
                                             const response = await fetch(
                                                 new URL(`/api/review/conversation${url.search}`, url),
                                             );
                                             if ((await response.json()).revision > 0) {
-                                                const hangupListener = listeners.get("SIGHUP");
-                                                if (!hangupListener) {
+                                                if (process.listenerCount("SIGHUP") <= previous.get("SIGHUP")!.length) {
                                                     throw new Error("Terminal hangup has no cleanup handler");
                                                 }
-                                                hangupListener();
+                                                process.emit("SIGHUP");
                                                 return;
                                             }
                                             await new Promise((resolve) => setTimeout(resolve, 20));
                                         }
                                         throw new Error("Engineer did not refresh");
                                     }
-                                    const response = await fetch(new URL(`/api/review/exit${url.search}`, url), {
-                                        method: "POST",
-                                    });
-                                    await response.text();
+                                    assertEquals(process.listenerCount("SIGINT"), previous.get("SIGINT")!.length + 1);
+                                    process.emit("SIGINT");
                                 })();
-                                browserRun.catch(() => listeners.get("SIGINT")?.());
+                                browserRun.catch(() => process.emit("SIGINT"));
                                 return Promise.resolve(true);
                             },
                         },
                     });
                     await browserRun;
-                    assertEquals(listeners.size, 0);
+                    for (const signal of signals) assertEquals(process.listeners(signal), previous.get(signal));
                     assertStringIncludes(
                         output.join("\n"),
                         hangup ? "Resume Engineer: wld resume" : "No review worktree",
                     );
                     if (hangup) assertStringIncludes(output.join("\n"), "Review worktree kept:");
                 } finally {
-                    Deno.addSignalListener = add;
-                    Deno.removeSignalListener = remove;
+                    process.on = add;
                     if (target.worktree) {
-                        await Deno.remove(target.worktree.path, { recursive: true }).catch(() => {});
+                        await rm(target.worktree.path, { recursive: true }).catch(() => {});
                     }
-                    await Deno.remove(cwd, { recursive: true });
+                    await rm(cwd, { recursive: true });
                 }
             });
         },

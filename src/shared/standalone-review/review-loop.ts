@@ -1,3 +1,4 @@
+import process from "node:process";
 import { AGENTS } from "../../constants.js";
 import { createSessionRuntime } from "../session/session-runtime.ts";
 import { getAgentDisplayName } from "../session/agents.js";
@@ -38,13 +39,13 @@ export async function runStandaloneReview(
         controller.abort();
         if (sessionId) void runtime.cancelSession(sessionId);
     }
-    const signals: Deno.Signal[] = [];
+    const signals: NodeJS.Signals[] = [];
     let resultMessage = "";
     const approvalState: ApprovalPublicationState = {};
     try {
         for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
             try {
-                Deno.addSignalListener(signal, interruptReview);
+                process.on(signal, interruptReview);
                 signals.push(signal);
             } catch {
                 // Windows and some hosts do not support every signal.
@@ -60,9 +61,10 @@ export async function runStandaloneReview(
                 resultMessage,
             };
             if (target.mode === "pr") {
-                const clean = !target.worktree ||
-                    !(await git(cwd, ["status", "--porcelain"])) &&
-                        await git(cwd, ["rev-parse", "HEAD"]) === target.metadata.headSha;
+                const clean =
+                    !target.worktree ||
+                    (!(await git(cwd, ["status", "--porcelain"])) &&
+                        (await git(cwd, ["rev-parse", "HEAD"])) === target.metadata.headSha);
                 const cli = target.ref.platform === "github" ? "gh" : "glab";
                 let unavailableReason = "";
                 try {
@@ -87,14 +89,16 @@ export async function runStandaloneReview(
             }
             const decision = await runCodeReview({
                 planName: "Standalone Code Review",
-                gitRef: target.worktree || target.mode === "uncommitted"
-                    ? `Working tree (${target.gitRef})`
-                    : target.gitRef,
-                planTitle: target.mode === "pr"
-                    ? target.metadata.title
-                    : target.mode === "branch"
-                    ? `${target.branch} vs ${target.baseLabel}`
-                    : "Uncommitted changes",
+                gitRef:
+                    target.worktree || target.mode === "uncommitted"
+                        ? `Working tree (${target.gitRef})`
+                        : target.gitRef,
+                planTitle:
+                    target.mode === "pr"
+                        ? target.metadata.title
+                        : target.mode === "branch"
+                          ? `${target.branch} vs ${target.baseLabel}`
+                          : "Uncommitted changes",
                 diffText,
                 executionCwd: cwd,
                 browser,
@@ -107,11 +111,12 @@ export async function runStandaloneReview(
                     if (opened || conversation.revision === 0) print(`Code Review: ${url}`);
                 },
             });
-            if (decision.canceled || decision.exit && !decision.reviewAction) break;
+            if (decision.canceled || (decision.exit && !decision.reviewAction)) break;
             if (decision.reviewAction) {
                 try {
                     if (
-                        target.mode === "pr" && ["post_comments", "approve_pr"].includes(String(decision.reviewAction))
+                        target.mode === "pr" &&
+                        ["post_comments", "approve_pr"].includes(String(decision.reviewAction))
                     ) {
                         const result = await postForgeReview(target, {
                             action: decision.reviewAction === "approve_pr" ? "approve" : "comment",
@@ -163,17 +168,16 @@ export async function runStandaloneReview(
                         }
                     });
                 }
-                const context =
-                    `Standalone Code Review of ${target.mode}: ${target.gitRef}, base ${target.baseLabel}. ${
-                        target.reviewContext || ""
-                    }\nThe user directs commits and pushes. Work in ${worktree.path}.`;
+                const context = `Standalone Code Review of ${target.mode}: ${target.gitRef}, base ${target.baseLabel}. ${
+                    target.reviewContext || ""
+                }\nThe user directs commits and pushes. Work in ${worktree.path}.`;
                 try {
                     const result = await runtime.promptSession(sessionId, {
-                        initialRequest: `${context}\n\n${decision.feedback}\n\n${
-                            formatCodeReviewAnnotations(decision.annotations)
-                        }`,
+                        initialRequest: `${context}\n\n${decision.feedback}\n\n${formatCodeReviewAnnotations(
+                            decision.annotations,
+                        )}`,
                         initialImages: decision.images?.flatMap((image) =>
-                            "base64" in image ? [{ base64: image.base64, mimeType: image.mimeType }] : []
+                            "base64" in image ? [{ base64: image.base64, mimeType: image.mimeType }] : [],
                         ),
                         signal: controller.signal,
                         emitInitialEvents: false,
@@ -212,7 +216,7 @@ export async function runStandaloneReview(
                 try {
                     print((await settleReviewWorktree(target.worktree)).message);
                 } finally {
-                    for (const signal of signals) Deno.removeSignalListener(signal, interruptReview);
+                    for (const signal of signals) process.removeListener(signal, interruptReview);
                 }
             }
         }

@@ -319,7 +319,9 @@ document surfaces should feel consistent while keeping Plan lifecycle controls s
 
 ### Shared Plan collaboration
 
-**Scope and maturity:** Current self-hosted baseline; hosted deployment and additional browser actions remain deferred.
+**Scope and maturity:** Current self-hosted collaboration protocol. The repository's Bun container definitions are
+for testing and are not production-hardened; equivalent runtime filesystem/subprocess isolation is deferred.
+Hosted deployment and additional browser actions remain deferred.
 
 **Requirement: Share review revisions with explicit access.**
 
@@ -350,6 +352,8 @@ Shared review consumes [Core Plan review](runwield-core-prd.md#plan-review) and
 
 **Acceptance scenarios:**
 
+- In Bun's Workspace development server, Shared Space pages are available when the explicitly exported
+  `RUNWIELD_WORKSPACE_MODE` is `remote`; local or unset mode returns 404 for those pages.
 - Given a deliberately shared Plan, when a reviewer follows their link, they can comment and switch Revisions within
   that access without receiving maintainer secrets.
 - When the maintainer publishes a new review version or unshares, participants see the corresponding shared-review

@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { AGENTS } from "../../constants.js";
 import { createSessionRuntime } from "../session/session-runtime.ts";
 import { git } from "./git.ts";
@@ -8,7 +9,7 @@ export async function approveAndCommit(cwd: string, signal?: AbortSignal, state:
     const branch = await git(cwd, ["symbolic-ref", "--short", "HEAD"]).catch(() => "");
     if (!branch) return { ok: false, message: "Approve & Commit is unavailable in detached HEAD." };
     const currentHead = await git(cwd, ["rev-parse", "HEAD"]);
-    const before = state.baselineHead ??= currentHead;
+    const before = (state.baselineHead ??= currentHead);
     const pendingPush = currentHead !== before && !(await git(cwd, ["status", "--porcelain"]));
     const runtime = createSessionRuntime({ ownerProcessKind: "workspace" });
     const id = await runtime.createPromptReadySession({ cwd, agentName: AGENTS.OPERATOR });
@@ -19,7 +20,7 @@ export async function approveAndCommit(cwd: string, signal?: AbortSignal, state:
     signal?.addEventListener("abort", cancel, { once: true });
     try {
         if (signal?.aborted) throw new Error("Approve & Commit canceled.");
-        const template = await Deno.readTextFile(new URL("../../prompt-templates/commit.md", import.meta.url));
+        const template = await readFile(new URL("../../prompt-templates/commit.md", import.meta.url), "utf8");
         const result = await runtime.promptSession(id, {
             initialRequest: `${template.replace(/^---\n[\s\S]*?\n---\n/, "")}\n\n${
                 pendingPush
@@ -40,7 +41,7 @@ export async function approveAndCommit(cwd: string, signal?: AbortSignal, state:
     if (await git(cwd, ["status", "--porcelain"])) failures.push("working tree is not clean");
     const head = await git(cwd, ["rev-parse", "HEAD"]);
     if (head === before) failures.push("HEAD did not move");
-    if (await git(cwd, ["rev-parse", "@{u}"]).catch(() => "") !== head) {
+    if ((await git(cwd, ["rev-parse", "@{u}"]).catch(() => "")) !== head) {
         failures.push("@{u} does not equal HEAD (push failed or upstream is missing)");
     }
     if (turnError) failures.push(turnError);

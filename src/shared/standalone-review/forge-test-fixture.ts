@@ -13,21 +13,22 @@ export async function makeForgeFixture(cwd: string) {
             Promise.resolve({
                 exitCode: 0,
                 stderr: "",
-                stdout: args[0] === "pr" && args[1] === "view"
-                    ? JSON.stringify({
-                        id: "node",
-                        title: "Review title",
-                        body: "Review body",
-                        author: { login: "user" },
-                        baseRefName: "main",
-                        headRefName: "topic",
-                        baseRefOid: base,
-                        headRefOid: head,
-                        url: "https://github.com/org/repo/pull/1",
-                    })
-                    : args[0] === "repo"
-                    ? "main"
-                    : "",
+                stdout:
+                    args[0] === "pr" && args[1] === "view"
+                        ? JSON.stringify({
+                              id: "node",
+                              title: "Review title",
+                              body: "Review body",
+                              author: { login: "user" },
+                              baseRefName: "main",
+                              headRefName: "topic",
+                              baseRefOid: base,
+                              headRefOid: head,
+                              url: "https://github.com/org/repo/pull/1",
+                          })
+                        : args[0] === "repo"
+                          ? "main"
+                          : "",
             }),
         runCommandWithInput: (_cmd, _args, input) => {
             submissions.push(input);

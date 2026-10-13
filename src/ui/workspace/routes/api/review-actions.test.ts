@@ -1,9 +1,12 @@
-import { assertEquals } from "@std/assert";
+import { rm } from "node:fs/promises";
+import { makeTempDirectory } from "../../../../testing/temp-file.ts";
+import { test } from "node:test";
+import { assertEquals } from "../../../../testing/assertions.ts";
 import { createReviewWorkspaceApp } from "../../server.js";
 import { registerReviewDecisionPromise, unregisterReviewDecision } from "./review-handlers.js";
 for (const action of ["post_comments", "approve_pr", "approve_commit", "request_changes", "arbitrary"]) {
-    Deno.test(`review feedback validates ${action}`, async () => {
-        const cwd = await Deno.makeTempDir();
+    test(`review feedback validates ${action}`, async () => {
+        const cwd = await makeTempDirectory();
         const token = crypto.randomUUID();
         const pending = registerReviewDecisionPromise(token);
         const app = createReviewWorkspaceApp({ cwd, token, reviewPayload: {}, reviewType: "code" });
@@ -25,7 +28,7 @@ for (const action of ["post_comments", "approve_pr", "approve_commit", "request_
         } finally {
             unregisterReviewDecision(token);
             await app.cleanup();
-            await Deno.remove(cwd, { recursive: true });
+            await rm(cwd, { recursive: true });
         }
     });
 }

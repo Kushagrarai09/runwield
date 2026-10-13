@@ -1,7 +1,7 @@
 import { mkdir as fsMkdir, readFile as fsReadFile, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
 import { test } from "node:test";
-import { assertEquals, assertStringIncludes } from "@std/assert";
-import { join } from "@std/path";
+import { assertEquals, assertStringIncludes } from "../../testing/assertions.ts";
+import { join } from "node:path";
 import { withRuntimeCommandFixture } from "../../cmd/testing/runtime-command-fixture.ts";
 import { RuntimeEventTypes } from "../../shared/session/session-runtime-events.js";
 import { createSessionRuntime, type SessionRuntime } from "../../shared/session/session-runtime.ts";

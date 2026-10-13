@@ -1,16 +1,19 @@
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { makeTempDirectory } from "../../testing/temp-file.ts";
+import { test } from "node:test";
+import { assertEquals, assertStringIncludes } from "../../testing/assertions.ts";
 import { defineGitFixture, git } from "../git-test-fixture.ts";
 import { resolveReviewTarget, resolveReviewTargetWithForge } from "./review-target.ts";
 import { ensureReviewWorktree, settleReviewWorktree } from "./review-worktree.ts";
 const fixture = defineGitFixture(async (cwd) => {
-    await Deno.writeTextFile(`${cwd}/base.txt`, "base\n");
+    await writeFile(`${cwd}/base.txt`, "base\n");
     await git(cwd, ["add", "."]);
     await git(cwd, ["commit", "-m", "base"]);
     await git(cwd, ["branch", "topic"]);
     await git(cwd, ["branch", "--set-upstream-to=main", "topic"]);
 });
 for (const state of ["clean", "dirty", "unpushed"]) {
-    Deno.test(`settle ${state} review checkout protects work`, async () => {
+    test(`settle ${state} review checkout protects work`, async () => {
         const cwd = await fixture.checkout();
         let path = "";
         try {
@@ -19,7 +22,7 @@ for (const state of ["clean", "dirty", "unpushed"]) {
             const worktree = await ensureReviewWorktree(target);
             path = worktree.path;
             assertEquals(await ensureReviewWorktree(target), worktree);
-            if (state !== "clean") await Deno.writeTextFile(`${path}/edit.txt`, "engineer work\n");
+            if (state !== "clean") await writeFile(`${path}/edit.txt`, "engineer work\n");
             if (state === "unpushed") {
                 await git(path, ["add", "."]);
                 await git(path, ["commit", "-m", "work"]);
@@ -32,29 +35,29 @@ for (const state of ["clean", "dirty", "unpushed"]) {
             }
             assertEquals((await git(cwd, ["worktree", "list", "--porcelain"])).includes(path), state !== "clean");
         } finally {
-            if (path) await Deno.remove(path, { recursive: true }).catch(() => {});
-            await Deno.remove(cwd, { recursive: true });
+            if (path) await rm(path, { recursive: true }).catch(() => {});
+            await rm(cwd, { recursive: true });
         }
     });
 }
-Deno.test("existing branch checkout is reused and never removed", async () => {
+test("existing branch checkout is reused and never removed", async () => {
     const cwd = await fixture.checkout();
-    const path = await Deno.makeTempDir();
+    const path = await makeTempDirectory();
     try {
         await git(cwd, ["worktree", "add", path, "topic"]);
         const worktree = await ensureReviewWorktree(await resolveReviewTarget(cwd, "topic"));
         assertEquals(worktree.created, false);
-        assertEquals(await Deno.realPath(worktree.path), await Deno.realPath(path));
+        assertEquals(await realpath(worktree.path), await realpath(path));
         assertEquals((await settleReviewWorktree(worktree)).removed, false);
-        assertEquals((await Deno.stat(path)).isDirectory, true);
+        assertEquals((await stat(path)).isDirectory(), true);
     } finally {
-        await Deno.remove(path, { recursive: true });
-        await Deno.remove(cwd, { recursive: true });
+        await rm(path, { recursive: true });
+        await rm(cwd, { recursive: true });
     }
 });
 
 import { makeForgeFixture } from "./forge-test-fixture.ts";
-Deno.test("PR worktree checkout retries an occupied branch and removes its clean checkout", async () => {
+test("PR worktree checkout retries an occupied branch and removes its clean checkout", async () => {
     const cwd = await fixture.checkout();
     let path = "";
     const commands: string[][] = [];
@@ -85,13 +88,13 @@ Deno.test("PR worktree checkout retries an occupied branch and removes its clean
         assertEquals(await git(path, ["rev-parse", "HEAD"]), await git(cwd, ["rev-parse", "topic"]));
         assertEquals((await settleReviewWorktree(worktree)).removed, true);
     } finally {
-        if (path) await Deno.remove(path, { recursive: true }).catch(() => {});
-        await Deno.remove(cwd, { recursive: true });
+        if (path) await rm(path, { recursive: true }).catch(() => {});
+        await rm(cwd, { recursive: true });
     }
 });
 
 for (const changed of [false, true]) {
-    Deno.test(`failed Forge checkout ${changed ? "preserves edits and blocks Engineer" : "removes unused tree and retries setup"}`, async () => {
+    test(`failed Forge checkout ${changed ? "preserves edits and blocks Engineer" : "removes unused tree and retries setup"}`, async () => {
         const cwd = await fixture.checkout();
         let path = "";
         let failing = true;
@@ -105,7 +108,7 @@ for (const changed of [false, true]) {
                     runCommand: async () => {
                         path = worktreePath;
                         if (failing) {
-                            if (changed) await Deno.writeTextFile(`${path}/keep.txt`, "local work");
+                            if (changed) await writeFile(`${path}/keep.txt`, "local work");
                             return { exitCode: 1, stdout: "", stderr: "checkout failed" };
                         }
                         await git(path, ["switch", "-c", "review-ready"]);
@@ -113,20 +116,20 @@ for (const changed of [false, true]) {
                     },
                 }),
             );
-            const { assertRejects } = await import("@std/assert");
+            const { assertRejects } = await import("../../testing/assertions.ts");
             await assertRejects(() => ensureReviewWorktree(target), Error, "checkout failed");
             failing = false;
             if (changed) {
                 await assertRejects(() => ensureReviewWorktree(target), Error, "Local work is preserved");
-                assertEquals(await Deno.readTextFile(`${path}/keep.txt`), "local work");
+                assertEquals(await readFile(`${path}/keep.txt`, "utf8"), "local work");
             } else {
                 assertEquals(target.worktree, undefined);
                 const ready = await ensureReviewWorktree(target);
                 assertEquals(ready.branch, "review-ready");
             }
         } finally {
-            if (path) await Deno.remove(path, { recursive: true }).catch(() => {});
-            await Deno.remove(cwd, { recursive: true });
+            if (path) await rm(path, { recursive: true }).catch(() => {});
+            await rm(cwd, { recursive: true });
         }
     });
 }

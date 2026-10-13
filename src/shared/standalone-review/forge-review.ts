@@ -1,3 +1,4 @@
+import { captureForegroundProcess } from "../captured-process.ts";
 import { fetchPR, submitPRReview } from "@plannotator/shared/pr-provider.ts";
 import type { PRReviewFileComment, PRReviewFileLevelComment, PRRuntime } from "@plannotator/shared/pr-types.ts";
 import type { CodeReviewAnnotation } from "../../ui/review/code-review.ts";
@@ -7,19 +8,7 @@ import { git } from "./git.ts";
 export function createPRRuntime(cwd: string): PRRuntime {
     async function run(cmd: string, args: string[], input?: string) {
         try {
-            const child = new Deno.Command(cmd, {
-                cwd,
-                args,
-                stdin: input === undefined ? "null" : "piped",
-                stdout: "piped",
-                stderr: "piped",
-            }).spawn();
-            if (input !== undefined) {
-                const writer = child.stdin.getWriter();
-                await writer.write(new TextEncoder().encode(input));
-                await writer.close();
-            }
-            const result = await child.output();
+            const result = await captureForegroundProcess(cmd, { cwd, args, stdinText: input });
             return {
                 stdout: new TextDecoder().decode(result.stdout),
                 stderr: new TextDecoder().decode(result.stderr),
@@ -43,13 +32,15 @@ export function mapReviewAnnotations(feedback: string, annotations: CodeReviewAn
         const side = annotation.side === "old" ? "LEFT" : "RIGHT";
         if (annotation.scope === "general" || !path) body.push(text);
         else if (annotation.scope === "file" || typeof line !== "number") fileLevelComments.push({ path, body: text });
-        else {fileComments.push({
+        else {
+            fileComments.push({
                 path,
                 line,
                 side,
                 body: text,
                 ...(typeof start === "number" && start < line ? { start_line: start, start_side: side } : {}),
-            });}
+            });
+        }
     }
     return { body: body.filter(Boolean).join("\n\n"), fileComments, fileLevelComments };
 }
@@ -72,7 +63,8 @@ export async function postForgeReview(target: PRReviewTarget, options: PostRevie
         target.worktree &&
         ((await git(target.worktree.path, ["status", "--porcelain"])) ||
             (await git(target.worktree.path, ["rev-parse", "HEAD"])) !== metadata.headSha)
-    ) return { status: "refused" as const, message: "Push the Engineer changes before posting to the PR." };
+    )
+        return { status: "refused" as const, message: "Push the Engineer changes before posting to the PR." };
     const mapped = mapReviewAnnotations(options.feedback, options.annotations);
     options.signal?.throwIfAborted();
     const result = await submitPRReview(
@@ -87,11 +79,9 @@ export async function postForgeReview(target: PRReviewTarget, options: PostRevie
     if (result.status === "partial") {
         return {
             ...result,
-            message: `Review partially posted. ${
-                result.failedFileComments.map((failure) =>
-                    `${failure.comment.path}: ${failure.comment.body}: ${failure.error}`
-                ).join("\n")
-            } ${result.approvalError || ""}`,
+            message: `Review partially posted. ${result.failedFileComments
+                .map((failure) => `${failure.comment.path}: ${failure.comment.body}: ${failure.error}`)
+                .join("\n")} ${result.approvalError || ""}`,
         };
     }
     return { status: "posted" as const, message: options.action === "approve" ? "PR approved." : "Comments posted." };

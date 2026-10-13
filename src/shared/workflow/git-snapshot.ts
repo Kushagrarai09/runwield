@@ -7,7 +7,7 @@ import { readFile as fsReadFile, rm as fsRm, writeFile as fsWriteFile } from "no
  * Git tree snapshots for workflow-scoped validation diffs.
  */
 
-import { dirname, isAbsolute, join } from "@std/path";
+import { dirname, isAbsolute, join } from "node:path";
 import { assertGitRepository, GitRepositoryRequiredError } from "../git.ts";
 
 class GitCommandError extends Error {

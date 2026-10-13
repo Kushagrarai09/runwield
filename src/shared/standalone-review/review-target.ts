@@ -48,7 +48,7 @@ export async function refreshPRTarget(target: PRReviewTarget): Promise<void> {
         if (await git(cwd, ["status", "--porcelain"])) {
             target.recoveryReason =
                 "PR head changed. Local edits are preserved in the review worktree. Ask the Engineer to reconcile them before posting.";
-        } else if (await git(cwd, ["rev-parse", "HEAD"]) !== target.metadata.headSha) {
+        } else if ((await git(cwd, ["rev-parse", "HEAD"])) !== target.metadata.headSha) {
             target.recoveryReason =
                 "PR head changed. Local commits are preserved in the review worktree. Ask the Engineer to reconcile them before posting.";
         } else {
@@ -87,24 +87,28 @@ export async function resolveReviewTargetWithForge(
             gitRef: "Working tree",
             baseLabel: "HEAD",
             baseRef: "HEAD",
-            computeDiff: async (
-                cwd = projectRoot,
-            ) => (await getReviewDiff(cwd, { baseRef: "HEAD", head: { kind: "worktree" } })),
+            computeDiff: async (cwd = projectRoot) =>
+                await getReviewDiff(cwd, { baseRef: "HEAD", head: { kind: "worktree" } }),
         };
     }
     if (/^https?:\/\//.test(arg)) {
         const ref = parsePRUrl(arg);
         if (
             !ref ||
-            !/^https?:\/\/[^/]+\/(?:[^/]+\/[^/]+\/pull\/\d+|.+\/-\/merge_requests\/\d+)(?:\/(?:files|commits|diffs))?\/?$/
-                .test(arg)
-        ) throw new Error("Expected a PR or MR URL.");
+            !/^https?:\/\/[^/]+\/(?:[^/]+\/[^/]+\/pull\/\d+|.+\/-\/merge_requests\/\d+)(?:\/(?:files|commits|diffs))?\/?$/.test(
+                arg,
+            )
+        )
+            throw new Error("Expected a PR or MR URL.");
         const project = ref.platform === "github" ? `${ref.owner}/${ref.repo}` : ref.projectPath;
-        const remote = (await git(projectRoot, ["remote", "-v"])).split("\n").map((line) => line.split(/\s+/)).find((
-            entry,
-        ) => parseRemoteHost(entry[1])?.toLowerCase() === ref.host.toLowerCase() &&
-            parseRemoteUrl(entry[1])?.toLowerCase() === project.toLowerCase()
-        )?.[0];
+        const remote = (await git(projectRoot, ["remote", "-v"]))
+            .split("\n")
+            .map((line) => line.split(/\s+/))
+            .find(
+                (entry) =>
+                    parseRemoteHost(entry[1])?.toLowerCase() === ref.host.toLowerCase() &&
+                    parseRemoteUrl(entry[1])?.toLowerCase() === project.toLowerCase(),
+            )?.[0];
         if (!remote) {
             throw new Error(
                 "The PR repository must match a remote of this checkout. RunWield does not clone repositories.",
@@ -128,12 +132,11 @@ export async function resolveReviewTargetWithForge(
             baseRef: metadata.baseSha,
             baseLabel: metadata.baseBranch,
             gitRef: metadata.headSha,
-            computeDiff: async (
-                cwd = target.worktree?.path || projectRoot,
-            ) => (await getReviewDiff(cwd, {
-                baseRef: target.baseRef,
-                head: target.worktree ? { kind: "worktree" } : { kind: "ref", ref: target.metadata.headSha },
-            })),
+            computeDiff: async (cwd = target.worktree?.path || projectRoot) =>
+                await getReviewDiff(cwd, {
+                    baseRef: target.baseRef,
+                    head: target.worktree ? { kind: "worktree" } : { kind: "ref", ref: target.metadata.headSha },
+                }),
         };
         await refreshPRTarget(target);
         const context = await fetchPRContext(runtime, ref);
@@ -156,12 +159,11 @@ export async function resolveReviewTargetWithForge(
         gitRef: `refs/heads/${arg}`,
         baseLabel: current,
         baseRef,
-        computeDiff: async (
-            cwd = target.worktree?.path || projectRoot,
-        ) => (await getReviewDiff(cwd, {
-            baseRef,
-            head: target.worktree ? { kind: "worktree" } : { kind: "ref", ref: `refs/heads/${arg}` },
-        })),
+        computeDiff: async (cwd = target.worktree?.path || projectRoot) =>
+            await getReviewDiff(cwd, {
+                baseRef,
+                head: target.worktree ? { kind: "worktree" } : { kind: "ref", ref: `refs/heads/${arg}` },
+            }),
     };
     return target;
 }

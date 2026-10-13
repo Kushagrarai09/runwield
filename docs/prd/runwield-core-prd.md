@@ -667,6 +667,19 @@ and siblings active. Listings keep held work distinct from active and finished w
 
 ### Execution, validation, and recovery
 
+**Requirement: Isolate missing execution Plan documents.**
+
+A missing execution Plan document must not block catalog reads or validation identity preparation for other Plans. The
+catalog excludes that Plan rather than using its stale primary copy. Its registered Plan ID stays reserved. Loading the
+affected Plan still reports the missing authoritative file and preserves all work and runtime state.
+
+**Acceptance scenarios:**
+
+- Given two Plans and a missing execution document for one, catalog reads and validation identity preparation for the
+  other succeed. Neither operation changes the missing Plan's primary copy or registry entry.
+- Given that missing document, loading its Plan reports the exact execution path and does not use the primary copy.
+- Given a new Plan, identity assignment does not reuse the registered ID of a Plan whose execution document is missing.
+
 Delivery evidence must describe its stage accurately. Finalizing a prepared Work Record adds deterministic current
 metadata and preserves recorder prose as historical pre-publication notes; pending-publication and provisional test
 caveats must not remain the current Summary. Deferred work and confirmed deviations remain available. Publication

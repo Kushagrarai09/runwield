@@ -1,16 +1,18 @@
+import { rm, writeFile } from "node:fs/promises";
+import { test } from "node:test";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assertEquals, assertStringIncludes } from "../../testing/assertions.ts";
 import { withRuntimeCommandFixture } from "../../cmd/testing/runtime-command-fixture.ts";
 import { defineGitFixture, git } from "../git-test-fixture.ts";
 import { resolveReviewTarget, resolveReviewTargetWithForge } from "./review-target.ts";
 import { runStandaloneReview } from "./review-loop.ts";
 const fixture = defineGitFixture(async (cwd) => {
-    await Deno.writeTextFile(`${cwd}/base.txt`, "base\n");
+    await writeFile(`${cwd}/base.txt`, "base\n");
     await git(cwd, ["add", "."]);
     await git(cwd, ["commit", "-m", "base"]);
     await git(cwd, ["switch", "-c", "topic"]);
-    await Deno.writeTextFile(`${cwd}/base.txt`, "selected head\n");
-    await Deno.writeTextFile(`${cwd}/topic-only.txt`, "topic only\n");
+    await writeFile(`${cwd}/base.txt`, "selected head\n");
+    await writeFile(`${cwd}/topic-only.txt`, "topic only\n");
     await git(cwd, ["add", "."]);
     await git(cwd, ["commit", "-m", "topic content"]);
     await git(cwd, ["switch", "main"]);
@@ -33,7 +35,7 @@ async function decide(url: URL, endpoint: string, body: Record<string, string | 
     });
     await response.text();
 }
-Deno.test("Engineer uses one real saved Session and refreshes its edited worktree diff", async () => {
+test("Engineer uses one real saved Session and refreshes its edited worktree diff", async () => {
     await withRuntimeCommandFixture("standalone-loop-", async ({ setModelResponseFactories }) => {
         const cwd = await fixture.checkout();
         let path = "";
@@ -44,17 +46,21 @@ Deno.test("Engineer uses one real saved Session and refreshes its edited worktre
             setModelResponseFactories([
                 () => {
                     path = target.worktree!.path;
-                    return fauxAssistantMessage(fauxToolCall("write", {
-                        path: "engineer.txt",
-                        content: "Engineer change\n",
-                    }));
+                    return fauxAssistantMessage(
+                        fauxToolCall("write", {
+                            path: "engineer.txt",
+                            content: "Engineer change\n",
+                        }),
+                    );
                 },
                 () => fauxAssistantMessage("I changed the file."),
                 () =>
-                    fauxAssistantMessage(fauxToolCall("write", {
-                        path: "engineer.txt",
-                        content: "Engineer change\nFollow-up edit\n",
-                    })),
+                    fauxAssistantMessage(
+                        fauxToolCall("write", {
+                            path: "engineer.txt",
+                            content: "Engineer change\nFollow-up edit\n",
+                        }),
+                    ),
                 () => fauxAssistantMessage("I kept the earlier edit and applied the follow-up."),
             ]);
             await runStandaloneReview(target, {
@@ -64,12 +70,10 @@ Deno.test("Engineer uses one real saved Session and refreshes its edited worktre
                         browserRun = (async () => {
                             const url = new URL(link);
                             const before = await status(url);
-                            for (
-                                const [file, contents] of [["base.txt", "selected head\n"], [
-                                    "topic-only.txt",
-                                    "topic only\n",
-                                ]]
-                            ) {
+                            for (const [file, contents] of [
+                                ["base.txt", "selected head\n"],
+                                ["topic-only.txt", "topic only\n"],
+                            ]) {
                                 const response = await fetch(
                                     new URL(`/api/file-content${url.search}&path=${file}`, url),
                                 );
@@ -133,12 +137,12 @@ Deno.test("Engineer uses one real saved Session and refreshes its edited worktre
             assertStringIncludes(output.join("\n"), "wld resume");
             assertStringIncludes(output.join("\n"), "kept:");
         } finally {
-            if (path) await Deno.remove(path, { recursive: true }).catch(() => {});
-            await Deno.remove(cwd, { recursive: true });
+            if (path) await rm(path, { recursive: true }).catch(() => {});
+            await rm(cwd, { recursive: true });
         }
     });
 });
-Deno.test("cancel review makes no commit, creates no worktree, and starts no Engineer", async () => {
+test("cancel review makes no commit, creates no worktree, and starts no Engineer", async () => {
     const cwd = await fixture.checkout();
     let browserRun = Promise.resolve();
     const output: string[] = [];
@@ -157,15 +161,18 @@ Deno.test("cancel review makes no commit, creates no worktree, and starts no Eng
         await browserRun;
         assertEquals(await git(cwd, ["rev-parse", "HEAD"]), head);
         assertEquals(await git(cwd, ["worktree", "list", "--porcelain"]), worktrees);
-        assertEquals(output.some((line) => line.startsWith("Engineer Session:")), false);
+        assertEquals(
+            output.some((line) => line.startsWith("Engineer Session:")),
+            false,
+        );
         assertStringIncludes(output.join("\n"), "No review worktree");
     } finally {
-        await Deno.remove(cwd, { recursive: true });
+        await rm(cwd, { recursive: true });
     }
 });
 
 import { makeForgeFixture } from "./forge-test-fixture.ts";
-Deno.test("Post comments submits once, shows completion, and ends without Engineer workspace", async () => {
+test("Post comments submits once, shows completion, and ends without Engineer workspace", async () => {
     const cwd = await fixture.checkout();
     let browserRun = Promise.resolve();
     try {
@@ -205,10 +212,10 @@ Deno.test("Post comments submits once, shows completion, and ends without Engine
         assertEquals(forge.submissions.length, 1);
         assertEquals(target.worktree, undefined);
     } finally {
-        await Deno.remove(cwd, { recursive: true });
+        await rm(cwd, { recursive: true });
     }
 });
-Deno.test("a changed PR head refuses submission, refreshes the diff, and stays open for cancellation", async () => {
+test("a changed PR head refuses submission, refreshes the diff, and stays open for cancellation", async () => {
     const cwd = await fixture.checkout();
     let browserRun = Promise.resolve();
     const output: string[] = [];
@@ -232,7 +239,7 @@ Deno.test("a changed PR head refuses submission, refreshes the diff, and stays o
                         );
                         assertEquals((await selectedContent.json()).newContent, "selected head\n");
                         await git(cwd, ["switch", "topic"]);
-                        await Deno.writeTextFile(`${cwd}/moved.txt`, "remote head change\n");
+                        await writeFile(`${cwd}/moved.txt`, "remote head change\n");
                         await git(cwd, ["add", "."]);
                         await git(cwd, ["commit", "-m", "remote move"]);
                         const moved = await git(cwd, ["rev-parse", "HEAD"]);
@@ -270,6 +277,6 @@ Deno.test("a changed PR head refuses submission, refreshes the diff, and stays o
         assertEquals(forge.submissions.length, 0);
         assertStringIncludes(output.join("\n"), "head changed");
     } finally {
-        await Deno.remove(cwd, { recursive: true });
+        await rm(cwd, { recursive: true });
     }
 });
