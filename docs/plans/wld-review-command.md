@@ -30,6 +30,12 @@ userVerifiedAt: null
 targetBranch: "main"
 deliveryBranch: "plan/wld-review-command"
 status: "reviewed"
+validatedCommit: "1441851d48b5976803dd7913c91bb364e99c0e28"
+workRecord:
+    status: "generated"
+    recordId: "42299407-d261-4d55-ae9f-d7cd2c56fbe2"
+    path: "docs/work-records/2026-10-13-standalone-code-review-with-wld-review.md"
+    lastAttemptAt: "2026-10-13T13:21:13.659Z"
 ---
 
 # Add the `wld review` Command
