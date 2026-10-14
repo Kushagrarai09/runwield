@@ -400,7 +400,7 @@
     "src/shared/workflow/plan-lifecycle.test.js",
     "src/shared/workflow/plan-location.integration.test.ts",
     "src/shared/workflow/plan-review-actions.test.ts",
-    "src/shared/workflow/plan-review-recovery.test.js",
+    "src/shared/workflow/plan-review-recovery.test.ts",
     "src/shared/workflow/planning-worktree.test.ts",
     "src/shared/workflow/publication-attempt.test.ts",
     "src/shared/workflow/publication-index-recovery.test.ts",
