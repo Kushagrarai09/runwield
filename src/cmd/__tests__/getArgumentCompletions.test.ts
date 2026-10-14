@@ -12,7 +12,10 @@ import { withProcessGlobalTestLock } from "../../testing/process-global-lock.ts"
 
 test("getAgentCompletions includes router", async () => {
     const items = await getAgentCompletions("ro");
-    assertEquals(items.some((i) => i.value === "router"), true);
+    assertEquals(
+        items.some((i) => i.value === "router"),
+        true,
+    );
 });
 
 test("getModelCompletions can find by provider prefix", async () => {
@@ -76,17 +79,20 @@ test("getLoadPlanCompletions sorts loadable plans by workflow priority", async (
 
             process.chdir(tempDir);
             const items = await getLoadPlanCompletions("");
-            assertEquals(items.map((item) => item.value), [
-                "failed-plan",
-                "implemented-plan",
-                "a-ready-epic",
-                "b-ready-epic",
-                "ready-feature",
-                "decompose-epic",
-                "draft-plan",
-                "z-verified",
-                "held-plan",
-            ]);
+            assertEquals(
+                items.map((item) => item.value),
+                [
+                    "failed-plan",
+                    "implemented-plan",
+                    "a-ready-epic",
+                    "b-ready-epic",
+                    "ready-feature",
+                    "decompose-epic",
+                    "draft-plan",
+                    "z-verified",
+                    "held-plan",
+                ],
+            );
         } finally {
             process.chdir(originalCwd);
             await fsRm(tempDir, { recursive: true });

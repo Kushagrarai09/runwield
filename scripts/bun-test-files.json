@@ -63,7 +63,7 @@
     "src/cli-onboarding.test.ts",
     "src/cli-startup.test.ts",
     "src/cmd/__tests__/command-helpers.test.js",
-    "src/cmd/__tests__/getArgumentCompletions.test.js",
+    "src/cmd/__tests__/getArgumentCompletions.test.ts",
     "src/cmd/__tests__/registry.test.ts",
     "src/cmd/acp/shutdown.test.ts",
     "src/cmd/agents/index.test.ts",
