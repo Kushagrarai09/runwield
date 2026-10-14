@@ -10,8 +10,12 @@ const supervisor = fileURLToPath(new URL("./runtime-supervisor.ts", import.meta.
 const fixture = fileURLToPath(new URL("./testing/runtime-supervisor-child.ts", import.meta.url));
 
 function run(mode: string, limited = false) {
-    const command = limited ? "/bin/sh" : process.execPath;
-    const args = limited ? ["-c", 'ulimit -n 64; exec "$@"', "sh", process.execPath, fixture, mode] : [fixture, mode];
+    const crash = limited || mode === "abort";
+    const command = crash ? "/bin/sh" : process.execPath;
+    // Exercise native aborts without waiting for the host's core-dump service.
+    const args = crash
+        ? ["-c", `ulimit -c 0; ${limited ? "ulimit -n 64; " : ""}exec "$@"`, "sh", process.execPath, fixture, mode]
+        : [fixture, mode];
     return spawnSync(
         process.execPath,
         [
@@ -130,7 +134,7 @@ test(
                 "--eval",
                 `
         import { superviseRuntime } from ${JSON.stringify(supervisor)};
-        const code = await superviseRuntime("/bin/sh", ${JSON.stringify(["-c", 'ulimit -n 64; exec "$@"', "sh", process.execPath, fixture, "tty-image-exhaustion"])});
+        const code = await superviseRuntime("/bin/sh", ${JSON.stringify(["-c", 'ulimit -c 0; ulimit -n 64; exec "$@"', "sh", process.execPath, fixture, "tty-image-exhaustion"])});
         const hold = setInterval(() => {}, 1000);
         const released = new Promise((resolve) => process.once("SIGTERM", resolve));
         console.log("SUPERVISOR_READY");
