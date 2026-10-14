@@ -501,7 +501,7 @@
     "src/tools/work-record-search.test.ts",
     "src/ui/design-system/components/react/RunWieldMascot.test.tsx",
     "src/ui/design-system/components/react/useDocumentPrintMode.test.tsx",
-    "src/ui/design-system/design-system.test.js",
+    "src/ui/design-system/design-system.test.ts",
     "src/ui/design-system/sidebar-motion.test.ts",
     "src/ui/design-system/theme-bridge.test.ts",
     "src/ui/mascot/mascot.test.ts",
