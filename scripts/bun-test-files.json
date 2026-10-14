@@ -457,7 +457,7 @@
     "src/shared/worktree-merge-risk.test.js",
     "src/shared/worktree-merge.test.js",
     "src/shared/worktree-project-context.test.ts",
-    "src/shared/worktree-registry-restore.test.js",
+    "src/shared/worktree-registry-restore.test.ts",
     "src/shared/worktree-registry.test.js",
     "src/shared/worktree-runtime-state-isolation.test.js",
     "src/testing/assertions.test.ts",
