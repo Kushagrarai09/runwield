@@ -21,12 +21,7 @@ import {
 } from "./git-snapshot.ts";
 import { GitRepositoryRequiredError } from "../git.ts";
 
-/**
- * @param {string} cwd
- * @param {string[]} args
- * @returns {Promise<string>}
- */
-async function git(cwd, args) {
+async function git(cwd: string, args: string[]): Promise<string> {
     const { code, stdout, stderr } = await captureForegroundProcess("git", { cwd, args });
     const decoder = new TextDecoder();
     const out = decoder.decode(stdout);
