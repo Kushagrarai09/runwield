@@ -7,6 +7,19 @@ import { superviseRuntime } from "../runtime-supervisor.ts";
 
 const mode = process.argv[2];
 if (process.platform === "linux" && ["abort", "image-exhaustion", "tty-image-exhaustion"].includes(mode)) {
+    // Piped core collectors can ignore RLIMIT_CORE. Change only this intentional crash process.
+    const { dlopen } = await import("bun:ffi");
+    const libc = dlopen("libc.so.6", {
+        prctl: { args: ["i32", "u64", "u64", "u64", "u64"], returns: "i32" },
+    });
+    try {
+        const PR_SET_DUMPABLE = 4;
+        if (libc.symbols.prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) !== 0) {
+            throw new Error("Cannot disable core dumps in the native crash fixture");
+        }
+    } finally {
+        libc.close();
+    }
     console.error("Native crash fixture:", process.pid, readFileSync("/proc/sys/kernel/core_pattern", "utf8").trim());
 }
 if (mode === "image-exhaustion" || mode === "supervisor-exhaustion" || mode === "tty-image-exhaustion") {
