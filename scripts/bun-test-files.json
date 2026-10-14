@@ -448,7 +448,7 @@
     "src/shared/workflow/validation-work-record-handoff.test.ts",
     "src/shared/workflow/workflow-document-authority.integration.test.ts",
     "src/shared/workflow/workflow-presentation.test.ts",
-    "src/shared/workflow/workflow-prompts.test.js",
+    "src/shared/workflow/workflow-prompts.test.ts",
     "src/shared/workflow/workflow-results.test.js",
     "src/shared/workflow/workflow-results.test.ts",
     "src/shared/workflow/workflow-slicer.integration.test.ts",
