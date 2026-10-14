@@ -782,7 +782,8 @@ The CLI runs each command inside a supervised runtime. The supervisor remains ou
 file-descriptor budget. If the working runtime aborts, the supervisor restores terminal input and display modes,
 reports a nonzero exit, and explains recognized file-descriptor, memory, or process/thread exhaustion on stderr.
 Standard input and stdout remain available to protocol commands without added protocol output. Catchable resource
-errors during interactive submission show the same guidance and restore the draft.
+errors during interactive submission show the same guidance and restore the draft. After the working runtime exits,
+the supervisor drains final stderr diagnostics without waiting for unrelated services to close inherited stderr.
 
 The supervisor does not delete saved work, change workflow state, or replay the failed command. After the external
 resource limit is resolved, `wld --continue` reopens the last saved Session through the normal recovery path. A native
@@ -798,6 +799,8 @@ Acceptance scenarios:
 - Given a catchable submission error, the interactive interface restores the draft and explains the resource limit.
 - Given ordinary completion or cancellation, the supervisor preserves command output, forwards termination signals,
   and retains the runtime's exit status without adding resource-limit advice.
+- Given a detached service that retains stderr, when the command exits, the supervisor returns the command's status
+  while the service remains running. A slow stderr consumer does not hide a final resource diagnostic.
 
 **Requirement: Replanning preserves the existing implementation.**
 

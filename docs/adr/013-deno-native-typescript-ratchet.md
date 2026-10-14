@@ -43,6 +43,10 @@ in a child process with inherited stdin and stdout. The supervisor forwards stde
 forwards termination signals, and restores terminal modes after failure. This boundary applies to private entries and
 protocol commands as well as interactive commands. Source-run and compiled invocations use the same boundary.
 
+The supervisor observes runtime exit rather than closure of a shared stderr pipe. It allows a short drain window for
+final diagnostics. A blocked output destination does not consume that window. Detached services can retain stderr
+without holding the CLI open; the supervisor does not terminate those services.
+
 This process boundary is required because native runtime aborts, including image-worker event-loop creation under
 file-descriptor exhaustion, bypass JavaScript exception handlers. A shared error classifier gives interactive handlers
 and the supervisor consistent OS-resource guidance. Supervision does not retry a command because its external effects

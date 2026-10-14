@@ -2,12 +2,21 @@ import { test } from "node:test";
 import { strict as assert } from "node:assert";
 import { spawn, spawnSync } from "node:child_process";
 import process from "node:process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resourceExhaustionMessage } from "./resource-exhaustion.ts";
 import { Terminal, spawn as spawnPty } from "bun";
 
 const supervisor = fileURLToPath(new URL("./runtime-supervisor.ts", import.meta.url));
 const fixture = fileURLToPath(new URL("./testing/runtime-supervisor-child.ts", import.meta.url));
+
+function runtimeEnvironment() {
+    // The isolated runner enables Bun's orphan watchdog. These fixtures own
+    // their service cleanup and must test the supervisor without that watchdog.
+    return { ...process.env, BUN_FEATURE_FLAG_NO_ORPHANS: "0" };
+}
 
 function run(mode: string, limited = false) {
     // Intentional aborts must not wait for the host's core-dump collector.
@@ -25,8 +34,17 @@ function run(mode: string, limited = false) {
         process.exitCode = await superviseRuntime(${JSON.stringify(command)}, ${JSON.stringify(args)});
     `,
         ],
-        { input: "protocol input\n", encoding: "utf8", timeout: 15_000 },
+        { input: "protocol input\n", encoding: "utf8", timeout: 15_000, env: runtimeEnvironment() },
     );
+}
+
+function stopService(pid: number) {
+    if (!Number.isSafeInteger(pid) || pid <= 0) return;
+    try {
+        process.kill(pid, "SIGTERM");
+    } catch {
+        /* Service already exited. */
+    }
 }
 
 test("resource errors explain descriptor and memory limits through nested causes", () => {
@@ -66,7 +84,7 @@ test("source CLI preserves Bun runtime preloads in the working process", () => {
             fileURLToPath(new URL("../cli.ts", import.meta.url)),
             "--version",
         ],
-        { encoding: "utf8", timeout: 15_000 },
+        { encoding: "utf8", timeout: 15_000, env: runtimeEnvironment() },
     );
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /^runwield /);
@@ -86,21 +104,59 @@ test("supervisor flushes forwarded stderr before the launcher exits", () => {
 });
 
 test("supervisor does not wait for a service that inherited stderr", () => {
-    const started = performance.now();
     const result = run("service");
     const pid = Number(result.stdout.trim());
     try {
         assert.equal(result.status, 0);
         assert.equal(result.stderr, "");
-        assert.ok(performance.now() - started < 3000, "a successful command must not wait for its service");
+        assert.ok(Number.isSafeInteger(pid) && pid > 0);
+        assert.doesNotThrow(() => process.kill(pid, 0), "the service must remain alive after the command returns");
     } finally {
-        if (Number.isSafeInteger(pid) && pid > 0) {
-            try {
-                process.kill(pid, "SIGTERM");
-            } catch {
-                /* Service already exited. */
-            }
-        }
+        stopService(pid);
+    }
+});
+
+test("supervisor preserves failed runtime output while a service keeps stderr open", () => {
+    const directory = mkdtempSync(join(tmpdir(), "supervisor-drain-"));
+    const release = join(directory, "release");
+    const result = spawnSync(
+        process.execPath,
+        [
+            "--eval",
+            `
+        import { Writable } from "node:stream";
+        import { writeFileSync } from "node:fs";
+        import { superviseRuntime } from ${JSON.stringify(supervisor)};
+        const destination = process.stderr;
+        let released = false;
+        Object.defineProperty(process, "stderr", {
+            value: new Writable({
+                highWaterMark: 1,
+                write(chunk, encoding, callback) {
+                    if (!released) {
+                        released = true;
+                        writeFileSync(${JSON.stringify(release)}, "release");
+                    }
+                    destination.write(chunk, encoding, () => setTimeout(callback, 500));
+                },
+            }),
+        });
+        process.exitCode = await superviseRuntime(process.execPath, [${JSON.stringify(fixture)}, "service-resource-error", ${JSON.stringify(release)}]);
+    `,
+        ],
+        { encoding: "utf8", timeout: 15_000, killSignal: "SIGKILL", env: runtimeEnvironment() },
+    );
+    const pid = Number(result.stdout.trim());
+    try {
+        assert.equal(result.error, undefined);
+        assert.equal(result.status, 17, result.stderr);
+        assert.ok(result.stderr.startsWith("x".repeat(64_000) + "\nfatal error: EMFILE: too many open files\n"));
+        assert.match(result.stderr, /reached the open-file limit/);
+        assert.ok(Number.isSafeInteger(pid) && pid > 0);
+        assert.doesNotThrow(() => process.kill(pid, 0), "the service must survive failed runtime shutdown");
+    } finally {
+        stopService(pid);
+        rmSync(directory, { recursive: true, force: true });
     }
 });
 
@@ -143,7 +199,7 @@ test(
         process.exitCode = code;
     `,
             ],
-            { terminal },
+            { terminal, env: runtimeEnvironment() },
         );
         let deadline: ReturnType<typeof setTimeout> | undefined;
         try {
@@ -241,7 +297,7 @@ for (const signalTarget of ["parent", "group"] as const) {
         process.exitCode = await superviseRuntime(process.execPath, ${JSON.stringify([fixture, "signal"])});
     `,
                 ],
-                { stdio: ["ignore", "pipe", "pipe"], detached: true },
+                { stdio: ["ignore", "pipe", "pipe"], detached: true, env: runtimeEnvironment() },
             );
             let output = "";
             let errors = "";
