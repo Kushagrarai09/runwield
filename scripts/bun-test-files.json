@@ -53,7 +53,7 @@
     "src/acp/interaction-mapper.test.js",
     "src/acp/interview-chat.test.ts",
     "src/acp/managed-session.integration.test.ts",
-    "src/acp/protocol-smoke.test.js",
+    "src/acp/protocol-smoke.test.ts",
     "src/acp/sdk-client-background.test.ts",
     "src/acp/segment-stable-identity.test.ts",
     "src/acp/server.test.js",
