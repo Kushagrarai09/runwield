@@ -471,6 +471,9 @@ does not reset its lifecycle or decisions.
 - Given recreated empty or stale runtime registry files, migration reports, or debug files, selecting a Plan recovers
   them automatically without replacing current attempts. Distinct valid attempts remain available; originals remain
   recoverable. Registry recovery and ordinary writers cannot overwrite each other or wait on their own locks.
+- Given an adopted worktree is removed or its former path is reused, its historical adoption record does not block
+  entry into the primary Project. Historical paths remain absolute, normalized, sorted, and unique; history alone
+  never authorizes recovery or file movement. Current checkout, registry, journal, and symlink safety checks still apply.
 - Given a Plan listing or a grouped evidence read, nested reads of the same checkout share runtime-layout verification
   for that operation. Later reads and writes revalidate changed evidence; background work cannot retain verification
   after its initiating read ends. Plan contents, controller state, and publication evidence remain freshly read.
@@ -1589,7 +1592,9 @@ does not retry ambiguous generations automatically or change host-global configu
 - Given an existing, escaping or symlinked destination, generation is rejected without modifying existing files. If a
   destination appears while generation is in flight, it is preserved and the tool reports failure.
 - Given a cancelled in-flight request, HTTP requests receive cancellation or the owned CLI helper terminates, and no
-  output file is published. No implicit generation retry occurs.
+  output file is published. If Codex turn startup is still being acknowledged, cleanup waits briefly for its identity
+  so it can interrupt that turn before terminating the helper. An unresponsive helper still terminates within a bounded
+  cleanup interval. No implicit generation retry occurs.
 - Given a model preset switches from Pi to Agy, incompatible inherited image options are dropped. Explicit unsupported
   settings fail clearly; disabling image generation removes automatic registration in newly built Sessions.
 
