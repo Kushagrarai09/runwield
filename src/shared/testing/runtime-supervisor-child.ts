@@ -1,6 +1,6 @@
 /** Real child-process failure scenarios. Never run inside the test runner. */
 import process from "node:process";
-import { closeSync, openSync, readFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { resizeImage } from "@earendil-works/pi-coding-agent";
 import { superviseRuntime } from "../runtime-supervisor.ts";
@@ -58,13 +58,19 @@ if (mode === "image-exhaustion" || mode === "supervisor-exhaustion" || mode === 
     process.exit(17);
 } else if (mode === "large-stderr") {
     process.stderr.write("x".repeat(512_000), () => process.exit(17));
-} else if (mode === "service") {
-    const service = spawn(process.execPath, ["--eval", "setTimeout(() => {}, 5000)"], {
+} else if (mode === "service" || mode === "service-resource-error") {
+    const serviceLifetime = mode === "service-resource-error" ? 30_000 : 5000;
+    const service = spawn(process.execPath, ["--eval", `setTimeout(() => {}, ${serviceLifetime})`], {
         stdio: ["ignore", "ignore", "inherit"],
         detached: true,
     });
     console.log(service.pid);
     service.unref();
+    if (mode === "service-resource-error") {
+        await new Promise<void>((resolve) => process.stderr.write("x".repeat(64_000), () => resolve()));
+        while (!existsSync(process.argv[3])) await new Promise((resolve) => setTimeout(resolve, 5));
+        process.stderr.write("\nfatal error: EMFILE: too many open files\n", () => process.exit(17));
+    }
 } else if (mode === "signal") {
     process.on("SIGTERM", () => process.exit(23));
     console.log("READY");

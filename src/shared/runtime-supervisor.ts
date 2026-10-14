@@ -44,7 +44,28 @@ export async function superviseRuntime(command: string, args: string[]): Promise
     for (const signal of signals) process.on(signal, forward);
     try {
         const result = await new Promise<RuntimeExit>((resolve) => {
-            child.once("close", (code, signal) => resolve({ code, signal }));
+            let drainTimer: ReturnType<typeof setTimeout> | undefined;
+            let resumeDrain: (() => void) | undefined;
+            const complete = (code: number | null, signal: NodeJS.Signals | null) => {
+                if (drainTimer) clearTimeout(drainTimer);
+                if (resumeDrain) process.stderr.off("drain", resumeDrain);
+                child.stderr?.destroy();
+                resolve({ code, signal });
+            };
+            child.once("close", complete);
+            child.once("exit", (code, signal) => {
+                // Descendants can keep stderr open after the runtime exits. Allow
+                // final diagnostics to drain, but do not wait for that shared EOF.
+                const scheduleDrain = () => {
+                    drainTimer = setTimeout(() => {
+                        // A blocked destination is not an idle input pipe.
+                        if (process.stderr.writableNeedDrain) process.stderr.once("drain", scheduleDrain);
+                        else complete(code, signal);
+                    }, 250);
+                };
+                resumeDrain = scheduleDrain;
+                scheduleDrain();
+            });
         });
         const failed = result.code !== 0 || result.signal !== null || launchError !== undefined;
         if (failed) {
