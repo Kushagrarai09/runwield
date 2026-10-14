@@ -145,8 +145,14 @@ test(
             ],
             { terminal },
         );
+        let deadline: ReturnType<typeof setTimeout> | undefined;
         try {
-            await guidance;
+            await Promise.race([
+                guidance,
+                new Promise<never>((_resolve, reject) => {
+                    deadline = setTimeout(() => reject(new Error(`Supervisor did not settle:\n${output}`)), 8_000);
+                }),
+            ]);
             assert.equal(terminal.inputFlags, before.input);
             assert.equal(terminal.outputFlags, before.output);
             assert.equal(terminal.controlFlags, before.control);
@@ -158,7 +164,8 @@ test(
             child.kill("SIGTERM");
             assert.equal(await child.exited, 134);
         } finally {
-            child.kill();
+            clearTimeout(deadline);
+            child.kill("SIGKILL");
             terminal.close();
         }
     },
@@ -179,7 +186,7 @@ test(
     },
     () => {
         const result = run("image-exhaustion", true);
-        assert.equal(result.error, undefined);
+        assert.equal(result.error, undefined, result.stderr);
         assert.equal(result.signal, null, "the supervisor itself must not abort");
         assert.notEqual(result.status, 0);
         assert.match(result.stderr, /failed to create the event loop/);
@@ -196,7 +203,7 @@ test(
     },
     () => {
         const result = run("abort");
-        assert.equal(result.error, undefined);
+        assert.equal(result.error, undefined, result.stderr);
         assert.equal(result.signal, null);
         assert.notEqual(result.status, 0);
         assert.match(result.stderr, /RunWield runtime stopped unexpectedly/);
