@@ -17,8 +17,7 @@ status: "validated"
 origin: "internal"
 parentPlan: "consolidate-project-runtime-state"
 order: 1
-dependencies:
-    []
+dependencies: []
 userVerifiedAt: null
 targetBranch: "epic/consolidate-project-runtime-state"
 ---
@@ -165,7 +164,7 @@ record. No `supersedes` relation is proposed.
 ## Verification Plan
 
 - Automated:
-  `deno run -A scripts/run-tests.js src/shared/project-runtime-layout.test.ts src/shared/runwield-owned-paths.test.js src/constants.test.js`.
+  `deno run -A scripts/run-tests.js src/shared/project-runtime-layout.test.ts src/shared/runwield-owned-paths.test.js src/constants.test.ts`.
 - Automated: `deno task seams:check`.
 - Automated: `deno task ci` must pass before the next child Plan starts.
 - Path-layout proof: a real linked-worktree test calls `resolveProjectRuntimeLayout()` with the linked checkout and

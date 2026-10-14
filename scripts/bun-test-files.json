@@ -135,7 +135,7 @@
     "src/cmd/workspace/workspace.test.ts",
     "src/cmd/wr/index.test.ts",
     "src/constants-portable.test.ts",
-    "src/constants.test.js",
+    "src/constants.test.ts",
     "src/extensions/cymbal/index.test.js",
     "src/extensions/cymbal/tools.test.ts",
     "src/extensions/helper-binary-exec.test.ts",
