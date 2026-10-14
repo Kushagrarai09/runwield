@@ -524,6 +524,7 @@
     "src/ui/tui/chat-session.test.ts",
     "src/ui/tui/chat-view-session-replacement.test.ts",
     "src/ui/tui/chat-view.test.ts",
+    "src/ui/tui/claude-cli-steering.test.ts",
     "src/ui/tui/clipboard.test.ts",
     "src/ui/tui/document-link-lifecycle.test.ts",
     "src/ui/tui/document-mentions.test.ts",
