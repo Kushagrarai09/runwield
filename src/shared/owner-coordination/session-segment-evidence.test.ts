@@ -29,7 +29,9 @@ async function writeTranscript(cwd: string, piSessionId: string) {
         [
             { type: "session", id: piSessionId, cwd, timestamp: "2026-01-01T00:00:00.000Z" },
             { type: "message", id: "entry", message: { role: "user", content: "hello" } },
-        ].map((entry) => JSON.stringify(entry)).join("\n") + "\n",
+        ]
+            .map((entry) => JSON.stringify(entry))
+            .join("\n") + "\n",
     );
     return path;
 }
