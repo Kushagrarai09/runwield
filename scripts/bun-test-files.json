@@ -436,7 +436,7 @@
     "src/shared/workflow/validation-owner.test.ts",
     "src/shared/workflow/validation-progress-presentation.test.ts",
     "src/shared/workflow/validation-progress.test.ts",
-    "src/shared/workflow/validation-prompts.test.js",
+    "src/shared/workflow/validation-prompts.test.ts",
     "src/shared/workflow/validation-publication.test.ts",
     "src/shared/workflow/validation-repair-prompt.test.ts",
     "src/shared/workflow/validation-repair-resume.integration.test.ts",
