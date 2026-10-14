@@ -28,6 +28,18 @@ RunWield will use a mixed JavaScript/TypeScript codebase with a ratchet policy:
 - `scripts/language-policy-baseline.json` records current production JavaScript/JSX under `src/`. Migrations remove
   paths from that baseline in the same change that converts them to TypeScript.
 
+### CLI runtime supervision
+
+The CLI entrypoint starts a small supervisor before command imports and initialization. The working Bun runtime runs
+in a child process with inherited stdin and stdout. The supervisor forwards stderr, retains bounded diagnostics,
+forwards termination signals, and restores terminal modes after failure. This boundary applies to private entries and
+protocol commands as well as interactive commands. Source-run and compiled invocations use the same boundary.
+
+This process boundary is required because native runtime aborts, including image-worker event-loop creation under
+file-descriptor exhaustion, bypass JavaScript exception handlers. A shared error classifier gives interactive handlers
+and the supervisor consistent OS-resource guidance. Supervision does not retry a command because its external effects
+may be uncertain. It does not replace Session or workflow recovery and does not mark a workflow complete or abandoned.
+
 ## Consequences
 
 ### Positive
