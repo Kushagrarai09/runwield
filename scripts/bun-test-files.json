@@ -359,7 +359,7 @@
     "src/shared/workflow/agent-runners.integration.test.ts",
     "src/shared/workflow/architecture-boundary.test.ts",
     "src/shared/workflow/authority-continuation.integration.test.ts",
-    "src/shared/workflow/collaboration-pull.test.js",
+    "src/shared/workflow/collaboration-pull.test.ts",
     "src/shared/workflow/command-metrics.test.ts",
     "src/shared/workflow/command-picker-metrics.test.ts",
     "src/shared/workflow/controller-registry.integration.test.ts",
