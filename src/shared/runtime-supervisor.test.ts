@@ -10,10 +10,10 @@ const supervisor = fileURLToPath(new URL("./runtime-supervisor.ts", import.meta.
 const fixture = fileURLToPath(new URL("./testing/runtime-supervisor-child.ts", import.meta.url));
 
 function run(mode: string, limited = false) {
-    const crash = limited || mode === "abort";
-    const command = crash ? "/bin/sh" : process.execPath;
-    // Exercise native aborts without waiting for the host's core-dump service.
-    const args = crash
+    // Intentional aborts must not wait for the host's core-dump collector.
+    const posix = process.platform !== "win32";
+    const command = posix ? "/bin/sh" : process.execPath;
+    const args = posix
         ? ["-c", `ulimit -c 0; ${limited ? "ulimit -n 64; " : ""}exec "$@"`, "sh", process.execPath, fixture, mode]
         : [fixture, mode];
     return spawnSync(
