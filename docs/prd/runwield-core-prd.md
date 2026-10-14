@@ -2462,6 +2462,8 @@ surface.
   blocker guidance. Status and cancel still work for permitted tasks; external native-shell commands are not filtered.
 - Given a read-only background delegate, when its parent turn ends, the child can finish and report its result without
   becoming the foreground Agent. A request for a background write delegation fails before launch.
+- Given a background shell that creates a child during Stop, cancellation terminates that child and drains the output
+  pipes without waiting for its natural exit. Workspace then releases the idle owner without another model turn.
 - Given running Background Tasks, when an execution Agent first calls `task_completed` while eligible to finish, Core
   rejects the call and lists each running task ID and kind. It explains that the next eligible completion call cancels
   remaining tasks and accepts completion. The Agent can instead wait for results or cancel tasks first; cancellation

@@ -28,6 +28,14 @@ RunWield will use a mixed JavaScript/TypeScript codebase with a ratchet policy:
 - `scripts/language-policy-baseline.json` records current production JavaScript/JSX under `src/`. Migrations remove
   paths from that baseline in the same change that converts them to TypeScript.
 
+### Owned command cancellation
+
+Foreground commands own a separate process group on POSIX systems. On macOS, cancellation stops the group and checks
+that its members are stopped before sending SIGKILL. A single group kill can miss a child that is still being created,
+leaving output pipes open after the shell exits. The check is bounded; probe failure still forces termination so a
+command cannot remain suspended. Explicit cancellation also terminates lingering descendants after their shell exits.
+Windows keeps its process-tree termination through `taskkill /T`.
+
 ### CLI runtime supervision
 
 The CLI entrypoint starts a small supervisor before command imports and initialization. The working Bun runtime runs
