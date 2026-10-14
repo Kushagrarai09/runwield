@@ -1,11 +1,14 @@
 /** Real child-process failure scenarios. Never run inside the test runner. */
 import process from "node:process";
-import { closeSync, openSync } from "node:fs";
+import { closeSync, openSync, readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { resizeImage } from "@earendil-works/pi-coding-agent";
 import { superviseRuntime } from "../runtime-supervisor.ts";
 
 const mode = process.argv[2];
+if (process.platform === "linux" && ["abort", "image-exhaustion", "tty-image-exhaustion"].includes(mode)) {
+    console.error("Native crash fixture:", process.pid, readFileSync("/proc/sys/kernel/core_pattern", "utf8").trim());
+}
 if (mode === "image-exhaustion" || mode === "supervisor-exhaustion" || mode === "tty-image-exhaustion") {
     if (mode === "tty-image-exhaustion") {
         process.stdin.setRawMode(true);
