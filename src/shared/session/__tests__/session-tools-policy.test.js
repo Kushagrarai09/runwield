@@ -1625,7 +1625,8 @@ test("Agent command front matter merges, clears, and validates layered defaults"
     try {
         await fsMkdir(directory, { recursive: true });
         const initial = await loadAgentDef(AGENTS.GUIDE, cwd);
-        assert(initial.bashAllowedCommands?.includes("git status"));
+        assert(initial.bashAllowedCommands);
+        assert(initial.bashAllowedCommands.includes("git status"));
         await fsWriteFile(overridePath, "---\nname: Guide\n---\n");
         assertEquals((await loadAgentDef(AGENTS.GUIDE, cwd)).bashAllowedCommands, initial.bashAllowedCommands);
         await fsWriteFile(overridePath, "---\nbashAllowedCommands: [td, git status, td]\n---\n");
@@ -1699,7 +1700,8 @@ test("Guide command lists merge across bundled, home, and project definitions", 
             await fsMkdir(homeAgents, { recursive: true });
             await fsMkdir(projectAgents, { recursive: true });
             const bundled = await loadAgentDef(AGENTS.GUIDE, cwd);
-            assert(bundled.bashAllowedCommands?.includes("git status"));
+            assert(bundled.bashAllowedCommands);
+            assert(bundled.bashAllowedCommands.includes("git status"));
             await fsWriteFile(join(homeAgents, "guide.md"), "---\nbashAllowedCommands: [td]\n---\n");
             assertEquals((await loadAgentDef(AGENTS.GUIDE, cwd)).bashAllowedCommands, [
                 ...bundled.bashAllowedCommands,
