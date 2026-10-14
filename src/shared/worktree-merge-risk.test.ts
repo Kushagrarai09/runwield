@@ -7,12 +7,12 @@ import { tmpdir } from "node:os";
 import { inspectExecutionWorktreeMergeRisk, removeWorktreeGitArtifacts } from "./worktree.js";
 
 import { createTestWorktreeAttempt, git, makeRepo } from "./worktree-test-helpers.ts";
+import type { WorktreeRegistryEntry } from "./worktree-registry.js";
 
 test("inspectExecutionWorktreeMergeRisk reports clean target branch as safe without mutating", async () => {
     const projectRoot = await makeRepo();
     const worktreeRoot = await fsMkdtemp(join(tmpdir(), "portable-fixture-"));
-    /** @type {Awaited<ReturnType<typeof createTestWorktreeAttempt>> | undefined} */
-    let worktree;
+    let worktree: WorktreeRegistryEntry | undefined;
     try {
         await git(projectRoot, ["checkout", "-b", "feature-base"]);
         worktree = await createTestWorktreeAttempt({
@@ -54,8 +54,7 @@ test("inspectExecutionWorktreeMergeRisk fails when target branch is checked out 
     const projectRoot = await makeRepo();
     const worktreeRoot = await fsMkdtemp(join(tmpdir(), "portable-fixture-"));
     const targetCheckout = await fsMkdtemp(join(tmpdir(), "portable-fixture-"));
-    /** @type {Awaited<ReturnType<typeof createTestWorktreeAttempt>> | undefined} */
-    let worktree;
+    let worktree: WorktreeRegistryEntry | undefined;
     try {
         await git(projectRoot, ["checkout", "-b", "feature-base"]);
         worktree = await createTestWorktreeAttempt({
@@ -102,8 +101,7 @@ test("inspectExecutionWorktreeMergeRisk fails when target branch is checked out 
 test("inspectExecutionWorktreeMergeRisk requires targetBranch to be a local branch, not a tag", async () => {
     const projectRoot = await makeRepo();
     const worktreeRoot = await fsMkdtemp(join(tmpdir(), "portable-fixture-"));
-    /** @type {Awaited<ReturnType<typeof createTestWorktreeAttempt>> | undefined} */
-    let worktree;
+    let worktree: WorktreeRegistryEntry | undefined;
     try {
         worktree = await createTestWorktreeAttempt({
             projectRoot,
@@ -143,8 +141,7 @@ test("inspectExecutionWorktreeMergeRisk requires targetBranch to be a local bran
 test("inspectExecutionWorktreeMergeRisk warns on overlapping dirty primary changes", async () => {
     const projectRoot = await makeRepo();
     const worktreeRoot = await fsMkdtemp(join(tmpdir(), "portable-fixture-"));
-    /** @type {Awaited<ReturnType<typeof createTestWorktreeAttempt>> | undefined} */
-    let worktree;
+    let worktree: WorktreeRegistryEntry | undefined;
     try {
         worktree = await createTestWorktreeAttempt({
             projectRoot,

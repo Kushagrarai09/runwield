@@ -456,7 +456,7 @@
     "src/shared/workflow/workflow.test.js",
     "src/shared/worktree-creation.test.js",
     "src/shared/worktree-guards.test.js",
-    "src/shared/worktree-merge-risk.test.js",
+    "src/shared/worktree-merge-risk.test.ts",
     "src/shared/worktree-merge.test.js",
     "src/shared/worktree-project-context.test.ts",
     "src/shared/worktree-registry-restore.test.ts",
