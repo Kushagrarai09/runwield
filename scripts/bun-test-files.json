@@ -683,5 +683,5 @@
     "src/ui/workspace/workspace-shell-navigation.test.ts",
     "src/ui/workspace/workspace-styles.test.ts",
     "src/ui/workspace/workspace-surface-parity.test.ts",
-    "src/ui/workspace/workspace-theme.test.js"
+    "src/ui/workspace/workspace-theme.test.ts"
 ]
