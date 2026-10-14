@@ -27,8 +27,7 @@ test("Plan Review recovery treats cancellation, exit, and unsupported outcomes a
 
 test("Plan Review recovery retries after unanswered review when user accepts", async () => {
     const reviews = [{ outcome: "canceled" }, { _meta: { approved: true, approvalAction: "run" } }];
-    /** @type {string[]} */
-    const prompts = [];
+    const prompts: string[] = [];
     const result = await requestRecoverablePlanReview({
         requestReview: () => Promise.resolve(reviews.shift()),
         requestRetry: (details) => {

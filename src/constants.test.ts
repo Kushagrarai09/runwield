@@ -71,16 +71,14 @@ test("test-module detection covers every convention deno test collects", () => {
     // A convention missing here is a test realm where the real-home guard is
     // inert. src/cmd/init/*_test.js slipped past an `.endsWith(".test.js")`
     // check and wrote into a real ~/.wld.
-    for (
-        const path of [
-            "/repo/src/foo.test.js",
-            "/repo/src/foo_test.js",
-            "/repo/src/test.js",
-            "/repo/src/foo.test.ts",
-            "/repo/src/foo_test.tsx",
-            "/repo/src/cmd/init/init-state_test.js",
-        ]
-    ) {
+    for (const path of [
+        "/repo/src/foo.test.js",
+        "/repo/src/foo_test.js",
+        "/repo/src/test.js",
+        "/repo/src/foo.test.ts",
+        "/repo/src/foo_test.tsx",
+        "/repo/src/cmd/init/init-state_test.js",
+    ]) {
         assert(isTestModulePath(path), `Expected ${path} to be treated as a test module.`);
     }
 

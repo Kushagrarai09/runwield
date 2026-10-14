@@ -776,6 +776,29 @@ There is no automatic terminal failure path. Internal errors, retry limits, or a
 the user, clear the active workflow, or require them to start a replacement workflow. A pause for approval, an actual
 external prerequisite, or a user-requested hold preserves the same work and its immediate continuation path.
 
+**Requirement: Explain OS resource failures across CLI commands.**
+
+The CLI runs each command inside a supervised runtime. The supervisor remains outside the working runtime's
+file-descriptor budget. If the working runtime aborts, the supervisor restores terminal input and display modes,
+reports a nonzero exit, and explains recognized file-descriptor, memory, or process/thread exhaustion on stderr.
+Standard input and stdout remain available to protocol commands without added protocol output. Catchable resource
+errors during interactive submission show the same guidance and restore the draft.
+
+The supervisor does not delete saved work, change workflow state, or replay the failed command. After the external
+resource limit is resolved, `wld --continue` reopens the last saved Session through the normal recovery path. A native
+abort can lose input or events that had not yet been saved. This behavior reports and contains runtime failure; it does
+not establish the source of resource growth or prevent the working runtime from aborting.
+
+Acceptance scenarios:
+
+- Given exhausted file descriptors during image-worker creation, when Bun aborts, the supervisor stays alive long
+  enough to restore the terminal and show open-file-limit guidance and the saved-Session continuation command.
+- Given an uncaught file, socket, memory, or process/thread resource error anywhere in a command, the supervisor
+  reports the recognized resource limit without replaying the command or writing advice to protocol stdout.
+- Given a catchable submission error, the interactive interface restores the draft and explains the resource limit.
+- Given ordinary completion or cancellation, the supervisor preserves command output, forwards termination signals,
+  and retains the runtime's exit status without adding resource-limit advice.
+
 **Requirement: Replanning preserves the existing implementation.**
 
 Returning to Planner or reopening Plan review does not abandon the execution attempt. Approve & Run first reuses the
@@ -2066,6 +2089,18 @@ Future/open requirements:
 **Scope and maturity:** Current Candidate release isolation and shell installation baseline. Prepared Homebrew and
 Windows WinGet support; public package availability is pending owner publication/submission. Remote development runtime
 preparation is a connection-only development-build subset, not a qualified production release.
+
+**Requirement: Honor the displayed Candidate update confirmation default.**
+
+For shell-installed RunWield, `wld update --rc` and its `wld upgrade --rc` alias accept Enter at `[Y/n]` as Yes.
+Explicit `y` or `yes` accepts without regard to case; No, unrecognized input, and end-of-input cancel before downloading
+or running the installer. `--yes` bypasses this confirmation.
+
+**Acceptance scenarios:**
+
+- Given an available Candidate and an interactive terminal, pressing Enter or typing Yes starts the selected update.
+- Given No, unrecognized input, or Ctrl-D, the update is canceled and the installer is neither downloaded nor run.
+- Given `--yes`, the selected update proceeds without requesting terminal input.
 
 **Requirement: Prepare only a matching remote development runtime.**
 

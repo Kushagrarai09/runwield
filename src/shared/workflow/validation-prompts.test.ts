@@ -41,15 +41,13 @@ test("loadReviewerPrompt loads the verification prompt for later rounds", async 
     assertStringIncludes(reviewerDef.systemPrompt, "Do Not Re-Derive the Plan");
 });
 
-/** @param {string} name */
 /**
  * The prompt an Agent actually receives. Reviewer prompts compose the shared
  * review practice, so their contracts hold for the composed prompt; other
  * bundled prompts are read as written.
  *
- * @param {string} name
  */
-async function readBundledPrompt(name) {
+async function readBundledPrompt(name: string) {
     if (name === "reviewer-prompt.md" || name === "reviewer-verify-prompt.md") {
         const definition = await loadReviewerPrompt(name === "reviewer-verify-prompt.md" ? "verify" : "discovery");
         return definition.systemPrompt;
@@ -194,10 +192,7 @@ test("bundled discovery reviewer prompt attacks tests with a plausible wrong imp
     assertStringIncludes(prompt, "Check the assertions, the boundaries, and fakes that bypass real behavior");
     assertStringIncludes(prompt, "never require execution proof");
     assertStringIncludes(prompt, "a test that green-lights a fake is misleading");
-    assertStringIncludes(
-        prompt,
-        "Observations about strengthening an honest test beyond that gate are advisories",
-    );
+    assertStringIncludes(prompt, "Observations about strengthening an honest test beyond that gate are advisories");
 });
 
 test("bundled discovery reviewer prompt requires all findings in one pass", async () => {
