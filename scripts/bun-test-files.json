@@ -601,7 +601,7 @@
     "src/ui/tui/testing/validation-workflow-coverage.test.ts",
     "src/ui/tui/testing/virtual-terminal.test.ts",
     "src/ui/tui/tui-crash-events.test.ts",
-    "src/ui/tui/tui-crash-guards.test.js",
+    "src/ui/tui/tui-crash-guards.test.ts",
     "src/ui/tui/tui-manager.test.ts",
     "src/ui/tui/tui.test.ts",
     "src/ui/tui/tutorial-guidance.test.js",
