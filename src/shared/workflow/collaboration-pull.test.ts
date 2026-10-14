@@ -60,15 +60,17 @@ test("buildPullRevisionRequest includes structured metadata and redacts secret-l
             spaceId: "s",
             revision: 2,
         },
-        comments: [{
-            id: "c1",
-            createdAt: "now",
-            resolved: false,
-            readable: true,
-            type: "global_comment",
-            displayName: "Alice",
-            body: "Feedback",
-        }],
+        comments: [
+            {
+                id: "c1",
+                createdAt: "now",
+                resolved: false,
+                readable: true,
+                type: "global_comment",
+                displayName: "Alice",
+                body: "Feedback",
+            },
+        ],
     });
 
     assert(request.includes("Title: Demo Plan"));
