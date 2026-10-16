@@ -322,7 +322,7 @@
     "src/shared/session/session-runtime-structure.test.ts",
     "src/shared/session/session-runtime.test.js",
     "src/shared/session/session-sidebar.test.ts",
-    "src/shared/session/session-state-imports.test.js",
+    "src/shared/session/session-state-imports.test.ts",
     "src/shared/session/session-subscribers.test.js",
     "src/shared/session/session-temperature.test.js",
     "src/shared/session/session-transcript-manifest.test.js",
