@@ -371,7 +371,7 @@
     "src/shared/workflow/epic-integration.test.ts",
     "src/shared/workflow/epic-review-context.test.ts",
     "src/shared/workflow/epic-sibling-drafts.test.ts",
-    "src/shared/workflow/execution-context.test.js",
+    "src/shared/workflow/execution-context.test.ts",
     "src/shared/workflow/execution-metrics-journey.test.ts",
     "src/shared/workflow/execution-metrics-measurements.test.ts",
     "src/shared/workflow/execution-metrics-turn-identity.test.ts",
