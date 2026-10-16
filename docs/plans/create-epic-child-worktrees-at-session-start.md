@@ -20,6 +20,8 @@ createdAt: "2026-10-14"
 origin: "internal"
 status: "ready_for_work"
 userVerifiedAt: null
+targetBranch: "main"
+deliveryBranch: "plan/create-epic-child-worktrees-at-session-start"
 ---
 
 # Create Epic Child Worktrees Only When a Session Starts
