@@ -5,6 +5,7 @@
 
 import { writeSync } from "node:fs";
 import { env } from "node:process";
+import type { TuiStopOptions } from "@earendil-works/pi-tui";
 
 import {
     type FocusReportingTerminal,
@@ -14,7 +15,7 @@ import {
 
 interface ManagedTui {
     start?(): void;
-    stop?(): void;
+    stop?(options?: TuiStopOptions): void;
     requestRender?(force?: boolean): void;
 }
 
@@ -83,7 +84,7 @@ export function createTuiManager<TTerminal extends FocusReportingTerminal, TTui 
                 }
             }
             try {
-                tuiInstance?.stop?.();
+                tuiInstance?.stop?.({ preserveScreen: true });
             } catch {
                 // Preserve the original construction/start failure.
             }
@@ -158,7 +159,8 @@ export function createTuiManager<TTerminal extends FocusReportingTerminal, TTui 
             // Focus reporting cleanup is best effort.
         }
         if (tui && wasStarted) {
-            tui.stop?.();
+            // Restore the shell without copying the fullscreen input into its history.
+            tui.stop?.({ preserveScreen: true });
         }
     }
 
