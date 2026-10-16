@@ -189,7 +189,7 @@
     "src/shared/owner-coordination/session-activations.test.ts",
     "src/shared/owner-coordination/session-segment-evidence.test.ts",
     "src/shared/owner-coordination/session-segments.test.ts",
-    "src/shared/owner-coordination/sessions.test.js",
+    "src/shared/owner-coordination/sessions.test.ts",
     "src/shared/package-install.test.ts",
     "src/shared/package-resources.test.ts",
     "src/shared/plan-archive-retention.test.ts",
