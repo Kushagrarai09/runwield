@@ -7,10 +7,11 @@ import {
 import { test } from "node:test";
 import { tmpdir } from "node:os";
 import { ok as assert } from "node:assert/strict";
-import { assertEquals, assertStringIncludes } from "../../testing/assertions.ts";
+import { assertEquals, assertRejects, assertStringIncludes } from "../../testing/assertions.ts";
 import { dirname, join } from "node:path";
 import { listPlans, loadPlan, updatePlanCollaborationMetadata } from "../../plan-store.js";
 import { runLoadPlanCommand } from "../../cmd/load-plan/index.ts";
+import { resolvePlanWithPrimaryRecovery } from "../../cmd/load-plan/primary-plan-recovery.ts";
 import { withRuntimeCommandFixture } from "../../cmd/testing/runtime-command-fixture.ts";
 import { createSessionRuntime } from "../session/session-runtime.ts";
 import { HostedSession } from "../session/hosted-session.js";
@@ -21,7 +22,7 @@ import { createExecutionStartPorts, startActiveExecutionWorkflow } from "./execu
 import { resolveEpicContinuation } from "./epic-continuation.ts";
 import { recordPlanEvent } from "./plan-lifecycle.js";
 import { resolveWorkflowPlanLocation } from "./plan-location.ts";
-import { preparePlanningWorktreeForPlan } from "./planning-worktree.ts";
+import { findTargetBranchPlansByParent, preparePlanningWorktreeForPlan } from "./planning-worktree.ts";
 
 type PlanFixtureAttribute = string | number | boolean | string[];
 type PlanFixtureAttributes = Record<string, PlanFixtureAttribute>;
@@ -70,45 +71,151 @@ function makeLoadUi(selections: Array<string | null>) {
 }
 
 const journeyFixture = defineGitFixture(async (repo) => {
-    await writePlan(repo, "epic", {
-        planId: "plan-epic",
-        classification: "PROJECT",
-        complexity: "HIGH",
-        status: "ready_for_work",
-        targetBranch: "epic-target",
-        affectedPaths: [],
-        createdAt: "2026-01-01T00:00:00.000Z",
-    }, "# Epic\n");
+    await writePlan(
+        repo,
+        "epic",
+        {
+            planId: "plan-epic",
+            classification: "PROJECT",
+            complexity: "HIGH",
+            status: "ready_for_work",
+            targetBranch: "epic-target",
+            affectedPaths: [],
+            createdAt: "2026-01-01T00:00:00.000Z",
+        },
+        "# Epic\n",
+    );
     await git(repo, ["add", "."]);
     await git(repo, ["commit", "-m", "primary epic only"]);
     await git(repo, ["switch", "-c", "epic-target"]);
-    await writePlan(repo, "epic/01-done", {
-        planId: "plan-child-01",
-        classification: "FEATURE",
-        complexity: "MEDIUM",
-        status: "validated",
-        parentPlan: "epic",
-        order: 1,
-        targetBranch: "epic-target",
-        affectedPaths: [],
-        createdAt: "2026-01-01T00:00:00.000Z",
-    }, "# Done child\n");
-    await writePlan(repo, "epic/02-next", {
-        planId: "plan-child-02",
-        classification: "FEATURE",
-        complexity: "MEDIUM",
-        status: "ready_for_work",
-        parentPlan: "epic",
-        order: 2,
-        dependencies: ["01-done"],
-        targetBranch: "epic-target",
-        affectedPaths: ["next.js"],
-        createdAt: "2026-01-01T00:00:00.000Z",
-    }, "# Next child\n\nTARGET NEXT BODY\n");
+    await writePlan(
+        repo,
+        "epic/01-done",
+        {
+            planId: "plan-child-01",
+            classification: "FEATURE",
+            complexity: "MEDIUM",
+            status: "validated",
+            parentPlan: "epic",
+            order: 1,
+            targetBranch: "epic-target",
+            affectedPaths: [],
+            createdAt: "2026-01-01T00:00:00.000Z",
+        },
+        "# Done child\n",
+    );
+    await writePlan(
+        repo,
+        "epic/02-next",
+        {
+            planId: "plan-child-02",
+            classification: "FEATURE",
+            complexity: "MEDIUM",
+            status: "ready_for_work",
+            parentPlan: "epic",
+            order: 2,
+            dependencies: ["01-done"],
+            targetBranch: "epic-target",
+            affectedPaths: ["next.js"],
+            createdAt: "2026-01-01T00:00:00.000Z",
+        },
+        "# Next child\n\nTARGET NEXT BODY\n",
+    );
     await fsWriteFile(join(repo, "target-only.js"), "target only\n");
     await git(repo, ["add", "."]);
     await git(repo, ["commit", "-m", "target child family"]);
     await git(repo, ["switch", "main"]);
+});
+
+test("Epic child selection excludes a saved planning name removed from the Epic branch", async () => {
+    const repo = await journeyFixture.checkout();
+    const planning = await preparePlanningWorktreeForPlan(repo, "epic/02-next", {
+        planId: "plan-child-02",
+        targetBranch: "epic-target",
+    });
+    const savedPath = join(planning.entry.path, "docs/plans/epic/02-next.md");
+    await fsWriteFile(savedPath, (await fsReadFile(savedPath, "utf8")) + "\nSAVED PLANNING EDIT\n");
+    await git(repo, ["switch", "epic-target"]);
+    await git(repo, ["mv", "docs/plans/epic/02-next.md", "docs/plans/epic/03-next.md"]);
+    await git(repo, ["commit", "-m", "renumber child"]);
+    await git(repo, ["switch", "main"]);
+
+    const children = await findTargetBranchPlansByParent(repo, "epic-target", "epic");
+    assertEquals(children.map((child) => child.name).sort(), ["epic/01-done", "epic/03-next"]);
+    const renamed = await resolveWorkflowPlanLocation(repo, "epic/03-next");
+    assertEquals(renamed.plan?.attrs.planId, "plan-child-02");
+    assertStringIncludes(renamed.plan?.markdown || "", "TARGET NEXT BODY");
+    assertStringIncludes(renamed.plan?.markdown || "", "SAVED PLANNING EDIT");
+    assertEquals(renamed.documentRoot, planning.entry.path);
+    assertEquals(
+        (await listEntries(repo)).map((entry) => entry.planName),
+        ["epic/03-next"],
+    );
+});
+
+test("Epic child loading rejects a primary-only name removed from the target", async () => {
+    const repo = await journeyFixture.checkout();
+    await writePlan(
+        repo,
+        "epic/02-obsolete",
+        {
+            planId: "obsolete-child",
+            classification: "FEATURE",
+            complexity: "MEDIUM",
+            status: "ready_for_work",
+            parentPlan: "epic",
+            targetBranch: "epic-target",
+            affectedPaths: [],
+        },
+        "# Stale primary child\n",
+    );
+    await assertRejects(
+        () => resolvePlanWithPrimaryRecovery(repo, "epic/02-obsolete"),
+        Error,
+        "does not exist on target",
+    );
+    assertStringIncludes(await fsReadFile(join(repo, "docs/plans/epic/02-obsolete.md"), "utf8"), "Stale primary child");
+});
+
+test("Loading an Epic does not publish stale primary children back to its branch", async () => {
+    await withRuntimeCommandFixture("epic-stale-primary-load-", async () => {
+        const repo = await journeyFixture.checkout();
+        await writePlan(
+            repo,
+            "epic/02-obsolete",
+            {
+                planId: "obsolete-child",
+                classification: "FEATURE",
+                complexity: "MEDIUM",
+                status: "ready_for_work",
+                parentPlan: "epic",
+                targetBranch: "epic-target",
+                affectedPaths: [],
+            },
+            "# Removed child\n",
+        );
+        const targetChild = await git(repo, ["show", "epic-target:docs/plans/epic/02-next.md"]);
+        await fsWriteFile(join(repo, "docs/plans/epic/02-next.md"), targetChild.replace("next.js", "stale.js"));
+        const head = await git(repo, ["rev-parse", "epic-target"]);
+        const runtime = createSessionRuntime();
+        const sessionId = await runtime.createPromptReadySession({ cwd: repo, agentName: "router" });
+        const ui = makeLoadUi(["pick_child", "epic/02-next", "view", "back", null, "cancel"]);
+        try {
+            await runLoadPlanCommand(["epic"], {
+                sessionRuntime: runtime,
+                sessionId,
+                uiAPI: ui.uiAPI,
+                editor: ui.editor,
+            });
+            assertStringIncludes(ui.messages.join("\n"), "Planned Change: epic/02-next");
+            assertStringIncludes(ui.messages.join("\n"), "next.js");
+            assertEquals(await git(repo, ["rev-parse", "epic-target"]), head);
+            const children = await findTargetBranchPlansByParent(repo, "epic-target", "epic");
+            assertEquals(children.map((child) => child.name).sort(), ["epic/01-done", "epic/02-next"]);
+        } finally {
+            runtime.closeAllSessions();
+        }
+    });
 });
 
 test("Epic branch target child actions select a delivered document after cleanup", async () => {
@@ -132,16 +239,21 @@ test("Epic branch target child actions select a delivered document after cleanup
 
 test("Epic branch target lookup preserves non-Git child Plan loading", async () => {
     const repo = await fsMkdtemp(join(tmpdir(), "portable-fixture-"));
-    await writePlan(repo, "epic/02-next", {
-        planId: "plain-child",
-        classification: "FEATURE",
-        complexity: "MEDIUM",
-        status: "ready_for_work",
-        parentPlan: "epic",
-        targetBranch: "epic-target",
-        affectedPaths: [],
-        createdAt: "2026-01-01T00:00:00.000Z",
-    }, "# Plain child\n");
+    await writePlan(
+        repo,
+        "epic/02-next",
+        {
+            planId: "plain-child",
+            classification: "FEATURE",
+            complexity: "MEDIUM",
+            status: "ready_for_work",
+            parentPlan: "epic",
+            targetBranch: "epic-target",
+            affectedPaths: [],
+            createdAt: "2026-01-01T00:00:00.000Z",
+        },
+        "# Plain child\n",
+    );
 
     const loaded = await resolveWorkflowPlanLocation(repo, "epic/02-next");
 
@@ -184,10 +296,7 @@ test("Epic branch manual load uses target child documents and saved planning edi
         targetBranch: "epic-target",
     });
     const planPath = join(planning.entry.path, "docs", "plans", "epic", "02-next.md");
-    await fsWriteFile(
-        planPath,
-        (await fsReadFile(planPath, "utf8")).replace("TARGET NEXT BODY", "SAVED PLANNER BODY"),
-    );
+    await fsWriteFile(planPath, (await fsReadFile(planPath, "utf8")).replace("TARGET NEXT BODY", "SAVED PLANNER BODY"));
 
     const loaded = await resolveWorkflowPlanLocation(repo, "epic/02-next");
     const catalog = await listPlans(repo);
@@ -256,27 +365,37 @@ test("Epic branch execution promotes the saved planning worktree", async () => {
 
 test("A published sequence keeps its parent open while a target-only child remains", async () => {
     const repo = await journeyFixture.checkout();
-    await writePlan(repo, "epic", {
-        planId: "plan-epic",
-        classification: "PROJECT",
-        type: "sequence",
-        complexity: "HIGH",
-        status: "ready_for_work",
-        targetBranch: "epic-target",
-        affectedPaths: [],
-        createdAt: "2026-01-01T00:00:00.000Z",
-    }, "# Epic\n");
-    await writePlan(repo, "epic/01-done", {
-        planId: "plan-child-01",
-        classification: "FEATURE",
-        complexity: "MEDIUM",
-        status: "reviewed",
-        parentPlan: "epic",
-        order: 1,
-        targetBranch: "epic-target",
-        affectedPaths: [],
-        createdAt: "2026-01-01T00:00:00.000Z",
-    }, "# First child\n");
+    await writePlan(
+        repo,
+        "epic",
+        {
+            planId: "plan-epic",
+            classification: "PROJECT",
+            type: "sequence",
+            complexity: "HIGH",
+            status: "ready_for_work",
+            targetBranch: "epic-target",
+            affectedPaths: [],
+            createdAt: "2026-01-01T00:00:00.000Z",
+        },
+        "# Epic\n",
+    );
+    await writePlan(
+        repo,
+        "epic/01-done",
+        {
+            planId: "plan-child-01",
+            classification: "FEATURE",
+            complexity: "MEDIUM",
+            status: "reviewed",
+            parentPlan: "epic",
+            order: 1,
+            targetBranch: "epic-target",
+            affectedPaths: [],
+            createdAt: "2026-01-01T00:00:00.000Z",
+        },
+        "# First child\n",
+    );
     await recordPlanEvent({
         cwd: repo,
         planName: "epic/01-done",
@@ -303,28 +422,38 @@ test("Sequence continuation follows the ready target parent when the primary cop
     const repo = await journeyFixture.checkout();
     const parent = await loadPlan(repo, "epic");
     assert(parent);
-    await writePlan(repo, "epic", {
-        planId: "plan-epic",
-        classification: "PROJECT",
-        type: "sequence",
-        complexity: "HIGH",
-        status: "draft",
-        targetBranch: "epic-target",
-        affectedPaths: [],
-        createdAt: "2026-01-01T00:00:00.000Z",
-    }, "# Epic\n");
+    await writePlan(
+        repo,
+        "epic",
+        {
+            planId: "plan-epic",
+            classification: "PROJECT",
+            type: "sequence",
+            complexity: "HIGH",
+            status: "draft",
+            targetBranch: "epic-target",
+            affectedPaths: [],
+            createdAt: "2026-01-01T00:00:00.000Z",
+        },
+        "# Epic\n",
+    );
     // The target branch holds the approved sequence and its published children.
     await git(repo, ["switch", "epic-target"]);
-    await writePlan(repo, "epic", {
-        planId: "plan-epic",
-        classification: "PROJECT",
-        type: "sequence",
-        complexity: "HIGH",
-        status: "ready_for_work",
-        targetBranch: "epic-target",
-        affectedPaths: [],
-        createdAt: "2026-01-01T00:00:00.000Z",
-    }, "# Epic\n");
+    await writePlan(
+        repo,
+        "epic",
+        {
+            planId: "plan-epic",
+            classification: "PROJECT",
+            type: "sequence",
+            complexity: "HIGH",
+            status: "ready_for_work",
+            targetBranch: "epic-target",
+            affectedPaths: [],
+            createdAt: "2026-01-01T00:00:00.000Z",
+        },
+        "# Epic\n",
+    );
     await git(repo, ["add", "."]);
     await git(repo, ["commit", "-m", "approve sequence"]);
     await git(repo, ["switch", "main"]);
@@ -388,17 +517,22 @@ test("Epic continuation refreshes a preplanned child before execution promotion"
 
 test("Epic branch continuation ignores stale primary completed child status", async () => {
     const repo = await journeyFixture.checkout();
-    await writePlan(repo, "epic/01-done", {
-        planId: "plan-child-01",
-        classification: "FEATURE",
-        complexity: "MEDIUM",
-        status: "ready_for_work",
-        parentPlan: "epic",
-        order: 1,
-        targetBranch: "epic-target",
-        affectedPaths: [],
-        createdAt: "2026-01-01T00:00:00.000Z",
-    }, "# Stale done child\n");
+    await writePlan(
+        repo,
+        "epic/01-done",
+        {
+            planId: "plan-child-01",
+            classification: "FEATURE",
+            complexity: "MEDIUM",
+            status: "ready_for_work",
+            parentPlan: "epic",
+            order: 1,
+            targetBranch: "epic-target",
+            affectedPaths: [],
+            createdAt: "2026-01-01T00:00:00.000Z",
+        },
+        "# Stale done child\n",
+    );
 
     const resolution = await resolveEpicContinuation({ cwd: repo, completedPlanName: "epic/01-done" });
 

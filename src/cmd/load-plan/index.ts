@@ -125,9 +125,7 @@ export async function runLoadPlanCommand(argv: string[], options: CommandContext
             if (!activeSnapshot) throw new Error("runLoadPlanCommand runtime session is missing");
             const plans = await listPlanDocuments(activeSnapshot.cwd);
             if (plans.length === 0) {
-                options.uiAPI.appendSystemMessage(
-                    "No plans available, start one by entering a new request",
-                );
+                options.uiAPI.appendSystemMessage("No plans available, start one by entering a new request");
                 clearEditor();
                 return;
             }
@@ -189,19 +187,16 @@ export async function runLoadPlanCommand(argv: string[], options: CommandContext
                 lookupStore.close();
             }
         }
-        uiAPI = await startInteractiveSession(
-            null,
-            {
-                browser: SYSTEM_BROWSER_PORT,
-                ...(cliResumeSessionId
-                    ? { sessionStartMode: "continue" as const, resumeSessionId: cliResumeSessionId }
-                    : {}),
-                onSessionReady: (nextSessionId, nextRuntime) => {
-                    runtimeSessionId = nextSessionId;
-                    sessionRuntime = nextRuntime;
-                },
+        uiAPI = await startInteractiveSession(null, {
+            browser: SYSTEM_BROWSER_PORT,
+            ...(cliResumeSessionId
+                ? { sessionStartMode: "continue" as const, resumeSessionId: cliResumeSessionId }
+                : {}),
+            onSessionReady: (nextSessionId, nextRuntime) => {
+                runtimeSessionId = nextSessionId;
+                sessionRuntime = nextRuntime;
             },
-        );
+        });
     }
 
     if (!uiAPI) return;
@@ -373,11 +368,14 @@ export async function runLoadPlanCommand(argv: string[], options: CommandContext
         let planDocumentRoot = projectRoot;
         const planId = typeof plan.attrs.planId === "string" ? plan.attrs.planId : "";
         if (
-            plan.attrs.parentPlan && planId && typeof plan.attrs.targetBranch === "string" &&
+            plan.attrs.parentPlan &&
+            planId &&
+            typeof plan.attrs.targetBranch === "string" &&
             ["draft", "feedback", "approved", "ready_for_work"].includes(plan.attrs.status) &&
-            plan.attrs.worktreeStatus !== "active" && await isGitRepository(projectRoot)
+            plan.attrs.worktreeStatus !== "active" &&
+            (await isGitRepository(projectRoot))
         ) {
-            await ensureEpicBranch(projectRoot, String(plan.attrs.parentPlan));
+            await ensureEpicBranch(projectRoot, String(plan.attrs.parentPlan), { seedChildren: false });
             const planning = await preparePlanningWorktreeForPlan(projectRoot, plan.planName, plan.attrs);
             await switchPlanAgent(session.getEffectiveAgentName() || AGENTS.ROUTER, {
                 cwd: planning.entry.path,
@@ -393,8 +391,8 @@ export async function runLoadPlanCommand(argv: string[], options: CommandContext
             plan.hasFrontMatter = true;
         }
         const associations = planId ? await runtime.listPlanAssociatedSessions(projectRoot, planId) : [];
-        const safeAssociations = associations.filter((candidate) =>
-            candidate.safePlanningResume && candidate.displayName?.trim()
+        const safeAssociations = associations.filter(
+            (candidate) => candidate.safePlanningResume && candidate.displayName?.trim(),
         );
         const activeElsewhere = associations.find((candidate) => candidate.reason === "active_elsewhere");
         let candidateToAdopt: (typeof safeAssociations)[number] | null = null;
@@ -553,7 +551,8 @@ export async function runLoadPlanCommand(argv: string[], options: CommandContext
         // from Plan Recovery whatever the Plan's status is. Otherwise a draft or
         // verified Plan is told it is blocked and offered nothing.
         if (
-            (!cleanupPending && !["verified", "user_verified"].includes(plan.attrs.status) &&
+            (!cleanupPending &&
+                !["verified", "user_verified"].includes(plan.attrs.status) &&
                 (["in_progress", "failed"].includes(plan.attrs.status) ||
                     isInValidation(plan.attrs.status) ||
                     isRecoverableWorktreeStatus(plan.attrs.worktreeStatus) ||
@@ -589,8 +588,10 @@ export async function runLoadPlanCommand(argv: string[], options: CommandContext
         const directReviewEligibility = getDirectPlanReviewEligibility(plan);
 
         if (
-            plan.attrs.status === "validated" || plan.attrs.status === "verified" ||
-            plan.attrs.status === "user_verified" || cleanupPending
+            plan.attrs.status === "validated" ||
+            plan.attrs.status === "verified" ||
+            plan.attrs.status === "user_verified" ||
+            cleanupPending
         ) {
             uiAPI.appendSystemMessage(
                 cleanupPending || plan.attrs.status === "validated" || plan.attrs.status === "verified"
@@ -603,14 +604,14 @@ export async function runLoadPlanCommand(argv: string[], options: CommandContext
                 const answer = await uiAPI.promptSelect("What would you like to do?", [
                     ...(cleanupPending
                         ? [
-                            { value: "view", label: "View plan details" },
-                            { value: "cleanup", label: "Remove published worktree and branch" },
-                        ]
+                              { value: "view", label: "View plan details" },
+                              { value: "cleanup", label: "Remove published worktree and branch" },
+                          ]
                         : [
-                            { value: "archive", label: "Archive plan" },
-                            { value: "review", label: "Re-open for review (planner/architect)" },
-                            { value: "view", label: "View plan details" },
-                        ]),
+                              { value: "archive", label: "Archive plan" },
+                              { value: "review", label: "Re-open for review (planner/architect)" },
+                              { value: "view", label: "View plan details" },
+                          ]),
                     { value: "cancel", label: "Cancel" },
                 ]);
                 if (!answer || answer === "cancel") {
@@ -627,7 +628,7 @@ export async function runLoadPlanCommand(argv: string[], options: CommandContext
                 if (answer === "archive") {
                     if (plan.attrs.status === "user_verified") {
                         const primaryRoot = resolvePrimaryCheckoutRoot(projectRoot);
-                        if (!await completeUserVerification({ projectRoot, plan, uiAPI, session })) continue;
+                        if (!(await completeUserVerification({ projectRoot, plan, uiAPI, session }))) continue;
                         projectRoot = primaryRoot;
                     }
                     const archived = await archivePlan(projectRoot, plan.planName, {
@@ -656,27 +657,32 @@ export async function runLoadPlanCommand(argv: string[], options: CommandContext
         if (plan.attrs.status === "approved" || isExecutablePlanStatus(plan.attrs.status)) {
             let reviewForced = forceReview;
             while (true) {
-                const answer = reviewForced ? "review" : await uiAPI.promptSelect("What would you like to do?", [
-                    { value: "proceed", label: "Proceed with execution" },
-                    ...(plan.attrs.status === "ready_for_work"
-                        ? [{ value: "planner_re_review", label: "Send back to Planner for re-review" }]
-                        : []),
-                    ...(directReviewEligibility.eligible
-                        ? [{
-                            value: "review",
-                            label: plan.attrs.status === "ready_for_work"
-                                ? "Review plan"
-                                : "Re-open for review (edit/annotate)",
-                        }]
-                        : []),
-                    {
-                        value: "user_verify",
-                        label: "Mark as User Verified (user attestation; no Workflow Validation claim)",
-                    },
-                    { value: "hold", label: "Put on hold" },
-                    { value: "view", label: "View plan details" },
-                    { value: "cancel", label: "Cancel" },
-                ]);
+                const answer = reviewForced
+                    ? "review"
+                    : await uiAPI.promptSelect("What would you like to do?", [
+                          { value: "proceed", label: "Proceed with execution" },
+                          ...(plan.attrs.status === "ready_for_work"
+                              ? [{ value: "planner_re_review", label: "Send back to Planner for re-review" }]
+                              : []),
+                          ...(directReviewEligibility.eligible
+                              ? [
+                                    {
+                                        value: "review",
+                                        label:
+                                            plan.attrs.status === "ready_for_work"
+                                                ? "Review plan"
+                                                : "Re-open for review (edit/annotate)",
+                                    },
+                                ]
+                              : []),
+                          {
+                              value: "user_verify",
+                              label: "Mark as User Verified (user attestation; no Workflow Validation claim)",
+                          },
+                          { value: "hold", label: "Put on hold" },
+                          { value: "view", label: "View plan details" },
+                          { value: "cancel", label: "Cancel" },
+                      ]);
                 reviewForced = false;
 
                 if (!answer || answer === "cancel") return;
@@ -699,11 +705,7 @@ export async function runLoadPlanCommand(argv: string[], options: CommandContext
                 if (answer === "proceed") {
                     restoreAgentName = planFlowRestoreAgent;
                     if (plan.attrs.status === "approved") {
-                        const ready = await prepareApprovedPlanForWork(
-                            projectRoot,
-                            plan,
-                            uiAPI,
-                        );
+                        const ready = await prepareApprovedPlanForWork(projectRoot, plan, uiAPI);
                         if (!ready) {
                             skipRouterRestore = true;
                             return;
@@ -798,10 +800,12 @@ export async function runLoadPlanCommand(argv: string[], options: CommandContext
                     { value: "resume", label: "Resume planning" },
                     ...(directReviewEligibility.eligible ? [{ value: "review", label: "Review plan" }] : []),
                     ...(isUserVerifiableStatus(plan.attrs.status)
-                        ? [{
-                            value: "user_verify",
-                            label: "Mark as User Verified (user attestation; no Workflow Validation claim)",
-                        }]
+                        ? [
+                              {
+                                  value: "user_verify",
+                                  label: "Mark as User Verified (user attestation; no Workflow Validation claim)",
+                              },
+                          ]
                         : []),
                     ...(isHoldableStatus(plan.attrs.status) ? [{ value: "hold", label: "Put on hold" }] : []),
                     { value: "view", label: "View plan details" },
