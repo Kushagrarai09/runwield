@@ -183,7 +183,7 @@
     "src/shared/owner-coordination/database.test.js",
     "src/shared/owner-coordination/file-session-bridge.test.js",
     "src/shared/owner-coordination/pairing.test.js",
-    "src/shared/owner-coordination/projects.test.js",
+    "src/shared/owner-coordination/projects.test.ts",
     "src/shared/owner-coordination/segment-activation-evidence.test.js",
     "src/shared/owner-coordination/segment-rollover-commit.test.js",
     "src/shared/owner-coordination/session-activations.test.ts",
