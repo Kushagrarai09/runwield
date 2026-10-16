@@ -461,7 +461,7 @@
     "src/shared/worktree-project-context.test.ts",
     "src/shared/worktree-registry-restore.test.ts",
     "src/shared/worktree-registry.test.js",
-    "src/shared/worktree-runtime-state-isolation.test.js",
+    "src/shared/worktree-runtime-state-isolation.test.ts",
     "src/testing/assertions.test.ts",
     "src/testing/home-sandbox.test.ts",
     "src/testing/process-global-lock.test.ts",
