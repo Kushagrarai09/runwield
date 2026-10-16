@@ -3,6 +3,7 @@
 import { realpathSync, statSync } from "node:fs";
 import { readFile, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
+import { readWorktreeReviewBaseFile, WorktreeReviewComparisonError } from "../../../../shared/workflow/git-snapshot.ts";
 import { getCwd } from "../../../../constants.js";
 
 export interface WorkspaceFile {
@@ -53,6 +54,7 @@ export function resolveWorkspaceFile(
 
 export interface ReviewFileContentOptions {
     cwd?: string;
+    targetBranch?: string;
 }
 
 interface WorkspaceTextFile {
@@ -61,9 +63,8 @@ interface WorkspaceTextFile {
 }
 
 /**
- * Return the current working-tree content when it is safely available.
- * The workflow diff's baseline tree is intentionally not guessed here, so
- * oldContent remains null instead of showing content from the wrong revision.
+ * Return safely available worktree content and, when a target is supplied,
+ * before text from the shared proposed-branch comparison.
  */
 export async function reviewFileContentApi(
     request: Request,
@@ -85,8 +86,26 @@ export async function reviewFileContentApi(
 
     try {
         const file = await readWorkspaceTextFile(cwd, filePath, baseDir);
+        let oldContent: string | null = null;
+        if (options.targetBranch) {
+            try {
+                const basePath = oldPath ? stripLineReference(oldPath) : file?.path || filePath;
+                for (const candidate of candidatePaths(cwd, basePath, baseDir)) {
+                    if (!isPathInside(candidate, cwd)) continue;
+                    oldContent = await readWorktreeReviewBaseFile(
+                        cwd,
+                        options.targetBranch,
+                        relative(cwd, candidate).replaceAll("\\", "/"),
+                    );
+                    if (oldContent !== null) break;
+                }
+                oldContent ??= file ? "" : null;
+            } catch (error) {
+                if (!(error instanceof WorktreeReviewComparisonError)) throw error;
+            }
+        }
         return Response.json({
-            oldContent: null,
+            oldContent,
             newContent: file?.contents ?? null,
             codeFile: file !== null,
             contents: file?.contents,
