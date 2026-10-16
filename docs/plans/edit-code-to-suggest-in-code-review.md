@@ -19,6 +19,12 @@ userVerifiedAt: null
 targetBranch: "main"
 deliveryBranch: "plan/edit-code-to-suggest-in-code-review"
 status: "reviewed"
+validatedCommit: "25f24a82a46a0d09b9fd58f4310207b54462e2e8"
+workRecord:
+    status: "generated"
+    recordId: "60dc16d7-b2a5-43d0-a3a6-9b0883708c69"
+    path: "docs/work-records/2026-10-16-edit-to-suggest-in-code-review.md"
+    lastAttemptAt: "2026-10-16T03:41:18.220Z"
 ---
 
 # Edit Code to Suggest in Code Review
