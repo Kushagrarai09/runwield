@@ -18,7 +18,7 @@ origin: "internal"
 userVerifiedAt: null
 targetBranch: "main"
 deliveryBranch: "plan/edit-code-to-suggest-in-code-review"
-status: "implemented"
+status: "reviewed"
 ---
 
 # Edit Code to Suggest in Code Review

@@ -2201,7 +2201,7 @@ export class WorkspaceSessionContinuationService {
             ? /** @type {Record<string, unknown>} */ (request.codeReview)
             : null;
         if (!codeReview || typeof codeReview.rawPatch !== "string") return null;
-        return request;
+        return { ...request, codeReview: { ...codeReview, rawPatch: codeReview.rawPatch } };
     }
 
     /**
