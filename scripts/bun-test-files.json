@@ -188,7 +188,7 @@
     "src/shared/owner-coordination/segment-rollover-commit.test.js",
     "src/shared/owner-coordination/session-activations.test.ts",
     "src/shared/owner-coordination/session-segment-evidence.test.ts",
-    "src/shared/owner-coordination/session-segments.test.js",
+    "src/shared/owner-coordination/session-segments.test.ts",
     "src/shared/owner-coordination/sessions.test.js",
     "src/shared/package-install.test.ts",
     "src/shared/package-resources.test.ts",
