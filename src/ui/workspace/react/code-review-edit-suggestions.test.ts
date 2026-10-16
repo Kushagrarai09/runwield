@@ -1,7 +1,10 @@
-import { assertEquals, assertNotEquals, assertStringIncludes } from "@std/assert";
+import { test } from "node:test";
+import { importTestBundle } from "../../../testing/import-test-bundle.ts";
+import { notDeepStrictEqual as assertNotEquals } from "node:assert/strict";
+import { assertEquals, assertStringIncludes } from "../../../testing/assertions.ts";
 import { editHunksToAnnotations, editorCommentToAnnotation } from "./code-review-edit-suggestions.ts";
 import { build, stop } from "esbuild";
-import { fromFileUrl } from "@std/path";
+import { fileURLToPath as fromFileUrl } from "node:url";
 
 // Bundle the real export as the browser does; vendored imports omit extensions.
 const bundle = await build({
@@ -25,9 +28,9 @@ const bundle = await build({
     },
 });
 stop();
-const { exportReviewFeedback } = await import(`data:text/javascript,${encodeURIComponent(bundle.outputFiles[0].text)}`);
+const { exportReviewFeedback } = await importTestBundle(bundle.outputFiles[0].text);
 
-Deno.test("edited regions become distinct new-side suggestion annotations and reach feedback", () => {
+test("edited regions become distinct new-side suggestion annotations and reach feedback", () => {
     const annotations = editHunksToAnnotations("src/example.ts", [
         { lineStart: 2, lineEnd: 3, originalCode: "before", suggestedCode: "after\nadded" },
         { lineStart: 8, lineEnd: 8, originalCode: "last", suggestedCode: "changed" },
@@ -51,7 +54,7 @@ Deno.test("edited regions become distinct new-side suggestion annotations and re
     assertStringIncludes(feedback, "**Suggested code:**\n```\nafter\nadded\n```");
 });
 
-Deno.test("empty replacements describe deletion and pure insertions omit original code", () => {
+test("empty replacements describe deletion and pure insertions omit original code", () => {
     const [deletion, insertion] = editHunksToAnnotations("example.ts", [
         { lineStart: 1, lineEnd: 2, originalCode: "removed", suggestedCode: "" },
         { lineStart: 4, lineEnd: 4, originalCode: "", suggestedCode: "inserted" },
@@ -64,7 +67,7 @@ Deno.test("empty replacements describe deletion and pure insertions omit origina
     assertEquals(editHunksToAnnotations("example.ts", []), []);
 });
 
-Deno.test("editor comments keep their pristine anchor and identify selected edited text", () => {
+test("editor comments keep their pristine anchor and identify selected edited text", () => {
     const comment = { lineStart: 3, lineEnd: 5, text: "  explain this  ", selectedText: "edited buffer", exact: false };
     const annotation = editorCommentToAnnotation("example.ts", comment)!;
     assertEquals(annotation.type, "comment");
