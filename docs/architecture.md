@@ -1016,7 +1016,7 @@ The current layout is:
 | `src/ui/review/`                     | Browser review interaction implementation                   | UI/review infrastructure; Core does not import it             |
 | `src/cmd/`                           | CLI/TUI command consumers                                   | Runtime public surface; no hosted/root/handler internals      |
 
-`src/shared/session/architecture-boundary.test.js` makes these rules executable in CI. It scans production files and
+`src/shared/session/architecture-boundary.test.ts` makes these rules executable in CI. It scans production files and
 fails on consumer vocabulary/imports in Core, internal session imports in consumers, host/object escape hatches,
 consumer event publication, and removed compatibility files returning.
 
@@ -1028,7 +1028,7 @@ dependency guard are what prevent this seam from silently returning.
 
 | Invariant                                              | Principal coverage                                                                  |
 | ------------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| Core knows no consumers; consumers use only Runtime    | `src/shared/session/architecture-boundary.test.js`                                  |
+| Core knows no consumers; consumers use only Runtime    | `src/shared/session/architecture-boundary.test.ts`                                  |
 | Opaque IDs and private internals                       | `src/shared/session/session-runtime.test.js`                                        |
 | One ordered turn lifecycle and error settlement        | `src/shared/session/session-runtime.test.js`                                        |
 | One Pi text/thinking/tool translation                  | `src/shared/session/session-subscribers.test.js`                                    |
@@ -1059,7 +1059,7 @@ Git behavior.
 | Git worktrees                | `worktree.test.js`, `worktree-registry.test.js`, `git.test.js`                                                                        | Real/temp Git operations, branch targets, merge safety, recovery metadata, non-Git behavior     |
 | Configuration and policy     | `settings.test.js`, `model-registry.test.js`, `model-validation.test.js`, `runtime-preflight.test.js`, `session-tools-policy.test.js` | Layering, migration, locking, model discovery, protected-tool and binary policy                 |
 | Collaboration primitives     | Tests under `src/shared/collaboration/`                                                                                               | Crypto, capabilities, protocol normalization, locks, secrets, client behavior                   |
-| Adapter/boundary conformance | `src/shared/session/architecture-boundary.test.js`, ACP tests, TUI runtime-adapter tests, Workspace tests                             | Dependency direction, protocol mapping, single event consumption, interactions, Plan projection |
+| Adapter/boundary conformance | `src/shared/session/architecture-boundary.test.ts`, ACP tests, TUI runtime-adapter tests, Workspace tests                             | Dependency direction, protocol mapping, single event consumption, interactions, Plan projection |
 
 The highest-value cross-boundary paths for later confidence analysis are visible in the diagrams above:
 
