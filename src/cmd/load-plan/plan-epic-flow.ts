@@ -17,10 +17,7 @@ import {
     formatWorkRecordAutoGenerationResult,
 } from "../../shared/work-records/auto-generation.js";
 import { SYSTEM_WORK_RECORD_MNEMOTECA_PORT } from "../../shared/work-records/mnemoteca-port.ts";
-import {
-    findTargetBranchPlansByParent,
-    preparePlanningWorktreeForPlan,
-} from "../../shared/workflow/planning-worktree.ts";
+import { findTargetBranchPlansByParent } from "../../shared/workflow/planning-worktree.ts";
 import { isGitRepository } from "../../shared/git.ts";
 import { ensureEpicBranch } from "../../shared/workflow/epic-branch.ts";
 import { reconcileEpicDelivery } from "../../shared/workflow/epic-integration.ts";
@@ -428,13 +425,6 @@ export async function handleEpicPlan({
                 if (!childPlanName) break;
                 if (childPlanName === "__next_child__") {
                     if (!nextChild) break;
-                    if (
-                        typeof nextChild.attrs.targetBranch === "string" &&
-                        nextChild.attrs.planId &&
-                        (await isGitRepository(projectRoot))
-                    ) {
-                        await preparePlanningWorktreeForPlan(projectRoot, nextChild.name, nextChild.attrs);
-                    }
                     await loadChildPlan(nextChild.name);
                     return "handled";
                 }
@@ -451,15 +441,6 @@ export async function handleEpicPlan({
                     if (!childAction || childAction === "back") break;
 
                     if (childAction === "load") {
-                        const selectedChild = children.find((child) => child.name === String(childPlanName));
-                        if (
-                            selectedChild &&
-                            typeof selectedChild.attrs.targetBranch === "string" &&
-                            selectedChild.attrs.planId &&
-                            (await isGitRepository(projectRoot))
-                        ) {
-                            await preparePlanningWorktreeForPlan(projectRoot, selectedChild.name, selectedChild.attrs);
-                        }
                         await loadChildPlan(String(childPlanName));
                         return "handled";
                     }

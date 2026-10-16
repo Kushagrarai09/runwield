@@ -21,8 +21,7 @@ status: "validated"
 origin: "internal"
 parentPlan: "package-manager-distribution"
 order: 1
-dependencies:
-    []
+dependencies: []
 userVerifiedAt: null
 targetBranch: "main"
 archivedAt: "2026-09-19T21:48:21.140Z"

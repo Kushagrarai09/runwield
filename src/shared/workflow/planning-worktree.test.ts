@@ -16,7 +16,8 @@ import { archivePlan, getPlanDocumentRoot, listPlans } from "../../plan-store.js
 import { listEntries, updateEntry } from "../worktree-registry.js";
 import { enterProjectRuntime } from "../project-runtime-layout.ts";
 import { loadControllerView, writeControllerState } from "./controller-registry.ts";
-import { resolveWorkflowPlanLocation } from "./plan-location.ts";
+import { PlanningNotStartedError, resolveWorkflowPlanLocation } from "./plan-location.ts";
+import { prepareSessionPlanningWorktree } from "./session-planning-worktree.ts";
 import { findTargetBranchPlansByParent, preparePlanningWorktreeForPlan } from "./planning-worktree.ts";
 
 type PlanFixtureAttribute = string | number | boolean | string[];
@@ -208,7 +209,7 @@ test("planning refresh preserves edits and imports publication before hook depen
 });
 
 for (const legacyAuthority of [false, true]) {
-    test(`loading retries a rolled-back anonymous planning creation${legacyAuthority ? " with legacy ownership" : ""}`, async () => {
+    test(`session start retries a rolled-back anonymous planning creation${legacyAuthority ? " with legacy ownership" : ""}`, async () => {
         const repo = await fixture.checkout();
         await git(repo, ["switch", "epic-target"]);
         const path = join(repo, "docs/plans/epic/01-child.md");
@@ -237,7 +238,13 @@ for (const legacyAuthority of [false, true]) {
         }
         await git(repo, ["config", "commit.gpgSign", "false"]);
 
-        const loaded = await resolveWorkflowPlanLocation(repo, "epic/01-child", { loadFromTarget: true });
+        const snapshot = await resolveWorkflowPlanLocation(repo, "epic/01-child", {
+            loadFromTarget: true,
+            readOnly: true,
+        });
+        assertEquals(snapshot.documentRoot, repo);
+        assertEquals((await listEntries(repo)).filter((entry) => entry.status === "planning").length, 0);
+        const loaded = await prepareSessionPlanningWorktree(repo, "epic/01-child");
         assertEquals(Boolean(loaded.plan?.attrs.planId), true);
         assertEquals(loaded.documentRoot === repo, false);
         assertEquals(loaded.documentRoot === failed.path, false);
@@ -510,6 +517,9 @@ test("target child catalog uses saved planning documents over target branch copi
 test("target document is selected before stale primary copy", async () => {
     const repo = await fixture.checkout();
 
+    await assertRejects(() => resolveWorkflowPlanLocation(repo, "epic/01-child"), PlanningNotStartedError);
+    assertEquals(await listEntries(repo), []);
+    await prepareSessionPlanningWorktree(repo, "epic/01-child");
     const location = await resolveWorkflowPlanLocation(repo, "epic/01-child");
 
     assertStringIncludes(location.plan?.markdown || "", "TARGET PLAN BODY");
@@ -655,7 +665,10 @@ test("unfinished standalone without an attempt recovers planning from its record
     const readOnly = await resolveWorkflowPlanLocation(repo, "standalone", { readOnly: true });
     assertEquals(readOnly.plan?.path, path);
     assertEquals(await listEntries(repo), []);
-    const recovered = await resolveWorkflowPlanLocation(repo, "standalone");
+    assertEquals(readOnly.planningNotStarted, true);
+    await assertRejects(() => resolveWorkflowPlanLocation(repo, "standalone"), PlanningNotStartedError);
+    assertEquals(await listEntries(repo), []);
+    const recovered = await prepareSessionPlanningWorktree(repo, "standalone");
     assertEquals((await listEntries(repo))[0].baseBranch, "plan/standalone");
     assertEquals((await listEntries(repo))[0].status, "planning");
     assertEquals(recovered.plan?.attrs.targetBranch, "main");
@@ -664,6 +677,23 @@ test("unfinished standalone without an attempt recovers planning from its record
     assertEquals(await fsReadFile(join(recovered.documentRoot, "landing-only.txt"), "utf8"), "landing context\n");
     assertEquals(await fsReadFile(path, "utf8"), original);
     assertEquals((await resolveWorkflowPlanLocation(repo, "standalone")).documentRoot, recovered.documentRoot);
+});
+
+test("session preparation fetches a recorded standalone landing absent from local refs", async () => {
+    const repo = await standaloneLandingFixture.checkout();
+    const remote = await fsMkdtemp(join(tmpdir(), "standalone-remote-"));
+    await git(remote, ["init", "--bare", "--initial-branch=main"]);
+    await git(repo, ["remote", "add", "origin", remote]);
+    await git(repo, ["push", "origin", "plan/standalone"]);
+    await git(repo, ["update-ref", "-d", "refs/heads/plan/standalone"]);
+    await git(repo, ["update-ref", "-d", "refs/remotes/origin/plan/standalone"]);
+    const refs = await git(repo, ["show-ref"]);
+    const snapshot = await resolveWorkflowPlanLocation(repo, "standalone", { readOnly: true });
+    assertEquals(snapshot.planningNotStarted, true);
+    assertEquals(await git(repo, ["show-ref"]), refs);
+    const prepared = await prepareSessionPlanningWorktree(repo, "standalone");
+    assertStringIncludes(prepared.plan?.body || "", "LANDING BODY");
+    assertEquals((await listEntries(repo)).length, 1);
 });
 
 test("published-only read snapshots cannot be used as archive document paths", async () => {

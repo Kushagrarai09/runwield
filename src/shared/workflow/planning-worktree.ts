@@ -173,7 +173,7 @@ async function readTargetPlanMarkdowns(
     return found;
 }
 
-async function loadTargetPlan(projectRoot: string, planName: string, baseRef: string) {
+export async function loadTargetPlan(projectRoot: string, planName: string, baseRef: string) {
     const source = await readTargetPlanMarkdown(projectRoot, planName, baseRef);
     if (!source) return null;
     const temp = await mkdtemp(join(tmpdir(), "runwield-"));
@@ -193,8 +193,18 @@ async function loadTargetPlan(projectRoot: string, planName: string, baseRef: st
 
 export async function findTargetBranchPlan(cwd: string, targetBranch: string, planName: string) {
     const projectRoot = resolvePrimaryCheckoutRoot(cwd);
-    const target = await resolveExistingTargetSnapshot(projectRoot, targetBranch);
-    return await loadTargetPlan(projectRoot, canonicalizeStoredPlanName(planName).name, target.baseRef);
+    const branch = targetBranch.trim().replace(/^origin\//, "");
+    if (!branch || branch === "HEAD" || branch.startsWith("refs/")) {
+        throw new Error(`Invalid target branch name: ${targetBranch}`);
+    }
+    // Lookup uses the known snapshot. Only session preparation fetches into project refs.
+    const remoteRef = `refs/remotes/origin/${branch}`;
+    const ref = (await gitRefExists(projectRoot, remoteRef)) ? remoteRef : `refs/heads/${branch}`;
+    // Undefined means this checkout has not fetched the branch; null means the
+    // known branch has no document at this path.
+    if (!(await gitRefExists(projectRoot, ref))) return undefined;
+    const commit = (await runGit(projectRoot, ["rev-parse", `${ref}^{commit}`])).trim();
+    return await loadTargetPlan(projectRoot, canonicalizeStoredPlanName(planName).name, commit);
 }
 
 /** Read remote target children in disposable Git storage without changing project refs or objects. */

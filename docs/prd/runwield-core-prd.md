@@ -404,8 +404,8 @@ started before Epic branches existed keep their earlier behavior.
 membership, names, and published content, not the current checkout. This includes an existing default Epic branch when
 its name is not yet recorded on the Epic, even if children have already started. Loading does not publish stale
 checkout drafts. A published rename keeps the child's stable identity and compatible saved planning edits. Active
-execution keeps its own document authority. If a selected child has no Plan ID, Core creates one before worktree
-preparation and saves it in the child's planning document. Later loads reuse that identity and worktree.
+execution keeps its own document authority. If a child has no Plan ID when its session starts, Core creates one during
+worktree preparation and saves it in the child's planning document. Later sessions reuse that identity and worktree.
 Before successful worktree creation, the Epic branch or primary checkout owns the Plan document. After creation, the
 worktree owns the document, even if the source copy changes or is removed. The registry owns attempt metadata keyed by
 Plan ID; it does not replace document content. A failed creation that was rolled back does not transfer document
@@ -415,6 +415,14 @@ ownership.
 Core fetches the latest Epic branch. The child's planning worktree starts from, or imports, that commit while keeping
 its saved scope and status. The refreshed commit is the child's baseline. A failed fetch keeps continuation
 recoverable.
+
+**Requirement: A child worktree starts only with a session.** Core creates a child's planning worktree only when
+planning, review, re-review, execution, or automatic continuation starts a session in that child. It starts from the
+latest fetched Epic branch. Plan location lookups are pure. Loading, selecting, viewing, canceling, pushing, or sharing
+never creates a child worktree. A session-less write to an unstarted child without a worktree is refused: start planning
+first, with no changes to the Plan or Git state. All Plans use the same session-start preparation, including standalone
+Plans with a recorded delivery branch. Existing planning worktrees are reused and refreshed; no automatic cleanup
+removes worktrees created earlier.
 
 **Requirement: Children are slices, and their boundaries can move.** A child moves the Epic forward; it need not be a
 finished feature by itself. Planner plans each child just before it runs and can reshape any unstarted sibling: move
@@ -449,9 +457,13 @@ siblings active. Listings show held work separately from active and finished wor
   in its planning worktree.
 - Given an existing default Epic branch and completed children, but no recorded Epic target, `/load-plan` lists that
   branch's current children and opens its next child, not a stale primary-checkout name.
-- Given a target-branch child without a Plan ID, loading it creates a durable identity and planning worktree. Repeated
-  or concurrent loading reuses both without changing the primary checkout or publishing to the Epic branch.
-- Given a failed creation that removed its worktree before it saved an identified Plan, loading retries from the source
+- Given an unstarted child, loading, selecting, viewing, or canceling creates no worktree and changes no Git refs.
+- Given a target-branch child without a Plan ID, starting its session creates a durable identity and planning worktree.
+  Repeated or concurrent session preparation reuses both without changing the primary checkout or publishing to the Epic
+  branch.
+- Given an unstarted child without a worktree, holding or pushing it without starting a session says to start planning
+  first and changes nothing.
+- Given a failed creation that removed its worktree before it saved an identified Plan, session start retries from the source
   automatically. A stale ownership reference from that failed creation does not block the retry.
 - Given an established planning document, loading keeps its saved contents and identity even when its source copy is
   removed. A missing established document is not replaced by an older source copy.

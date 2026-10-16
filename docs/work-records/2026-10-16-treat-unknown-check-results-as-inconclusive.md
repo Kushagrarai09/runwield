@@ -11,6 +11,7 @@ provenance:
     sourcePlans:
         - "06e22551-74b2-437c-a3a4-e8ec7e7ea511"
 ---
+
 # Treat unknown check results as inconclusive
 
 ## Summary
@@ -27,12 +28,11 @@ Validation scope is the configured workflow gate. See the delivery card's test r
 The recorder draft below is preserved verbatim as historical context. Its publication-pending and outstanding-validation statements describe the earlier snapshot, not the current delivery status. Implementation details, deviations and deferred work remain available here; consult the delivery evidence for final validation outcomes.
 
 > # Treat unknown check results as inconclusive
-> 
+>
 > ## Summary
-> 
+>
 > Added a Core PRD requirement and two acceptance scenarios that distinguish unknown state from a definite negative answer. Updated engineering, review, working-tree safety, and test-writing guidance to require safe handling of inconclusive checks and shared identifiers for matching answers. Added a prompt-composition regression test; focused tests and a section-removal mutation check passed. This change establishes requirements and agent guidance, not runtime compliance; no runtime code changed or was audited.
-> 
+>
 > ## Deferred Work
-> 
+>
 > A separate Plan can audit lock release, worktree registry repair, and Session writer locks against the new rule.
-> 
