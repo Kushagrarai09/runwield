@@ -184,7 +184,7 @@
     "src/shared/owner-coordination/file-session-bridge.test.js",
     "src/shared/owner-coordination/pairing.test.js",
     "src/shared/owner-coordination/projects.test.js",
-    "src/shared/owner-coordination/segment-activation-evidence.test.js",
+    "src/shared/owner-coordination/segment-activation-evidence.test.ts",
     "src/shared/owner-coordination/segment-rollover-commit.test.js",
     "src/shared/owner-coordination/session-activations.test.ts",
     "src/shared/owner-coordination/session-segment-evidence.test.ts",
