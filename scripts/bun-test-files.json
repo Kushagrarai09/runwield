@@ -308,7 +308,7 @@
     "src/shared/session/session-catalog.test.js",
     "src/shared/session/session-context-report.test.ts",
     "src/shared/session/session-context-resilience.test.js",
-    "src/shared/session/session-engineer-compaction.test.js",
+    "src/shared/session/session-engineer-compaction.test.ts",
     "src/shared/session/session-help.test.ts",
     "src/shared/session/session-host.test.js",
     "src/shared/session/session-metrics.test.ts",
