@@ -454,7 +454,7 @@
     "src/shared/workflow/workflow-slicer.integration.test.ts",
     "src/shared/workflow/workflow-tool-events.test.ts",
     "src/shared/workflow/workflow.test.js",
-    "src/shared/worktree-creation.test.js",
+    "src/shared/worktree-creation.test.ts",
     "src/shared/worktree-guards.test.js",
     "src/shared/worktree-merge-risk.test.ts",
     "src/shared/worktree-merge.test.js",
