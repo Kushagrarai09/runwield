@@ -94,6 +94,13 @@ test("TUI exit restores the shell without leaving the input behind", async () =>
 
     assertEquals(terminal.getScreenText(), shellScreen);
     assertEquals(terminal.stopped, true);
+    const screenEnteredAt = terminal.writes.lastIndexOf("\x1b[?1049h");
+    const focusReportingEnabledAt = terminal.writes.lastIndexOf("\x1b[?1004h");
+    const focusReportingDisabledAt = terminal.writes.lastIndexOf("\x1b[?1004l");
+    const screenRestoredAt = terminal.writes.lastIndexOf("\x1b[?1049l");
+    assertEquals(focusReportingEnabledAt > screenEnteredAt, true);
+    assertEquals(focusReportingDisabledAt > focusReportingEnabledAt, true);
+    assertEquals(focusReportingDisabledAt < screenRestoredAt, true);
     stopTUI();
     await terminal.flush();
     assertEquals(terminal.getScreenText(), shellScreen);

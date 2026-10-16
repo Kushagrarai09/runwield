@@ -71,6 +71,7 @@ export function createTuiManager<TTerminal extends FocusReportingTerminal, TTui 
         tuiInstance = pair.tui;
         try {
             tuiInstance.start?.();
+            focusStateOwner?.activate();
             started = true;
             installCrashGuards();
             crashGuardsInstalled = true;
@@ -84,12 +85,12 @@ export function createTuiManager<TTerminal extends FocusReportingTerminal, TTui 
                 }
             }
             try {
-                tuiInstance?.stop?.({ preserveScreen: true });
+                focusStateOwner?.dispose();
             } catch {
                 // Preserve the original construction/start failure.
             }
             try {
-                focusStateOwner?.dispose();
+                tuiInstance?.stop?.({ preserveScreen: true });
             } catch {
                 // Preserve the original construction/start failure.
             }
@@ -106,7 +107,7 @@ export function createTuiManager<TTerminal extends FocusReportingTerminal, TTui 
         if (tuiInstance) return tuiInstance;
         const terminal = new TerminalCtor();
         if (!env.WLD_GOLDEN_TUI && !env.WLD_GOLDEN_TUI_CHILD) {
-            focusStateOwner = installTerminalFocusState(terminal, () => tuiInstance?.requestRender?.(true));
+            focusStateOwner = installTerminalFocusState(terminal, () => tuiInstance?.requestRender?.(true), false);
         }
         try {
             const tui = new TuiCtor(terminal);
