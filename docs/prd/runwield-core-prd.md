@@ -1221,6 +1221,24 @@ comparisons.
 - Given a missing recorded target, missing execution HEAD, or unrelated histories, review stops with a recoverable
   comparison failure and does not use `main`, an alternate HEAD-only diff, the recovery baseline, or an empty patch.
 
+**Requirement: Suggest code by editing the diff.**
+
+Code Review settings provide an experimental **Edit code to suggest** switch, off by default. There is no announcement
+or first-run prompt. When enabled, Edit is available in the all-files diff on both standalone and Workspace review
+pages, one file at a time, but not in Guided Review. Finished edits become suggestion annotations in the feedback. The
+browser never writes project files. The before text comes from the shared proposed-branch comparison; Workspace reads
+the execution worktree, not the primary checkout.
+
+**Acceptance scenarios:**
+
+- Given the switch is off, opening Code Review shows no Edit control or announcement dialog.
+- Given the switch is on, editing a modified or added file and clicking Suggest creates an annotation per changed
+  region. Feedback includes the suggested code and the project files remain unchanged.
+- Given a comment made on selected text during editing, discarding the edit keeps the comment and restores the diff.
+- Given a Workspace review whose worktree differs from the primary checkout, the editor shows the worktree text.
+- Given Guided Review, its diffs have no Edit control. Plan Review settings do not show the switch.
+- Given an unavailable review comparison, the diff still renders and Edit shows its unavailable reason.
+
 **Requirement: Complete inspection before a review decision.**
 
 The Reviewer receives the actual approved Plan content. Rounds one and two must read the complete diff for every changed
