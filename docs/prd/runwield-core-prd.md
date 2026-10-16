@@ -73,6 +73,7 @@ Other surfaces reference these requirements and add only their own user experien
 - [Plan lifecycle](#plan-lifecycle)
 - [Epic decomposition and hold](#epic-decomposition-and-hold)
 - [Execution, validation, and recovery](#execution-validation-and-recovery)
+- [Standalone code review](#standalone-code-review)
 - [Semantic review and repair](#semantic-review-and-repair)
 - [Frontend engineering and pair execution](#frontend-engineering-and-pair-execution)
 - [Theme selection](#theme-selection)
@@ -470,6 +471,9 @@ does not reset its lifecycle or decisions.
 - Given recreated empty or stale runtime registry files, migration reports, or debug files, selecting a Plan recovers
   them automatically without replacing current attempts. Distinct valid attempts remain available; originals remain
   recoverable. Registry recovery and ordinary writers cannot overwrite each other or wait on their own locks.
+- Given an adopted worktree is removed or its former path is reused, its historical adoption record does not block
+  entry into the primary Project. Historical paths remain absolute, normalized, sorted, and unique; history alone
+  never authorizes recovery or file movement. Current checkout, registry, journal, and symlink safety checks still apply.
 - Given a Plan listing or a grouped evidence read, nested reads of the same checkout share runtime-layout verification
   for that operation. Later reads and writes revalidate changed evidence; background work cannot retain verification
   after its initiating read ends. Plan contents, controller state, and publication evidence remain freshly read.
@@ -666,6 +670,19 @@ and siblings active. Listings keep held work distinct from active and finished w
 
 ### Execution, validation, and recovery
 
+**Requirement: Isolate missing execution Plan documents.**
+
+A missing execution Plan document must not block catalog reads or validation identity preparation for other Plans. The
+catalog excludes that Plan rather than using its stale primary copy. Its registered Plan ID stays reserved. Loading the
+affected Plan still reports the missing authoritative file and preserves all work and runtime state.
+
+**Acceptance scenarios:**
+
+- Given two Plans and a missing execution document for one, catalog reads and validation identity preparation for the
+  other succeed. Neither operation changes the missing Plan's primary copy or registry entry.
+- Given that missing document, loading its Plan reports the exact execution path and does not use the primary copy.
+- Given a new Plan, identity assignment does not reuse the registered ID of a Plan whose execution document is missing.
+
 Delivery evidence must describe its stage accurately. Finalizing a prepared Work Record adds deterministic current
 metadata and preserves recorder prose as historical pre-publication notes; pending-publication and provisional test
 caveats must not remain the current Summary. Deferred work and confirmed deviations remain available. Publication
@@ -759,6 +776,32 @@ There is no automatic terminal failure path. Internal errors, retry limits, or a
 the user, clear the active workflow, or require them to start a replacement workflow. A pause for approval, an actual
 external prerequisite, or a user-requested hold preserves the same work and its immediate continuation path.
 
+**Requirement: Explain OS resource failures across CLI commands.**
+
+The CLI runs each command inside a supervised runtime. The supervisor remains outside the working runtime's
+file-descriptor budget. If the working runtime aborts, the supervisor restores terminal input and display modes,
+reports a nonzero exit, and explains recognized file-descriptor, memory, or process/thread exhaustion on stderr.
+Standard input and stdout remain available to protocol commands without added protocol output. Catchable resource
+errors during interactive submission show the same guidance and restore the draft. After the working runtime exits,
+the supervisor drains final stderr diagnostics without waiting for unrelated services to close inherited stderr.
+
+The supervisor does not delete saved work, change workflow state, or replay the failed command. After the external
+resource limit is resolved, `wld --continue` reopens the last saved Session through the normal recovery path. A native
+abort can lose input or events that had not yet been saved. This behavior reports and contains runtime failure; it does
+not establish the source of resource growth or prevent the working runtime from aborting.
+
+Acceptance scenarios:
+
+- Given exhausted file descriptors during image-worker creation, when Bun aborts, the supervisor stays alive long
+  enough to restore the terminal and show open-file-limit guidance and the saved-Session continuation command.
+- Given an uncaught file, socket, memory, or process/thread resource error anywhere in a command, the supervisor
+  reports the recognized resource limit without replaying the command or writing advice to protocol stdout.
+- Given a catchable submission error, the interactive interface restores the draft and explains the resource limit.
+- Given ordinary completion or cancellation, the supervisor preserves command output, forwards termination signals,
+  and retains the runtime's exit status without adding resource-limit advice.
+- Given a detached service that retains stderr, when the command exits, the supervisor returns the command's status
+  while the service remains running. A slow stderr consumer does not hide a final resource diagnostic.
+
 **Requirement: Replanning preserves the existing implementation.**
 
 Returning to Planner or reopening Plan review does not abandon the execution attempt. Approve & Run first reuses the
@@ -842,6 +885,12 @@ Executable Plan work starts only from `ready_for_work`.
 Execution requirements:
 
 - work on the approved Plan in an isolated worktree;
+- prepare worktree dependencies before the initial preparation commit invokes project Git hooks. Run only the explicit
+  project `worktree_setup_command` or a command the user confirms; never infer an installer or bypass hooks. When hooks
+  exist without configuration, ask for setup or confirmation that the checkout is ready. Setup failure or cancellation
+  must not start an Agent, mark the Plan in progress, or silently resume an incomplete attempt. Preserve setup output
+  for retry; never commit setup-created versioned files, unrelated edits, or staging as preparation. Successful setup
+  and a completed preparation checkpoint must not run again merely because the Session resumes;
 - preserve the user's existing checkout changes and a useful recovery point;
 - carry uncommitted `.wld/settings.json` and `docs/domain-language.md` into newly created planning and execution
   worktrees, including Tutorial worktrees, and recreate only RunWield's managed `.gitignore` block. These versionable
@@ -1048,6 +1097,13 @@ global edit does not replace an explicit project override.
 
 **Acceptance scenarios: Completion recovery and preparation.**
 
+- Given a fresh execution worktree with a dependency-backed Git hook and an approved setup command, setup completes
+  before the first preparation commit, the hook runs normally, and exactly one preparation commit precedes Agent work.
+- Given failed bootstrap, the Plan remains ready and the worktree and diagnostics survive. Retrying the corrected setup
+  uses that attempt, runs no Agent until setup and the hook succeed, and never absorbs unrelated setup output.
+- Given an already prepared worktree, resuming preserves its baseline and does not reinstall dependencies or add a
+  duplicate preparation commit.
+
 - Given delivered code with a failed Work Record, the completion menu offers **Retry Work Record**. Retry regenerates
   only that Plan's record (or its eligible parent Epic), keeps the current Session, and never repeats implementation,
   validation, merge, or other Plans' recording. Repeating a successful retry does not duplicate the record.
@@ -1059,6 +1115,63 @@ global edit does not replace an explicit project override.
 - Given a reused worktree with unrelated staged or unstaged ignore rules, preparation preserves both versions and
   classifies them as implementation rather than silently committing them. Ordinary and Tutorial execution share this
   rule.
+
+### Standalone code review
+
+**Scope: Current local CLI behavior.** Standalone Code Review does not require a Plan and does not write Plan lifecycle
+or Delivery Evidence. The validation gate remains owned by
+[Execution, validation, and recovery](#execution-validation-and-recovery).
+
+**Requirement: Review three local sources.** `wld review` compares HEAD with staged, unstaged, and untracked changes.
+`wld review <branch>` compares the named local branch with its merge base against the current checkout. A PR/MR URL
+compares the fetched head with the merge base of its target branch. Its host and repository path must match a remote of
+the current checkout. RunWield never clones another repository. Missing or unauthenticated Forge CLIs stop PR resolution
+with the required `gh auth login` or `glab auth login` command.
+
+**Requirement: Discuss and edit without a Plan.** The shared Code Review page provides Guided Review and chat with the
+normal Engineer. One saved Engineer Session serves the review and can be resumed. PR and branch reviews use refs until
+the first Engineer request. Only then does RunWield create or reuse a review worktree, outside the Plan registry.
+Uncommitted review uses the current checkout. Users direct Engineer commits and pushes.
+
+**Requirement: Explicit source-specific actions.** PR review offers Post to PR and Engineer destinations. Post comments
+submits a neutral review; Approve submits annotations and approval. Global notes and feedback become the review body.
+File and line comments retain their scope and side. Request changes is not offered. Posting is disabled when local edits
+no longer match the PR head. A moved remote head refuses posting and refreshes the review, clears old annotations, and
+marks retained Guided Review prose as stale. Users select current lines to add annotations again. An unchanged clean
+review worktree advances only by fast-forward from the previously reviewed head; local work and rewritten history are
+preserved with a recovery reason. Branch review offers Engineer feedback only. Uncommitted review offers Approve &
+Commit: the Operator follows the bundled commit rules, commits, and pushes, setting `origin HEAD` as upstream when
+needed. RunWield checks a clean tree, changed HEAD, and upstream equality. Detached HEAD disables that action. Failed
+pushes keep commits and leave the review usable. A retry keeps the original approval baseline and publishes an existing
+commit without creating another commit when the tree is clean. Partial GitLab submissions report failed comments without
+replaying mutations.
+
+**Requirement: Protect review work.** Closing the review makes no Forge or Git publication. On completion, cancellation,
+or interruption, RunWield closes its Sessions and removes only its own clean worktrees whose HEAD equals upstream. It
+also removes unchanged unused worktrees after checkout setup fails. Incomplete checkout setup cannot start the Engineer;
+a later request retries setup when no local work needs protection. RunWield keeps dirty or unpushed work, reports the
+path and branch, and never removes reused or primary checkouts. The terminal prints the review link, progress, result,
+cleanup outcome, and Engineer Session id.
+
+**Acceptance scenarios**
+
+- Given staged, unstaged, and untracked edits, no-target review shows all three and Guided Review explains the diff.
+- Given a different local branch, review initially creates no worktree; an Engineer request creates or reuses one and
+  the next diff includes its edits. No Approve or Open PR action appears.
+- Given a PR in a matching remote, review works before workspace creation; Post comments and Approve have real Forge
+  effects. A foreign repository is rejected without fetching or cloning.
+- Given missing or signed-out `gh` or `glab`, PR resolution names that CLI and its sign-in command.
+- Given a remote head change, posting refuses and refreshes, removes old annotation anchors, and marks the retained
+  Guide stale. A clean unchanged worktree advances to a descendant head; local edits, local commits, and rewritten
+  history remain protected. Local Engineer changes disable posting until pushed.
+- Given checkout setup failure, an unchanged unused worktree is removed and the next Engineer request retries checkout.
+  Changes made during failed setup remain protected; no Engineer starts in an incomplete checkout.
+- Given a lazy worktree created after the review page opened, subsequent Guided Review jobs use that worktree directory.
+- Given uncommitted work, Approve & Commit succeeds only after the commit and upstream checks pass. A failed push keeps
+  the commit and reports the failed check. A successful push retry completes approval without a second commit; detached
+  HEAD starts no Operator.
+- Given review exit during PR metadata lookup, no Forge submission starts. A clean created checkout at upstream is
+  removed; dirty, unpushed, reused, and primary checkouts remain accessible.
 
 ### Semantic review and repair
 
@@ -1536,7 +1649,9 @@ does not retry ambiguous generations automatically or change host-global configu
 - Given an existing, escaping or symlinked destination, generation is rejected without modifying existing files. If a
   destination appears while generation is in flight, it is preserved and the tool reports failure.
 - Given a cancelled in-flight request, HTTP requests receive cancellation or the owned CLI helper terminates, and no
-  output file is published. No implicit generation retry occurs.
+  output file is published. If Codex turn startup is still being acknowledged, cleanup waits briefly for its identity
+  so it can interrupt that turn before terminating the helper. An unresponsive helper still terminates within a bounded
+  cleanup interval. No implicit generation retry occurs.
 - Given a model preset switches from Pi to Agy, incompatible inherited image options are dropped. Explicit unsupported
   settings fail clearly; disabling image generation removes automatic registration in newly built Sessions.
 
@@ -1663,13 +1778,18 @@ Execution Backends, live message headers, restored messages, and the TUI footer.
 **Required tools.**
 
 Users can customize Agent tools, while required workflow capabilities remain available so customization does not break
-planning or validation. Guide may save ordinary Markdown documents when explicitly requested in the conversation; this
+planning or validation. An Agent definition names tools individually with `tools`, by group with `toolSets` (`read`,
+`write`, `docs`, `shell`, `web`), or both. A layer that sets either key replaces the lower layer's tool list with its
+expanded sets followed by its individual tools. An unknown set name fails with source-specific guidance. An Agent with
+neither key in any layer is conversation-only. `delegate_agent_read` and `delegate_agent_write` grant `delegate_agent`
+limited to one mode; the `read` and `write` sets include them respectively, plain `delegate_agent` allows both, and the
+tool advertises only the allowed modes and refuses others, including a mode a Delegated Role's ceiling reduces to. Guide may save ordinary Markdown documents when explicitly requested in the conversation; this
 does not grant authority to change workflow-owned Plans, ADRs, or Work Records. Guide also supports requested
 [image generation](#image-generation) when configured, without gaining general file-editing tools.
 
 Optional Agent and delegated-definition `bashAllowedCommands` front matter limits RunWield-managed shell starts without
 granting the bash tool. Omission inherits a lower definition layer; absent from all layers means unrestricted bash. A
-list replaces the lower list, `[]` denies every command, and `null` resets the definition's inherited list to
+non-empty list adds to the lower list and removes duplicate entries, `[]` denies every command, and `null` resets the definition's inherited list to
 unrestricted. The child delegate's effective list intersects its parent's limit, so neither omission nor `null` can
 remove a parent's restriction. Guide and read delegates have inspection defaults. Read delegates also allow selected
 `gh` and `glab` commands for PR/MR, issue, and repository inspection, not forge mutation or arbitrary API calls. Write
@@ -1684,8 +1804,11 @@ boundary and does not control external CLI Execution Backends' native shells. Se
 
 - Given `planner.md` with the effective front matter name `Plan Designer`, when any Execution Backend emits Agent
   messages, the message headers and footer show `Plan Designer`; routing and saved Agent identity remain `planner`.
+- Given a project Agent definition with `toolSets: [read]` over bundled Operator, when the Agent loads, it has the read
+  set's tools plus Operator's protected workflow tools and none of its write or shell tools; given `toolSets: [reed]`, the
+  definition fails to load and names the valid sets.
 - Given layered Agent definitions, when a higher layer omits `bashAllowedCommands`, its lower list remains; when it
-  supplies a list it replaces the lower list, `[]` denies all commands, and `null` resets the definition to unrestricted
+  supplies a non-empty list it adds to the lower list without duplicate entries, `[]` denies all commands, and `null` resets the definition to unrestricted
   bash. Invalid values fail with source-specific guidance instead of removing a limit silently.
 - Given Guide or a read-only delegate with effective bash access, when it runs an allowed Git or file inspection
   command, it can inspect the repository; an unapproved or compound command does not start and the denial lists allowed
@@ -1905,6 +2028,16 @@ Code CLI and signing in with Claude Code; it does not require a RunWield API-key
 executable or authentication state is reported by the first-turn backend preflight, not by provider credential
 onboarding.
 
+**Requirement: Deliver text steering during Claude CLI work.** Core sends text Steering Messages to the active Claude
+CLI turn, including turns that use only native tools or no tools. A message stays pending until Claude acknowledges
+receipt. Core then records it once in the Session Transcript. Lifecycle calls cannot accept completion while steering
+is pending. Up recalls the latest pending message to the input without removing earlier messages. Esc recalls pending
+messages and stops the turn. A late cancellation result must not replace the recalled input with the original request.
+
+**Acceptance scenario:** Given an active Claude CLI turn, when the user sends text steering during a native command,
+Claude receives it before its next model step. The queue removes the acknowledged message, and Session history contains
+that user message once. Delivery does not require a RunWield lifecycle call.
+
 Users need an honest account of what activity a backend can display and replay. Backend coverage and implementation gaps
 belong in its technical documentation and Plans. RunWield Connect is the separate mode where an external host, such as
 Claude Code, owns the conversation and model calls.
@@ -1990,6 +2123,18 @@ Future/open requirements:
 **Scope and maturity:** Current Candidate release isolation and shell installation baseline. Prepared Homebrew and
 Windows WinGet support; public package availability is pending owner publication/submission. Remote development runtime
 preparation is a connection-only development-build subset, not a qualified production release.
+
+**Requirement: Honor the displayed Candidate update confirmation default.**
+
+For shell-installed RunWield, `wld update --rc` and its `wld upgrade --rc` alias accept Enter at `[Y/n]` as Yes.
+Explicit `y` or `yes` accepts without regard to case; No, unrecognized input, and end-of-input cancel before downloading
+or running the installer. `--yes` bypasses this confirmation.
+
+**Acceptance scenarios:**
+
+- Given an available Candidate and an interactive terminal, pressing Enter or typing Yes starts the selected update.
+- Given No, unrecognized input, or Ctrl-D, the update is canceled and the installer is neither downloaded nor run.
+- Given `--yes`, the selected update proceeds without requesting terminal input.
 
 **Requirement: Prepare only a matching remote development runtime.**
 
@@ -2351,6 +2496,8 @@ surface.
   blocker guidance. Status and cancel still work for permitted tasks; external native-shell commands are not filtered.
 - Given a read-only background delegate, when its parent turn ends, the child can finish and report its result without
   becoming the foreground Agent. A request for a background write delegation fails before launch.
+- Given a background shell that creates a child during Stop, cancellation terminates that child and drains the output
+  pipes without waiting for its natural exit. Workspace then releases the idle owner without another model turn.
 - Given running Background Tasks, when an execution Agent first calls `task_completed` while eligible to finish, Core
   rejects the call and lists each running task ID and kind. It explains that the next eligible completion call cancels
   remaining tasks and accepts completion. The Agent can instead wait for results or cancel tasks first; cancellation

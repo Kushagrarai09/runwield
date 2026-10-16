@@ -3,6 +3,7 @@
 import { realpathSync, statSync } from "node:fs";
 import { readFile, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
+import { captureForegroundProcess } from "../../../../shared/captured-process.ts";
 import { readWorktreeReviewBaseFile, WorktreeReviewComparisonError } from "../../../../shared/workflow/git-snapshot.ts";
 import { getCwd } from "../../../../constants.js";
 
@@ -29,10 +30,14 @@ export function resolveWorkspaceFile(
     options: WorkspaceFileOptions = {},
 ): WorkspaceFile | null {
     if (
-        !filePath || filePath.includes("\0") || filePath.includes("\\") || isAbsolute(filePath) ||
+        !filePath ||
+        filePath.includes("\0") ||
+        filePath.includes("\\") ||
+        isAbsolute(filePath) ||
         /^[a-z][a-z\d+.-]*:/i.test(filePath) ||
         (!options.allowRelativeTraversal && filePath.split("/").includes(".."))
-    ) throw Object.assign(new Error("File path is outside this review workspace."), { code: "EACCES" });
+    )
+        throw Object.assign(new Error("File path is outside this review workspace."), { code: "EACCES" });
 
     try {
         const root = realpathSync(projectRoot);
@@ -55,6 +60,7 @@ export function resolveWorkspaceFile(
 export interface ReviewFileContentOptions {
     cwd?: string;
     targetBranch?: string;
+    headRef?: string;
 }
 
 interface WorkspaceTextFile {
@@ -63,7 +69,7 @@ interface WorkspaceTextFile {
 }
 
 /**
- * Return safely available worktree content and, when a target is supplied,
+ * Return safely available selected-ref or worktree content and, when a target is supplied,
  * before text from the shared proposed-branch comparison.
  */
 export async function reviewFileContentApi(
@@ -85,7 +91,9 @@ export async function reviewFileContentApi(
     }
 
     try {
-        const file = await readWorkspaceTextFile(cwd, filePath, baseDir);
+        const file = options.headRef
+            ? await readRefTextFile(cwd, options.headRef, filePath, baseDir)
+            : await readWorkspaceTextFile(cwd, filePath, baseDir);
         let oldContent: string | null = null;
         if (options.targetBranch) {
             try {
@@ -104,16 +112,19 @@ export async function reviewFileContentApi(
                 if (!(error instanceof WorktreeReviewComparisonError)) throw error;
             }
         }
-        return Response.json({
-            oldContent,
-            newContent: file?.contents ?? null,
-            codeFile: file !== null,
-            contents: file?.contents,
-            filepath: file?.path || filePath,
-            ...(!file && { error: `File not found in project: ${filePath}` }),
-        }, {
-            headers: { "cache-control": "no-store" },
-        });
+        return Response.json(
+            {
+                oldContent,
+                newContent: file?.contents ?? null,
+                codeFile: file !== null,
+                contents: file?.contents,
+                filepath: file?.path || filePath,
+                ...(!file && { error: `File not found in project: ${filePath}` }),
+            },
+            {
+                headers: { "cache-control": "no-store" },
+            },
+        );
     } catch (error) {
         if (error instanceof Error && ["EACCES", "EPERM"].includes(Reflect.get(error, "code"))) {
             return Response.json({ error: "File path is outside this review workspace." }, { status: 403 });
@@ -124,9 +135,12 @@ export async function reviewFileContentApi(
 
 /** Plannotator hides its open-in control when the host reports unavailable. */
 export function reviewOpenInAppsApi(): Response {
-    return Response.json({ available: false, apps: [] }, {
-        headers: { "cache-control": "no-store" },
-    });
+    return Response.json(
+        { available: false, apps: [] },
+        {
+            headers: { "cache-control": "no-store" },
+        },
+    );
 }
 
 /**
@@ -135,9 +149,12 @@ export function reviewOpenInAppsApi(): Response {
  * RunWield settings source.
  */
 export function reviewLocalConfigApi(): Response {
-    return Response.json({ ok: true }, {
-        headers: { "cache-control": "no-store" },
-    });
+    return Response.json(
+        { ok: true },
+        {
+            headers: { "cache-control": "no-store" },
+        },
+    );
 }
 
 function stripLineReference(value: string): string {
@@ -155,6 +172,24 @@ function candidatePaths(cwd: string, filePath: string, baseDir: string): string[
         candidates.push(resolve(cwd, baseDir, filePath));
     }
     return [...new Set(candidates)];
+}
+
+async function readRefTextFile(
+    cwd: string,
+    headRef: string,
+    filePath: string,
+    baseDir: string,
+): Promise<WorkspaceTextFile | null> {
+    for (const candidate of candidatePaths(cwd, filePath, baseDir)) {
+        if (!isPathInside(candidate, cwd)) continue;
+        const path = relative(cwd, candidate).replaceAll("\\", "/");
+        const result = await captureForegroundProcess("git", {
+            cwd,
+            args: ["show", `${headRef}:${path}`],
+        });
+        if (result.success) return { path, contents: new TextDecoder().decode(result.stdout) };
+    }
+    return null;
 }
 
 async function readWorkspaceTextFile(

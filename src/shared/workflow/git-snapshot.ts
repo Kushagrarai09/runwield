@@ -170,12 +170,9 @@ export async function resolveWorktreeReviewBaseTree(cwd: string, targetBranch: s
     try {
         targetCommit = (await runGit(cwd, ["rev-parse", "--verify", `refs/heads/${branch}^{commit}`])).trim();
     } catch (error) {
-        if (error instanceof Error && isMissingRevisionError(error)) {
-            throw new WorktreeReviewTargetError(branch);
-        }
+        if (error instanceof Error && isMissingRevisionError(error)) throw new WorktreeReviewTargetError(branch);
         throw error;
     }
-
     let executionCommit;
     try {
         executionCommit = (await runGit(cwd, ["rev-parse", "--verify", "HEAD^{commit}"])).trim();
@@ -187,7 +184,6 @@ export async function resolveWorktreeReviewBaseTree(cwd: string, targetBranch: s
         }
         throw error;
     }
-
     let commonAncestor;
     try {
         commonAncestor = (await runGit(cwd, ["merge-base", targetCommit, executionCommit])).trim();
@@ -200,6 +196,53 @@ export async function resolveWorktreeReviewBaseTree(cwd: string, targetBranch: s
         throw error;
     }
     return (await runGit(cwd, ["rev-parse", "--verify", `${commonAncestor}^{tree}`])).trim();
+}
+
+export type ReviewHead = { kind: "ref"; ref: string } | { kind: "worktree" };
+
+export interface ReviewDiffOptions {
+    baseRef: string;
+    head: ReviewHead;
+}
+
+/** Compare the common ancestor with a commit or the complete working tree. */
+export async function getReviewDiff(cwd: string, { baseRef, head }: ReviewDiffOptions): Promise<string> {
+    await assertGitRepository(cwd, "Computing a review diff");
+    const targetCommit = (await runGit(cwd, ["rev-parse", "--verify", `${baseRef}^{commit}`])).trim();
+    const headRef = head.kind === "ref" ? head.ref : "HEAD";
+    let executionCommit;
+    try {
+        executionCommit = (await runGit(cwd, ["rev-parse", "--verify", `${headRef}^{commit}`])).trim();
+    } catch (error) {
+        if (error instanceof Error && isMissingRevisionError(error)) {
+            throw new WorktreeReviewComparisonError(
+                `Cannot compute the worktree review diff because ${
+                    head.kind === "worktree" ? "execution HEAD" : headRef
+                } is unavailable.`,
+            );
+        }
+        throw error;
+    }
+
+    let commonAncestor;
+    try {
+        commonAncestor = (await runGit(cwd, ["merge-base", targetCommit, executionCommit])).trim();
+    } catch (error) {
+        if (error instanceof GitCommandError && error.code === 1) {
+            throw new WorktreeReviewComparisonError(
+                `Cannot compute the worktree review diff because ${baseRef} and ${
+                    head.kind === "worktree" ? "execution HEAD" : headRef
+                } have no common ancestor.`,
+            );
+        }
+        throw error;
+    }
+    const baseTree = (await runGit(cwd, ["rev-parse", "--verify", `${commonAncestor}^{tree}`])).trim();
+    const currentTree =
+        head.kind === "worktree"
+            ? await captureWorktreeTree(cwd)
+            : (await runGit(cwd, ["rev-parse", "--verify", `${executionCommit}^{tree}`])).trim();
+    return await diffTrees(cwd, baseTree, currentTree);
 }
 
 /** Read a file from the same common-ancestor tree used by the proposed patch. */

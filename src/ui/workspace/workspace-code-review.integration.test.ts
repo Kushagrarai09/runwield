@@ -1,5 +1,5 @@
 import { rmdir as fsRmdir } from "node:fs/promises";
-// @ts-nocheck: Deno test imports are checked by scripts/run-tests.js, not Astro check.
+// @ts-nocheck: test fixture types are checked by scripts/run-tests.js, not Astro check.
 import { captureForegroundProcess } from "../../shared/captured-process.ts";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -9,10 +9,11 @@ import {
     mkdtemp as fsMkdtemp,
     readFile as fsReadFile,
     rename as fsRename,
+    writeFile as fsWriteFile,
     rm as fsRm,
     writeFile as fsWriteFile,
 } from "node:fs/promises";
-import { assertEquals, assertFalse, assertRejects, assertStringIncludes } from "@std/assert";
+import { assertEquals, assertFalse, assertRejects, assertStringIncludes } from "../../testing/assertions.ts";
 import { WorkspaceSessionContinuationService } from "./server/session-continuation.js";
 import { defineGitFixture, git } from "../../shared/git-test-fixture.ts";
 import { openOwnerCoordinationStore } from "../../shared/owner-coordination/index.js";
@@ -82,12 +83,14 @@ test("Workspace Code Review keeps an empty patch reviewable with the repair conv
                     id: "review-conversation",
                     agentLabel: "Reviewer Feedback Engineer",
                     revision: 1,
-                    events: [{
-                        type: "assistant_text_delta",
-                        delta: "The repair is complete.",
-                        messageId: "repair-reply",
-                        agentName: "reviewer-feedback-engineer",
-                    }],
+                    events: [
+                        {
+                            type: "assistant_text_delta",
+                            delta: "The repair is complete.",
+                            messageId: "repair-reply",
+                            agentName: "reviewer-feedback-engineer",
+                        },
+                    ],
                 },
             },
         });
@@ -277,12 +280,12 @@ test("TUI review routes keep the same shared bodies in the standalone shell", as
 });
 
 const fileCheckoutFixture = defineGitFixture(async (cwd) => {
-    await Deno.writeTextFile(`${cwd}/review.ts`, "merge base text\n");
+    await fsWriteFile(`${cwd}/review.ts`, "merge base text\n");
     await git(cwd, ["add", "."]);
     await git(cwd, ["commit", "-m", "base"]);
 });
 
-Deno.test("Workspace live Code Review reads execution worktree files and merge-base before text", async () => {
+test("Workspace live Code Review reads execution worktree files and merge-base before text", async () => {
     const root = await fileCheckoutFixture.checkout();
     const execution = `${root}/execution`;
     const store = openOwnerCoordinationStore({ dbPath: `${root}/owner.sqlite3` });
@@ -293,9 +296,9 @@ Deno.test("Workspace live Code Review reads execution worktree files and merge-b
     let interaction;
     try {
         await git(root, ["worktree", "add", "-b", "execution", execution, "main"]);
-        await Deno.writeTextFile(`${root}/review.ts`, "primary checkout text\n");
-        await Deno.writeTextFile(`${execution}/review.ts`, "execution worktree text\n");
-        await Deno.writeTextFile(`${execution}/added.ts`, "added execution text\n");
+        await fsWriteFile(`${root}/review.ts`, "primary checkout text\n");
+        await fsWriteFile(`${execution}/review.ts`, "execution worktree text\n");
+        await fsWriteFile(`${execution}/added.ts`, "added execution text\n");
         const pairing = store.createPairingRequest({ codeFactory: () => "REV123", proofFactory: () => "review-proof" });
         store.approvePairingRequest(pairing.code);
         const claimed = store.claimPairingRequest(pairing.proof);
@@ -312,8 +315,7 @@ Deno.test("Workspace live Code Review reads execution worktree files and merge-b
             prompt: "Review code.",
             _meta: { diffText: "stale patch", executionCwd: execution, targetBranch: "main" },
         });
-        const referer =
-            `${origin}/projects/${project.projectId}/sessions/session-files/review/code?operation=operation-files&interaction=interaction-files`;
+        const referer = `${origin}/projects/${project.projectId}/sessions/session-files/review/code?operation=operation-files&interaction=interaction-files`;
         const handler = app.handler();
         const page = await handler(new Request(referer, { headers: { cookie } }));
         assertEquals(page.headers.get("referrer-policy"), "same-origin");
@@ -335,13 +337,11 @@ Deno.test("Workspace live Code Review reads execution worktree files and merge-b
         );
         assertEquals((await added.json()).oldContent, "");
 
-        for (
-            const fallbackReferer of [
-                `${origin}/projects/${project.projectId}/sessions/session-files`,
-                referer.replace("interaction-files", "stale-interaction"),
-                referer.replace("session-files", "other-session"),
-            ]
-        ) {
+        for (const fallbackReferer of [
+            `${origin}/projects/${project.projectId}/sessions/session-files`,
+            referer.replace("interaction-files", "stale-interaction"),
+            referer.replace("session-files", "other-session"),
+        ]) {
             const fallback = await handler(
                 new Request(`${origin}/api/file-content?path=review.ts`, {
                     headers: { cookie, referer: fallbackReferer },
@@ -356,11 +356,11 @@ Deno.test("Workspace live Code Review reads execution worktree files and merge-b
         await interaction;
         await app.close();
         store.close();
-        await Deno.remove(root, { recursive: true });
+        await fsRm(root, { recursive: true, force: true });
     }
 });
 
-Deno.test("live Code Review checkout shares review liveness and requires stored execution context", async () => {
+test("live Code Review checkout shares review liveness and requires stored execution context", async () => {
     const cwd = await fileCheckoutFixture.checkout();
     const store = openOwnerCoordinationStore({ dbPath: `${cwd}/owner.sqlite3` });
     const service = new WorkspaceSessionContinuationService({ store });
@@ -385,13 +385,11 @@ Deno.test("live Code Review checkout shares review liveness and requires stored 
             interactionId: "interaction-checkout",
         };
         assertEquals(await service.getLiveCodeReviewCheckout(options), { cwd, targetBranch: "main" });
-        for (
-            const invalid of [
-                { ...options, projectId: "other" },
-                { ...options, runwieldSessionId: "other" },
-                { ...options, interactionId: "other" },
-            ]
-        ) {
+        for (const invalid of [
+            { ...options, projectId: "other" },
+            { ...options, runwieldSessionId: "other" },
+            { ...options, interactionId: "other" },
+        ]) {
             assertEquals(await service.getLiveCodeReviewCheckout(invalid), null);
             assertEquals(await service.getLiveCodeReview(invalid), null);
         }
@@ -413,6 +411,6 @@ Deno.test("live Code Review checkout shares review liveness and requires stored 
         await interaction;
         await service.close();
         store.close();
-        await Deno.remove(cwd, { recursive: true });
+        await fsRm(cwd, { recursive: true, force: true });
     }
 });

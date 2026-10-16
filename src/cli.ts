@@ -1,4 +1,3 @@
-import { isStandaloneExecutable } from "./shared/runtime-identity.ts";
 /**
  * @module cli
  * RunWield — Plan-by-Default Coding Harness
@@ -12,21 +11,28 @@ import { isStandaloneExecutable } from "./shared/runtime-identity.ts";
  *   wld help
  *
  * Source-run fallback for contributors:
- *   deno run -A src/cli.ts "<user request>"
+ *   bun src/cli.ts "<user request>"
  */
 
-import { argv, env, exit, versions } from "node:process";
-import { createRequire } from "node:module";
-import { parseArgs } from "@std/cli/parse-args";
+import { argv, env, execArgv, execPath, exit, ppid } from "node:process";
+import { parseArgs } from "./shared/cli-args.ts";
+import { isStandaloneExecutable } from "./shared/runtime-identity.ts";
+import { superviseRuntime } from "./shared/runtime-supervisor.ts";
+
+// Keep the supervisor outside every command and startup import. A native Bun
+// abort cannot reach JavaScript catch/finally blocks in the working runtime.
+// Match the actual parent so nested wld invocations get their own supervisor.
+if (env.WLD_RUNTIME_SUPERVISOR_PID !== String(ppid)) {
+    exit(await superviseRuntime(execPath, isStandaloneExecutable() ? argv.slice(2) : [...execArgv, ...argv.slice(1)]));
+}
 const cliArgs = argv.slice(2);
 
 // Keep private runtime entries ahead of helper exposure, browser startup and
 // command-registry imports. Static imports execute before top-level dispatch.
 if (["--remote-preflight", "--remote-view", "--remote-supervisor", "--remote-model-proof"].includes(cliArgs[0])) {
     try {
-        const { runRemoteModelProofEntry, runRemotePreflight, runRemoteView } = await import(
-            "./shared/remote/entry.ts"
-        );
+        const { runRemoteModelProofEntry, runRemotePreflight, runRemoteView } =
+            await import("./shared/remote/entry.ts");
         if (cliArgs.length !== (cliArgs[0] === "--remote-supervisor" ? 2 : 1)) {
             throw new Error("Unexpected remote entry arguments");
         }
@@ -43,26 +49,17 @@ if (["--remote-preflight", "--remote-view", "--remote-supervisor", "--remote-mod
         exit(1);
     }
 }
-const { cleanupAgentBrowserSessionSync, initializeAgentBrowserSession } = await import(
-    "./shared/agent-browser-session.ts"
-);
+const { cleanupAgentBrowserSessionSync, initializeAgentBrowserSession } =
+    await import("./shared/agent-browser-session.ts");
 const { exposeBundledHelpersSync } = await import("./shared/package-install.ts");
 
 function isProtocolOnlyStartup(argv: string[]): boolean {
-    return argv[0] === "mcp" || argv[0] === "remote" ||
-        (argv[0] === "--mode" && argv[1] === "acp");
+    return argv[0] === "mcp" || argv[0] === "remote" || (argv[0] === "--mode" && argv[1] === "acp");
 }
 
 if (cliArgs[0] !== "remote") exposeBundledHelpersSync();
 
 if (!isProtocolOnlyStartup(cliArgs)) initializeAgentBrowserSession();
-
-if (versions.deno && isStandaloneExecutable()) {
-    Object.defineProperty(globalThis, "require", {
-        value: createRequire(import.meta.url),
-        configurable: true,
-    });
-}
 
 function stripLeadingGlobalFlags(argv: string[]): string[] {
     const stripped: string[] = [];
@@ -71,7 +68,11 @@ function stripLeadingGlobalFlags(argv: string[]): string[] {
     for (const arg of argv) {
         if (
             stillInGlobalPrefix &&
-            (arg === "--help" || arg === "-h" || arg === "--continue" || arg === "-c" || arg === "--version" ||
+            (arg === "--help" ||
+                arg === "-h" ||
+                arg === "--continue" ||
+                arg === "-c" ||
+                arg === "--version" ||
                 arg === "-v")
         ) {
             continue;
@@ -143,9 +144,8 @@ async function main(): Promise<void> {
         return;
     }
 
-    const { COMMAND_NAMES, commandRegistry, getCommandDefinition, hasCommandSurface } = await import(
-        "./cmd/registry.js"
-    );
+    const { COMMAND_NAMES, commandRegistry, getCommandDefinition, hasCommandSurface } =
+        await import("./cmd/registry.js");
     const { printCommandHelp, printGlobalHelp } = await import("./cmd/help/index.js");
 
     const helpRequest = resolveHelpRequest(args, COMMAND_NAMES);
