@@ -119,7 +119,7 @@ export async function listCommitsTouchingPathsSince(
  * Capture the current working tree into a git tree object without mutating the
  * repository's real index.
  */
-export async function captureWorktreeTree(cwd: string): Promise<string> {
+export async function captureWorktreeTree(cwd: string, forcePaths: string[] = []): Promise<string> {
     await assertGitRepository(cwd, "Capturing an execution baseline tree");
     const realIndex = (await runGit(cwd, ["rev-parse", "--git-path", "index"])).trim();
     const realIndexPath = isAbsolute(realIndex) ? realIndex : join(cwd, realIndex);
@@ -135,6 +135,7 @@ export async function captureWorktreeTree(cwd: string): Promise<string> {
             await fsRm(indexPath);
         }
         await runGit(cwd, ["add", "-A", "--", "."], env);
+        if (forcePaths.length > 0) await runGit(cwd, ["add", "-f", "--", ...forcePaths], env);
         return (await runGit(cwd, ["write-tree"], env)).trim();
     } finally {
         await fsRm(indexPath).catch(() => {});

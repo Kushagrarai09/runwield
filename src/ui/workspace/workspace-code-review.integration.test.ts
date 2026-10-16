@@ -11,7 +11,6 @@ import {
     rename as fsRename,
     writeFile as fsWriteFile,
     rm as fsRm,
-    writeFile as fsWriteFile,
 } from "node:fs/promises";
 import { assertEquals, assertFalse, assertRejects, assertStringIncludes } from "../../testing/assertions.ts";
 import { WorkspaceSessionContinuationService } from "./server/session-continuation.js";

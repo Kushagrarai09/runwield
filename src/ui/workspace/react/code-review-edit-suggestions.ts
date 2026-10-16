@@ -1,6 +1,13 @@
 import type { CodeAnnotation } from "@plannotator/ui/types.ts";
 import type { SuggestionHunk } from "../../../../third_party/plannotator/packages/review-editor/edit/deriveSuggestions.ts";
-import type { EditSelectionComment } from "../../../../third_party/plannotator/packages/review-editor/edit/useEditSession.ts";
+/** Data consumed at the editor callback boundary; no editor runtime types are needed here. */
+interface EditSelectionComment {
+    lineStart: number;
+    lineEnd: number;
+    exact: boolean;
+    selectedText: string;
+    text: string;
+}
 
 /** Convert edits of the new-side buffer into ordinary review annotations. */
 export function editHunksToAnnotations(filePath: string, hunks: SuggestionHunk[]): CodeAnnotation[] {
