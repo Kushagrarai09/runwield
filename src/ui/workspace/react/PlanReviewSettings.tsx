@@ -74,6 +74,7 @@ export function PlanReviewSettings(
     const diffShowBackground = useConfigValue("diffShowBackground");
     const diffExpandUnchanged = useConfigValue("diffExpandUnchanged");
     const diffFontSize = useConfigValue("diffFontSize");
+    const editSuggestions = useConfigValue("editSuggestions") === true;
 
     useEffect(() => {
         if (!open) return;
@@ -202,6 +203,7 @@ export function PlanReviewSettings(
                                 mode === "code"
                                     ? (
                                         <CodeDisplaySettings
+                                            editSuggestions={editSuggestions}
                                             diffExpandUnchanged={diffExpandUnchanged}
                                             diffFontSize={diffFontSize}
                                             diffIndicators={diffIndicators}
@@ -429,6 +431,7 @@ function DisplaySettings({ gridEnabled, onGridEnabledChange, onUIPreferencesChan
 }
 
 function CodeDisplaySettings({
+    editSuggestions,
     diffExpandUnchanged,
     diffFontSize,
     diffIndicators,
@@ -515,6 +518,13 @@ function CodeDisplaySettings({
                 description="Show full file content around changes"
                 label="Expand Unchanged Regions"
                 onChange={(next) => configStore.set("diffExpandUnchanged", next)}
+            />
+            <div className="border-t border-border" />
+            <SettingSwitch
+                checked={editSuggestions}
+                description="Experimental: edit the diff to create code suggestions"
+                label="Edit code to suggest"
+                onChange={(next) => configStore.set("editSuggestions", next)}
             />
         </>
     );

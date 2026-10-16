@@ -30,6 +30,7 @@ import { ReviewContextBar } from "./ReviewContextBar.tsx";
 import { ArtifactConversationSidebar } from "./ArtifactConversationSidebar.tsx";
 import { buildArtifactConversationFeedback, collectArtifactConversationReply } from "./artifact-conversation.ts";
 import { useReviewAnnotations } from "./use-review-annotations.ts";
+import { editHunksToAnnotations, editorCommentToAnnotation } from "./code-review-edit-suggestions.ts";
 import { useCodeReviewHighlighting } from "./code-review-highlighting.ts";
 import { formatGuidedReviewGenerator, formatGuidedReviewUsageStatus } from "./guided-review-status.ts";
 import "./plannotator.css";
@@ -132,6 +133,15 @@ export function CodeReviewSurface({ payload, presentation = "standalone" }) {
     const highlightingReady = useCodeReviewHighlighting(files);
     const [activeFileIndex, setActiveFileIndex] = useState(0);
     const [annotations, setAnnotations] = useState([]);
+    const editSuggestions = useConfigValue("editSuggestions") === true;
+    const addSuggestionsForFile = useCallback((filePath, hunks) => {
+        const additions = editHunksToAnnotations(filePath, hunks);
+        setAnnotations((items) => [...items, ...additions]);
+    }, []);
+    const addEditorCommentForFile = useCallback((filePath, comment) => {
+        const annotation = editorCommentToAnnotation(filePath, comment);
+        if (annotation) setAnnotations((items) => [...items, annotation]);
+    }, []);
     const [selectedAnnotationId, setSelectedAnnotationId] = useState(null);
     const [scrollTargetAnnotation, setScrollTargetAnnotation] = useState(null);
     const [pendingSelection, setPendingSelection] = useState(null);
@@ -1174,6 +1184,9 @@ export function CodeReviewSurface({ payload, presentation = "standalone" }) {
                                                     diffFontSize,
                                                 ].join("|")}
                                                 files={accordionFiles}
+                                                enableEditSuggestions={editSuggestions}
+                                                onAddSuggestionsForFile={addSuggestionsForFile}
+                                                onAddEditorCommentForFile={addEditorCommentForFile}
                                                 diffStyle={diffStyle}
                                                 diffOverflow={diffOverflow}
                                                 diffIndicators={diffIndicators}
