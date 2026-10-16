@@ -310,7 +310,7 @@
     "src/shared/session/session-context-resilience.test.js",
     "src/shared/session/session-engineer-compaction.test.ts",
     "src/shared/session/session-help.test.ts",
-    "src/shared/session/session-host.test.js",
+    "src/shared/session/session-host.test.ts",
     "src/shared/session/session-metrics.test.ts",
     "src/shared/session/session-prompt.test.js",
     "src/shared/session/session-provider-replay.test.ts",
