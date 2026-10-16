@@ -349,7 +349,7 @@
     "src/shared/standalone-review/review-signals.test.ts",
     "src/shared/standalone-review/review-target.test.ts",
     "src/shared/standalone-review/review-worktree.test.ts",
-    "src/shared/update-check.test.js",
+    "src/shared/update-check.test.ts",
     "src/shared/validation-settings-publication.test.ts",
     "src/shared/windows-bash.test.ts",
     "src/shared/work-records/auto-generation.test.ts",
