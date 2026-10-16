@@ -32,10 +32,10 @@ validation, memory, or Workspace goals need a distinct product surface.
 
 ## Core Philosophies
 
-- **Plan-by-Default:** Material work becomes a reviewed Plan unless it is an `OPERATION` or a `QUICK_FIX`.
+- **Plan-by-Default:** Material work becomes a reviewed Plan unless it is an `INQUIRY`, an `OPERATION`, or a `QUICK_FIX`.
 - **Right ceremony for the request:** Router matches the workflow to the request, so simple tasks stay light and large
   work gets a complete specification.
-- **Artifacts over vibes:** Plans, PRDs, ADRs, validation notes, and Work Records are durable project memory.
+- **Artifacts over vibes:** Plans, PRDs, ADRs, and Work Records are durable project memory.
 - **Session continuity:** Fresh Sessions start with Router. Follow-up messages stay with the specialist that owns the
   topic until the user starts fresh or returns to Router.
 - **Work protection:** RunWield preserves user work and asks before any action that could destroy it.
@@ -400,6 +400,11 @@ first needs the branch, RunWield creates it from the latest primary branch, reco
 drafts on it while the user's checkout stays as it is. An existing branch keeps its history. Epics whose children
 started before Epic branches existed keep their earlier behavior.
 
+**Requirement: Load children from the Epic branch.** Once the Epic branch exists, `/load-plan` uses it for child
+membership, names, and published content, not the current checkout. Loading does not publish stale checkout drafts.
+A published rename keeps the child's stable identity and compatible saved planning edits. Active execution keeps its
+own document authority.
+
 **Requirement: Each child starts with the preceding children's published code.** Before the next child is prepared,
 Core fetches the latest Epic branch. The child's planning worktree starts from, or imports, that commit while keeping
 its saved scope and status. The refreshed commit is the child's baseline. A failed fetch keeps continuation
@@ -433,6 +438,9 @@ siblings active. Listings show held work separately from active and finished wor
 
 - Given a new Epic without its branch, starting the first child creates the branch from the latest primary branch with
   the child drafts on it; the user's checkout is unchanged.
+- Given Planner renumbers children on the Epic branch, `/load-plan` lists the new names, excludes removed names, and
+  opens the selected branch Plan without restoring stale checkout drafts. A renamed child's saved planning edits stay
+  in its planning worktree.
 - Given a child published from another checkout, preparing the next child includes that publication.
 - Given the next child already has a planning worktree with saved edits, continuation imports the published code and
   keeps those edits.
