@@ -376,7 +376,7 @@
     "src/shared/workflow/execution-metrics-measurements.test.ts",
     "src/shared/workflow/execution-metrics-turn-identity.test.ts",
     "src/shared/workflow/execution-metrics.test.ts",
-    "src/shared/workflow/execution-plan-file.test.js",
+    "src/shared/workflow/execution-plan-file.test.ts",
     "src/shared/workflow/execution-progress.test.ts",
     "src/shared/workflow/execution-segment-handoff.test.ts",
     "src/shared/workflow/git-snapshot-ref.test.ts",
