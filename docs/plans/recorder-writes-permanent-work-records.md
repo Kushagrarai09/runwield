@@ -20,7 +20,7 @@ origin: "internal"
 userVerifiedAt: null
 targetBranch: "main"
 deliveryBranch: "main"
-status: "in_progress"
+status: "implemented"
 ---
 
 # Recorder writes permanent Work Records

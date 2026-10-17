@@ -1240,18 +1240,18 @@ or Session. Failures, text-only output, malformed bytes, cancellation, and timeo
 authorship are follow-up scope.
 
 **Requirement: Preserve outcomes with truthful completion confidence.** Work Records are concise, repository-owned
-Markdown accounts of what completed work produced and what future planning should remember. They keep meaningful
-deviations, deferred scope, concrete lessons, source Plan links, Ticket links, and useful evidence. Identity and links
-survive renaming, and search can be rebuilt from the documents.
+Markdown accounts of permanent facts: the delivered outcome, recorded Plan Deviations, out-of-scope facts, and durable
+lessons. They keep source Plan and Ticket links, not validation receipts, delivery status, run events, to-dos, or known
+defects. Identity and links survive renaming, and search can be rebuilt from the documents.
 
 - Eligible top-level completed Plans and Epics receive auto-approved records by default. An Epic record summarizes its
   relevant children, including deferred and archived work.
 - Completion labels distinguish RunWield verification, user verification with its note, closure without verification
   with its reason, and done-enough Epics. Missing historical closure reasons are disclosed.
-- A record describes its delivery stage accurately. A record written before publication stays pending until the merge
-  finalizes, and a restart reuses it. After publication, it names the exact confirmed published commit, and earlier
-  Recorder prose stays as pre-publication notes. Publication and test receipts state what was confirmed. A search-index
-  failure is reported separately from successful delivery.
+- A record written before publication stays pending until the merge finalizes, and a restart reuses it. Publication
+  approves the record without rewriting its body. The delivered commit lives only in the source Plan's Delivery
+  Evidence, reached through the record's source Plan provenance. A search-index failure is reported separately from
+  successful delivery.
 
 **Requirement: Recording is best effort and recoverable.** Recording failure leaves the completed Plan and its delivery
 intact. The completion notice shows both outcomes and offers **Retry Work Record**, which regenerates only that Plan's
@@ -1277,6 +1277,9 @@ Git history.
 **Acceptance scenarios:**
 
 - Given an eligible completed Plan, the record links its source and labels how completion was established.
+- Given no recorded Plan Deviations, the record has no Deviations from Plan section.
+- Given publication, the approved record body equals its pre-publication body.
+- Given user verification, the record states the attestation and cleaned note once.
 - Given delivered code and a failed record, the completion menu offers **Retry Work Record**; a retry regenerates only
   that record, and repeating a successful retry keeps one record.
 - Given Recorder returns text without submitting its record, one corrective turn can finish it; if both turns omit it,
