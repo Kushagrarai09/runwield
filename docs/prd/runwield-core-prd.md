@@ -1022,6 +1022,31 @@ theme activates only its theme content. See the [theme reference](../user-docume
 **Scope and maturity:** Current baseline. A compressed Project Brief and further code-intelligence improvements are
 target scope.
 
+**Requirement: Confirm home and system folder use.**
+
+Before local project CLI dispatch or direct TUI startup, RunWield warns “System or home folder detected. Continue?” with
+the selected path and Continue/Quit choices. Quit is the default; cancellation stops before project work or Session
+creation. The policy matches the current account home, filesystem roots, and a fixed cross-platform system-directory
+list by exact normalized or canonical equality. Symlink aliases match; ordinary descendants and similarly named folders
+do not. Consent applies only to the same inspected directory in this invocation, not a persistent trusted-folder
+setting.
+
+Noninteractive project commands refuse with nonzero status and stderr guidance unless a leading
+`--allow-system-directory` flag acknowledges the directory. This flag does not consume piped request input, change
+`--continue`, or bypass Init's file consent. Help, version, global commands, Workspace services, ACP, MCP, and remote
+connections retain their existing behavior. This warning is consent, not a security sandbox or universal unsafe-path
+detector.
+
+**Acceptance scenarios:**
+
+- Given an exact home or listed system directory, when project startup begins, no project work starts before Continue.
+  Quit, Escape, Ctrl-C, and cancellation stop startup. A later process asks again.
+- Given Continue, automatic Init, Tutorial, and empty-folder starter offers are absent and their stored markers are
+  unchanged. Explicit Init and Onboard remain available with their normal consent.
+- Given an ordinary descendant such as `~/projects/app`, `/opt/app`, or `/tmp/app`, startup keeps its normal offers.
+- Given piped `guided-review` input at home, startup refuses before reading it unless the leading acknowledgement is
+  supplied.
+
 **Requirement: Preserve useful project facts and retrieve relevant context.**
 
 - **Mnemoteca:** project and global persistent memory for preferences, project facts, and critical context.
@@ -1088,6 +1113,8 @@ change impact.
 ### Tutorial
 
 **Scope and maturity:** Current TUI baseline. Workspace-native Tutorial controls are deferred.
+
+Home and classified system folders are not eligible for automatic offers, even after Continue.
 
 **Requirement: Offer an optional guided first change.** On one eligible new TUI Session, RunWield offers a Tutorial
 after model setup and the Init decision. The offer shows the current project and states that starting makes a real
