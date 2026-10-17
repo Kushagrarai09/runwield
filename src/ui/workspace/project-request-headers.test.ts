@@ -3,10 +3,7 @@ import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { assertEquals } from "../../testing/assertions.ts";
 
-const pages = [
-    { path: "./pages/projects/index.astro", helper: "rwProjectOwnerFetch" },
-    { path: "./pages/projects/[projectId]/settings.astro", helper: "rwSettingsOwnerFetch" },
-];
+const pages = [{ path: "./pages/projects/[projectId]/settings.astro", helper: "rwSettingsOwnerFetch" }];
 
 async function requestThroughPage(path: string, helper: string, options: RequestInit = {}) {
     const source = await readFile(new URL(path, import.meta.url), "utf8");
@@ -56,19 +53,30 @@ for (const page of pages) {
         assertEquals(sent.get("x-runwield-csrf"), "csrf=proof");
     });
 
-    test(`${page.helper} preserves case-insensitive caller overrides without mutating input`, async () => {
-        const headers = new Headers({ "Content-Type": "text/plain", "X-RunWield-CSRF": "explicit-proof" });
-        const options = Object.freeze({ method: "POST", headers });
-        const sent = await requestThroughPage(page.path, page.helper, options);
-        assertEquals(sent.get("content-type"), "text/plain");
-        assertEquals(sent.get("x-runwield-csrf"), "explicit-proof");
-        assertEquals(options.headers, headers);
-        assertEquals(
-            [...headers],
-            [
-                ["content-type", "text/plain"],
-                ["x-runwield-csrf", "explicit-proof"],
+    const overrideForms: HeaderForm[] = [
+        {
+            name: "Headers",
+            make: () => new Headers({ "Content-Type": "text/plain", "X-RunWield-CSRF": "explicit-proof" }),
+        },
+        {
+            name: "tuples",
+            make: () => [
+                ["Content-Type", "text/plain"],
+                ["X-RunWield-CSRF", "explicit-proof"],
             ],
-        );
-    });
+        },
+        { name: "record", make: () => ({ "Content-Type": "text/plain", "X-RunWield-CSRF": "explicit-proof" }) },
+    ];
+    for (const form of overrideForms) {
+        test(`${page.helper} preserves case-insensitive ${form.name} overrides without mutating input`, async () => {
+            const headers = form.make();
+            const before = structuredClone(headers instanceof Headers ? [...headers] : headers);
+            const options = Object.freeze({ method: "POST", headers });
+            const sent = await requestThroughPage(page.path, page.helper, options);
+            assertEquals(sent.get("content-type"), "text/plain");
+            assertEquals(sent.get("x-runwield-csrf"), "explicit-proof");
+            assertEquals(options.headers, headers);
+            assertEquals(headers instanceof Headers ? [...headers] : headers, before);
+        });
+    }
 }

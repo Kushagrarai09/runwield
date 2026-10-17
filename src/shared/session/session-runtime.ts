@@ -4,6 +4,7 @@ export {
     listPromptTemplates,
     listSkills,
 } from "./session.js";
+export { resolveSessionContinuation } from "./session-continuation.ts";
 export type { DequeueQueuedMessageResult, SteerSessionResult } from "./runtime/types.ts";
 import { AGENTS } from "../../constants.js";
 import { SessionHost } from "./session-host.ts";
@@ -387,12 +388,7 @@ interface ManagedContinuationSnapshot {
     activeExecutionWorkflow?: RuntimeContinuationValue;
 }
 type RuntimeContinuationValue =
-    | string
-    | number
-    | boolean
-    | null
-    | RuntimeContinuationRecord
-    | RuntimeContinuationValue[];
+    string | number | boolean | null | RuntimeContinuationRecord | RuntimeContinuationValue[];
 interface RuntimeContinuationRecord {
     [key: string]: RuntimeContinuationValue;
 }
@@ -411,9 +407,8 @@ export function deriveManagedSessionContinuationDecision(facts: ManagedContinuat
     return {
         ok: true,
         code: "continue",
-        agentName: typeof snapshot.activeAgent === "string" && snapshot.activeAgent
-            ? snapshot.activeAgent
-            : AGENTS.ROUTER,
+        agentName:
+            typeof snapshot.activeAgent === "string" && snapshot.activeAgent ? snapshot.activeAgent : AGENTS.ROUTER,
         message: "Ready for your next message.",
     };
 }
