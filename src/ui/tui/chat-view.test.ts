@@ -750,7 +750,6 @@ test("an image read completing after view disposal adds no preview and requests 
             isCtrlCPendingExit: () => false,
             cycleThinkingLevel: () => {},
             readClipboardImage: () => read,
-            isDisposed: () => view.isDisposed(),
             cancelRuntimeSession: () => false,
         });
         const pending = view.editor.handleInput("\x16");

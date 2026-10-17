@@ -1,6 +1,6 @@
 import { handleBashCommand } from "./bash-interceptor.ts";
 import { endBlink } from "./boot-logo.ts";
-import { installKeybindings } from "./keybindings.ts";
+import { disposeKeybindings, installKeybindings } from "./keybindings.ts";
 import { handleSlashCommand, isImmediateBuiltinSlashCommandWhileStreaming, type SkillMeta } from "./slash-dispatch.ts";
 import { readClipboardImage } from "./clipboard.ts";
 import { resolveTemplateModel } from "../../shared/models/model-validation.ts";
@@ -580,7 +580,6 @@ export function createChatInputController(options: ChatInputControllerOptions): 
         readClipboardImage,
         onClipboardImageMissing: () => view.showClipboardImageMissing(),
         onInput: () => view.clearClipboardImageNotice(),
-        isDisposed: () => disposed || view.isDisposed(),
         cancelRuntimeSession: () => runtime.cancelSession(options.getSessionId()).aborted,
     });
     return {
@@ -592,6 +591,7 @@ export function createChatInputController(options: ChatInputControllerOptions): 
         offerSessionCompletion,
         dispose: async () => {
             disposed = true;
+            disposeKeybindings(editor);
             editor.onChange = originalOnChange;
             await flushPendingThinkingLevelPersistence();
         },

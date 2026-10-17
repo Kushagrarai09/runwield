@@ -37,9 +37,21 @@ export interface KeybindingsContext {
     readClipboardImage(): Promise<{ base64: string; mimeType: string } | null>;
     onClipboardImageMissing?(): void;
     onInput?(): void;
-    isDisposed?(): boolean;
     handleImagePaste?: (image: ImageAttachment) => Promise<ImageAttachment | null>;
     cancelRuntimeSession(): boolean;
+}
+
+interface KeybindingsLifecycle {
+    disposed: boolean;
+}
+
+const keybindingsLifecycles = new WeakMap<Editor, KeybindingsLifecycle>();
+
+export function disposeKeybindings(editor: Editor): void {
+    const lifecycle = keybindingsLifecycles.get(editor);
+    if (!lifecycle) return;
+    lifecycle.disposed = true;
+    keybindingsLifecycles.delete(editor);
 }
 
 function isEditorEmpty(editor: Editor): boolean {
@@ -85,6 +97,8 @@ export function installKeybindings(ctx: KeybindingsContext): (data: string) => v
         forceResetUI();
     }
 
+    const lifecycle: KeybindingsLifecycle = { disposed: false };
+    keybindingsLifecycles.set(editor, lifecycle);
     const originalHandleInput = editor.handleInput.bind(editor);
     let pendingClipboardRead: Promise<ImageAttachment | null> | null = null;
 
@@ -96,7 +110,7 @@ export function installKeybindings(ctx: KeybindingsContext): (data: string) => v
                 // The paste handler reports clipboard failures. Keep later input responsive.
             }
         }
-        if (ctx.isDisposed?.()) return;
+        if (lifecycle.disposed) return;
         ctx.onInput?.();
         if (matchesKey(data, Key.escape)) {
             hideKeyboardHelp?.();
@@ -133,7 +147,7 @@ export function installKeybindings(ctx: KeybindingsContext): (data: string) => v
             } finally {
                 if (pendingClipboardRead === imageRead) pendingClipboardRead = null;
             }
-            if (ctx.isDisposed?.()) return;
+            if (lifecycle.disposed) return;
             if (!img) {
                 ctx.onClipboardImageMissing?.();
                 return;
@@ -144,7 +158,7 @@ export function installKeybindings(ctx: KeybindingsContext): (data: string) => v
             if (handleImagePaste) {
                 handleImagePaste(img)
                     .then((attachment) => {
-                        if (ctx.isDisposed?.()) return;
+                        if (lifecycle.disposed) return;
                         if (!attachment) {
                             const index = pastedImages.indexOf(img);
                             if (index >= 0) {
@@ -158,7 +172,7 @@ export function installKeybindings(ctx: KeybindingsContext): (data: string) => v
                         tui.requestRender();
                     })
                     .catch((error) => {
-                        if (ctx.isDisposed?.()) return;
+                        if (lifecycle.disposed) return;
                         const index = pastedImages.indexOf(img);
                         if (index >= 0) {
                             pastedImages.splice(index, 1);

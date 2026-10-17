@@ -37,6 +37,7 @@ import { SpinnerBlock, ToolExecutionBlock, ToolExecutionGroupBlock } from "./blo
 import { createSessionSnapshotWindow } from "./session-snapshot-window.ts";
 import { type FooterTheme, renderUpdateNoticeLine } from "./chat-footer.ts";
 import { installUiApiOverrides } from "./ui-api-overrides.ts";
+import { disposeKeybindings } from "./keybindings.ts";
 import type { Component } from "@earendil-works/pi-tui";
 import type { ThemeColor } from "@earendil-works/pi-coding-agent";
 import type { ImageAttachment } from "../../shared/session/types.js";
@@ -206,7 +207,6 @@ export interface ChatView {
     requestRender(): void;
     showClipboardImageMissing(): void;
     clearClipboardImageNotice(): void;
-    isDisposed(): boolean;
     dispose(): void;
 }
 
@@ -735,9 +735,9 @@ async function createChatViewInternal(options: ChatViewOptions): Promise<ChatVie
             clipboardImageMissing = false;
             tui.requestRender();
         },
-        isDisposed: () => disposed,
         dispose() {
             disposed = true;
+            disposeKeybindings(editor);
             mascot.dispose();
             for (const surface of artifactReaders) void Promise.resolve(surface.stop()).catch(() => {});
             artifactReaders.clear();
