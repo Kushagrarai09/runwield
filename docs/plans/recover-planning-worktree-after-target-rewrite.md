@@ -16,7 +16,7 @@ routingIntent: "PLANNED_CHANGE"
 sessionName: "Plan Registry Recovery"
 targetBranch: "main"
 deliveryBranch: "main"
-status: "implemented"
+status: "reviewed"
 ---
 
 # Recover a planning worktree after its Epic branch is rewritten
