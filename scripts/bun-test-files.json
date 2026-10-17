@@ -603,6 +603,7 @@
     "src/ui/tui/testing/child-protocol.test.ts",
     "src/ui/tui/testing/isolated-environment.test.ts",
     "src/ui/tui/testing/scenario-runner-clock.test.ts",
+    "src/ui/tui/testing/scripted-review-surface.test.ts",
     "src/ui/tui/testing/subprocess-runner.test.ts",
     "src/ui/tui/testing/validation-workflow-branch-precision.test.ts",
     "src/ui/tui/testing/validation-workflow-coverage.test.ts",
