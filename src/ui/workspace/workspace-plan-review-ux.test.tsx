@@ -296,7 +296,10 @@ test("Plan and Code review use shared toolbar structure with edge-aligned restor
     assertStringIncludes(surface, '{ value: "frontend-engineer", label: "Frontend Engineer", icon: "frontend" }');
     assertStringIncludes(surface, '{ value: "pair", label: "Pair Execution", icon: "pair" }');
     assertStringIncludes(surface, '{ value: "autonomous", label: "Autonomous", icon: "autonomous" }');
-    assertStringIncludes(styles, ".rw-plan-review .rw-plannotator-plan-layout:has(> .rw-plan-sidebar-tab-toggle)");
+    assertStringIncludes(
+        styles.replace(/\s+/g, " "),
+        ".rw-plan-review .rw-plannotator-plan-layout:has(> .rw-plan-sidebar-tab-toggle)",
+    );
     assertStringIncludes(styles, ".rw-plan-sidebar-tab-toggle {\n    position: absolute;\n    top: 0;");
     assertStringIncludes(surface.replace(/\s+/g, " "), "compact showHelpLink={false}");
     assertStringIncludes(codeSurface, 'className="rw-review-toolbar rw-code-diff-toolbar"');
