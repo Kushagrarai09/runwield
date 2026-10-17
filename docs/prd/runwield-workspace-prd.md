@@ -335,6 +335,11 @@ can relink, disable, or remove a Project whose root is missing or disabled. Disa
 registration completely and returns to Projects; adding the directory again creates a new registration and rediscovers
 its Sessions and artifacts. Repository content becomes available when the Project is enabled and its root exists.
 
+**Requirement: Recover from failed Project requests.** Linking, relinking, and maintenance actions show pending and
+failure feedback beside their controls. A rejected network request clears pending feedback, preserves entered paths,
+and restores the controls for an explicit retry. Failures never navigate or claim completion, and a later successful
+attempt replaces the failure message. Pending requests prevent duplicate submission of the same action.
+
 **Requirement: Restore archived Sessions from Project settings.** Project settings has General and Archived Sessions
 tabs. Archived Sessions lists archived names in pages, links to their conversations, and offers Unarchive. Unarchive
 returns the same Session ID, transcript, and Plan Associations to ordinary history. Opening an archived Session keeps it
@@ -366,6 +371,9 @@ and slide the highlight; sidebars open and close with subtle motion. Reduced-mot
   worktrees remain. A removed Project leaves Projects, the sidebar, and the Dashboard, and its old settings URL stops
   resolving; adding its directory again rediscovers its Sessions.
 - Given a missing Project root, its settings page opens and offers relink, disable, and remove.
+- When a link, relink, enable, disable, remove, or rescan request loses its connection, the page shows a visible
+  failure, retains entered values, and permits retry without automatic resubmission or navigation. HTTP errors retain
+  the server explanation; successful retries navigate or show rescan diagnostics as usual.
 - Given an archived Session, Archived Sessions lists it with paging and opens its conversation; Unarchive returns the
   same Session to ordinary history.
 - Given a foreign Session or an unauthorized Project, an Archive or Unarchive request fails and the Session stays as
@@ -674,6 +682,18 @@ conversation shows the submission. Working or unavailable chats stay disabled. W
 the Architect discussion stays on the page across rounds, following
 [Core Epic review chat](runwield-core-prd.md#plan-review).
 
+**Requirement: Answer Plan Questions in place.** A valid `wld-question` fence appears as one question card in its Plan
+section, with Yes/No, text, or multiple-choice controls. Multiple choice includes Other with free text. The form marks
+the recommended answer but does not select it for the owner. Invalid blocks remain readable code with a parse-error
+note. Answers survive a reload of the same Plan revision; answers for removed question ids are dropped after revision.
+
+Answered questions attach to Planner chat automatically. The context chip shows the answer count and combines with
+attached review notes. Send and Send Annotations include a “Question answers” section. Removing the chip omits that
+context from the chat message without erasing the answers. Before either approval action, open questions trigger a
+confirmation that names their count and says the recommended answers will be used. Cancel keeps review open. Approval
+follows [Core's question resolution rules](runwield-core-prd.md#plan-review). No bundled Agent writes question blocks;
+local Planner instructions can opt in.
+
 **Requirement: Repair code inside the open review.** A Code Review repair request keeps the same review screen and
 conversation through the repair and the required CI rerun. The Agent's reply and the refreshed changes appear in place,
 with chat history, the selected file, diff collapse choices, the Guided Review or diff mode, and collapsed guide
@@ -727,6 +747,14 @@ that backfill regenerates missing or failed records across completed Plans. On n
 every action stays available.
 
 **Acceptance scenarios:**
+
+- Given a Plan with a Plan Question in a section, the owner answers it there and reloads; the same answer is restored.
+- Given answered questions and attached review notes, chat shows their combined context count and Send carries both.
+  Removing the chip excludes both from that chat message. Annotation-only Send remains available.
+- Given question-answer feedback, Planner can record the decision in the affected section, remove the answered block,
+  and present the revised Plan in the same review loop. Answers for removed ids no longer appear in the draft.
+- Given an open question, either approval action warns with the count. Cancel keeps review open; confirmation saves
+  the resolved Plan under Core's approval rules.
 
 - Given a Workspace Plan or Code Review, submitting approval or feedback returns to its Session in the same tab; a
   failed decision stays in review.

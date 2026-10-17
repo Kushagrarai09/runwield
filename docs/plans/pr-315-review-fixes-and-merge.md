@@ -1,4 +1,5 @@
 ---
+planId: "59cd99ae-2682-4a76-8e79-047b2b4799e7"
 classification: "PLANNED_CHANGE"
 workKind: "BUG_FIX"
 complexity: "MEDIUM"
@@ -12,14 +13,22 @@ affectedPaths:
     - "docs/prd/runwield-workspace-prd.md"
 tickets:
     - url: "https://github.com/gandazgul/runwield/pull/315"
-devServerCommand: null
-devServerUrl: null
-devServerHmr: null
-createdAt: "2026-10-17"
-status: "draft"
 executionAgent: "engineer"
 collaborationRecommendation: "autonomous"
-planId: "59cd99ae-2682-4a76-8e79-047b2b4799e7"
+createdAt: "2026-10-17"
+origin: "internal"
+userVerifiedAt: null
+routingIntent: "PLANNED_CHANGE"
+sessionName: "PR Review And Merge"
+targetBranch: "main"
+deliveryBranch: "main"
+validatedCommit: "b6c3867cf8021d7a2e1952e2b93457354a758e9e"
+workRecord:
+    status: "generated"
+    recordId: "85f37a6b-6297-46f7-a17d-399d75f3f2f2"
+    path: "docs/work-records/2026-10-17-project-request-recovery-and-regression-coverage.md"
+    lastAttemptAt: "2026-10-17T17:51:07.369Z"
+status: "verified"
 ---
 
 # PR #315: Fix Review Findings, Resolve Conflicts, and Merge
