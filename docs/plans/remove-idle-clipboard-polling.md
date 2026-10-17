@@ -25,6 +25,12 @@ routingIntent: "PLANNED_CHANGE"
 targetBranch: "main"
 deliveryBranch: "main"
 status: "reviewed"
+validatedCommit: "8ab1ed2ea0fae494e100d14333e1a1ac41e7dd13"
+workRecord:
+    status: "generated"
+    recordId: "ee460c33-12a8-48a0-8d16-49fcc7825e03"
+    path: "docs/work-records/2026-10-17-removed-idle-tui-clipboard-polling.md"
+    lastAttemptAt: "2026-10-17T20:07:17.860Z"
 ---
 
 # Remove Idle Clipboard Polling From the TUI
