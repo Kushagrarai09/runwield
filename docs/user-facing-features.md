@@ -214,7 +214,8 @@ Continue the same work in the terminal or browser, find what needs attention, an
 - Render Mermaid diagrams inline in Markdown responses.
 - Run shell commands and send output to the model with `!command`.
 - Run shell commands without adding output to model context with `!!command`.
-- Paste images into the TUI when supported by the active model or configured fallback.
+- Paste images into the TUI on demand with Ctrl-V when supported by the active model or configured fallback. RunWield
+  does not watch the clipboard. If no image is available, a notice appears until the next input.
 - Queue messages while an agent is working.
 - Steer foreground work early without waiting for the active process to finish.
 - Cancel active work and its process tree reliably with Escape.

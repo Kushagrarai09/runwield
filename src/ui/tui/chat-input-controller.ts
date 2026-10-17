@@ -578,6 +578,9 @@ export function createChatInputController(options: ChatInputControllerOptions): 
         cycleThinkingLevel,
         handleImagePaste,
         readClipboardImage,
+        onClipboardImageMissing: () => view.showClipboardImageMissing(),
+        onInput: () => view.clearClipboardImageNotice(),
+        isDisposed: () => disposed || view.isDisposed(),
         cancelRuntimeSession: () => runtime.cancelSession(options.getSessionId()).aborted,
     });
     return {

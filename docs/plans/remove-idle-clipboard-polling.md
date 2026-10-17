@@ -24,7 +24,7 @@ userVerifiedAt: null
 routingIntent: "PLANNED_CHANGE"
 targetBranch: "main"
 deliveryBranch: "main"
-status: "in_progress"
+status: "implemented"
 ---
 
 # Remove Idle Clipboard Polling From the TUI
