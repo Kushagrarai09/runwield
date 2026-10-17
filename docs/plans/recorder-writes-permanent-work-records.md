@@ -21,6 +21,12 @@ userVerifiedAt: null
 targetBranch: "main"
 deliveryBranch: "main"
 status: "reviewed"
+validatedCommit: "7d53440b903ea4338105fe8220bec5224647378e"
+workRecord:
+    status: "generated"
+    recordId: "c87ac85f-2692-428c-9bdb-fbb2ceb0d36f"
+    path: "docs/work-records/2026-10-17-permanent-work-record-content-and-stable-publication.md"
+    lastAttemptAt: "2026-10-17T17:51:48.908Z"
 ---
 
 # Recorder writes permanent Work Records
