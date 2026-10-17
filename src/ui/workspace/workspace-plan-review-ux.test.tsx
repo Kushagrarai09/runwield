@@ -499,7 +499,7 @@ test("Compact Plan Review starts collapsed and keeps panel controls outside docu
     const surface = await fsReadFile(SURFACE_PATH, "utf8");
     const styles = await fsReadFile("src/ui/workspace/react/plannotator.css", "utf8");
     assertStringIncludes(surface, 'globalThis.matchMedia?.("(max-width: 980px)")');
-    assertStringIncludes(surface, "!compactLayout && getUIPreferences().tocEnabled");
+    assertStringIncludes(surface, "!compactLayout && uiPreferences.tocEnabled");
     assertStringIncludes(surface, "useReviewAnnotations(annotations.length + codeAnnotations.length)");
     assertStringIncludes(surface, 'media.addEventListener("change", syncLayout)');
     assertStringIncludes(surface, 'media.removeEventListener("change", syncLayout)');
