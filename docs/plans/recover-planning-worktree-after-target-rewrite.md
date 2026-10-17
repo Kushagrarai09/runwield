@@ -17,6 +17,12 @@ sessionName: "Plan Registry Recovery"
 targetBranch: "main"
 deliveryBranch: "main"
 status: "reviewed"
+validatedCommit: "362b246204fa39b37d3cc8b7508ed5ebe6aa926c"
+workRecord:
+    status: "generated"
+    recordId: "62a4e02c-ea11-43ad-a637-110bb2470ef5"
+    path: "docs/work-records/2026-10-17-recover-planning-worktrees-after-epic-history-rewrites.md"
+    lastAttemptAt: "2026-10-17T17:51:39.009Z"
 ---
 
 # Recover a planning worktree after its Epic branch is rewritten
