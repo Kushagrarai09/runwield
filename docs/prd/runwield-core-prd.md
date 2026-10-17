@@ -484,6 +484,9 @@ siblings active. Listings show held work separately from active and finished wor
 - Given a child published from another checkout, preparing the next child includes that publication.
 - Given the next child already has a planning worktree with saved edits, continuation imports the published code and
   keeps those edits.
+- Given the Epic branch was rewritten after the next child's planning worktree was created, continuation moves that
+  worktree onto the new Epic branch and keeps its saved planning edits; saved implementation is kept and stops
+  continuation with the reason.
 - Given a last child that has validated but not finished publishing, the Epic is not yet implemented.
 - Given all children delivered, a passing integration gate marks the Epic reviewed for that branch head; the primary
   branch is unchanged.
