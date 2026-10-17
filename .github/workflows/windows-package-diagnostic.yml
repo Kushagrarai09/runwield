@@ -4,82 +4,43 @@ on:
     workflow_dispatch:
         inputs:
             ref:
-                description: Git ref to build and test
+                description: Git ref to test
                 required: true
-                default: fix/windows-package-check
+                default: release/v0.12.3
 
 permissions:
     contents: read
 
 jobs:
-    build-windows:
-        runs-on: ubuntu-latest
+    docs-arm64:
+        runs-on: windows-11-arm
+        timeout-minutes: 40
+        defaults:
+            run:
+                shell: pwsh
+        env:
+            WLD_TEST_FILE_TIMEOUT_MS: "1800000"
         steps:
-            - name: Checkout
-              uses: actions/checkout@v5
+            - uses: actions/checkout@v5
               with:
                   ref: ${{ inputs.ref }}
                   submodules: recursive
-
-            - name: Setup Bun
-              uses: oven-sh/setup-bun@v2
-              with:
-                  bun-version-file: .bun-version
-
-            - name: Install frozen dependencies
-              run: bun run install:locked
-
-            - name: Generate version file
-              env:
-                  WLD_BUILD_VERSION: v0.10.1-rc.9
-              run: bun scripts/write-version.js
-
-            - name: Cache dependencies
-              run: bun run install:locked
-
-            - name: Compile Windows binary
-              env:
-                  WLD_BUILD_VERSION: v0.10.1-rc.9
-              run: bun run compile --output wld.exe --target bun-windows-x64
-
-            - name: Package Windows artifact
-              run: bun run package:windows --tag v0.10.1-rc.9 --binary wld.exe --output .
-
-            - name: Upload Windows artifact
-              uses: actions/upload-artifact@v5
-              with:
-                  name: diagnostic-windows-package
-                  path: |
-                      *.zip
-                      *.json
-                      *.sha256
-
-    check-windows:
-        runs-on: windows-latest
-        needs: build-windows
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v5
-              with:
-                  ref: ${{ inputs.ref }}
-
-            - name: Setup Bun
-              uses: oven-sh/setup-bun@v2
-              with:
-                  bun-version-file: .bun-version
-
-            - name: Install frozen dependencies
-              run: bun run install:locked
-
-            - name: Download Windows artifact
-              uses: actions/download-artifact@v5
-              with:
-                  name: diagnostic-windows-package
-                  path: windows-package
-
-            - name: Run native Windows package checks
-              shell: pwsh
+            - name: Install pinned native Bun
               run: |
-                  $zip = Get-ChildItem windows-package -Filter "wld-*-windows-x64.zip" | Select-Object -First 1
-                  if (-not $zip) { throw "Windows package ZIP not found" }
-                  bun run package:windows:check --package $zip.FullName
+                  $zip = Join-Path $env:RUNNER_TEMP 'bun.zip'
+                  Invoke-WebRequest 'https://github.com/oven-sh/bun/releases/download/bun-v1.4.3/bun-windows-aarch64.zip' -OutFile $zip
+                  Expand-Archive $zip -DestinationPath $env:RUNNER_TEMP
+                  $bin = Join-Path $env:RUNNER_TEMP 'bun-windows-aarch64'
+                  $bin >> $env:GITHUB_PATH
+                  & "$bin/bun.exe" -e 'if (process.arch !== "arm64" || process.versions.bun !== "1.4.3") throw new Error("Wrong native Bun runtime")'
+                  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            - name: Install frozen dependencies
+              run: bun run install:locked
+            - name: Measure the docs workflow suite without changing the release limit
+              run: bun scripts/run-tests.js scripts/docs-workflow.test.ts
+            - uses: actions/upload-artifact@v5
+              if: always()
+              with:
+                  name: docs-arm64-diagnostic
+                  include-hidden-files: true
+                  path: .ci-cache/
