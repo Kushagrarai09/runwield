@@ -426,8 +426,9 @@ ownership.
 
 **Requirement: Each child starts with the preceding children's published code.** Before the next child is prepared,
 Core fetches the latest Epic branch. The child's planning worktree starts from, or imports, that commit while keeping
-its saved scope and status. The refreshed commit is the child's baseline. A failed fetch keeps continuation
-recoverable.
+its saved scope and status. The refreshed commit is the child's baseline. If the Epic history was rewritten, Core
+carries only the child's planning changes onto the current target and retains the old planning head for recovery.
+Existing implementation changes are never discarded. A failed fetch keeps continuation recoverable.
 
 **Requirement: A child worktree starts only with a session.** Core creates a child's planning worktree only when
 planning, review, re-review, execution, or automatic continuation starts a session in that child. It starts from the
@@ -485,8 +486,10 @@ siblings active. Listings show held work separately from active and finished wor
 - Given the next child already has a planning worktree with saved edits, continuation imports the published code and
   keeps those edits.
 - Given the Epic branch was rewritten after the next child's planning worktree was created, continuation moves that
-  worktree onto the new Epic branch and keeps its saved planning edits; saved implementation is kept and stops
-  continuation with the reason.
+  worktree onto the new Epic branch, keeps saved scope and status, and does not merge the replaced code history. A retry
+  settles the same refresh.
+- Given implementation changes in that child worktree, continuation preserves them and refuses the planning refresh.
+- Given conflicting saved scope, continuation preserves both versions without leaving an unfinished merge.
 - Given a last child that has validated but not finished publishing, the Epic is not yet implemented.
 - Given all children delivered, a passing integration gate marks the Epic reviewed for that branch head; the primary
   branch is unchanged.
