@@ -165,7 +165,7 @@
     "src/shared/front-matter.test.ts",
     "src/shared/git-evidence-cache.test.ts",
     "src/shared/git-port.test.ts",
-    "src/shared/git.test.js",
+    "src/shared/git.test.ts",
     "src/shared/http-server.test.ts",
     "src/shared/image-generation/codex-executable.test.ts",
     "src/shared/isolated-publication-target-progress.test.ts",
