@@ -29,9 +29,9 @@ The first visit shows **Authorize this browser**, a device label, and a short co
 2. Copy the command shown on the page.
 3. Run it in a **second terminal on the same computer**, using your actual code:
 
-    ```bash
-    wld workspace pair ABC123
-    ```
+   ```bash
+   wld workspace pair ABC123
+   ```
 
 The browser opens Workspace automatically after approval. It remembers the pairing across visits. A new browser or
 cleared cookies require pairing again.

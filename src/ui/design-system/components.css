@@ -2428,6 +2428,6 @@ button.danger-action:disabled {
 }
 .rw-confirmation-actions {
     display: flex;
-    gap: 0.5rem;
+    gap: .5rem;
     justify-content: flex-end;
 }
