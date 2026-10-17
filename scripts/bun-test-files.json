@@ -75,7 +75,7 @@
     "src/cmd/guided-review/index.test.ts",
     "src/cmd/help/index.test.ts",
     "src/cmd/init/index.test.ts",
-    "src/cmd/init/init-state_test.js",
+    "src/cmd/init/init-state_test.ts",
     "src/cmd/init/init-verification-confirmation.integration.test.ts",
     "src/cmd/install/index.test.ts",
     "src/cmd/load-plan/code-review-close.integration.test.ts",
