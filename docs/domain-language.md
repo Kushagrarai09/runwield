@@ -270,8 +270,9 @@ sample project, or a substitute for validation. _Avoid_: Onboarding workflow, tr
 matter records classification, complexity, status, timestamps, and origin. _Avoid_: Blueprint, spec, design doc
 
 **Work Record**: A small repo-local markdown retrospective planning-memory artifact that distills what completed planned
-work actually produced and what future planning should remember. _Avoid_: Review log, chat transcript, implementation
-diary, duplicate Plan
+work actually produced. It holds only facts that stay true after later changes: the delivered outcome, recorded Plan
+Deviations, out-of-scope facts, and durable lessons. _Avoid_: Review log, chat transcript, implementation diary, duplicate
+Plan, known issues list, validation receipt
 
 **Draft Work Record**: An external, manual, or imported Work Record awaiting human review before default search and
 Agent retrieval. _Avoid_: Approved record, generated internal record, memory

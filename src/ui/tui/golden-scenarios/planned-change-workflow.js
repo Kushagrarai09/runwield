@@ -470,6 +470,8 @@ export const onboardingTutorialDeliveryScenario = {
         { type: "select", promptIncludes: "were stopped before they finished", value: "stop" },
         { type: "select", promptIncludes: "Resume tutorial guidance", value: "resume" },
         { type: "select", promptIncludes: "Plan recovery", value: "validate" },
+        // The recap can settle before the second reload. Otherwise startup asks to resume guidance.
+        { type: "select", promptIncludes: "Resume tutorial guidance", value: "resume", optional: true },
     ],
     script: [
         {
