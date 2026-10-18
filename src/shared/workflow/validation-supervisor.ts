@@ -8,6 +8,7 @@ import { loadPlan, resolvePlanExecutionPolicy, StalePlanWriteError, updatePlanFr
 import { StaleControllerWriteError } from "./controller-registry.ts";
 import { runPlansDoctor } from "../../cmd/plans/doctor.ts";
 import { getLockHostname, isPidAlive } from "../process-liveness.ts";
+import { getProcessBirthIdentity, sameProcessIdentity } from "../process-identity.ts";
 import { findActiveByPlanName as findWorktreeByPlanName } from "../worktree-registry.js";
 import { createEngineValidationArgs, runValidationLoop, type ValidationLoopArgs } from "./validation.ts";
 import {
@@ -67,7 +68,15 @@ function checkpointRecord(value: import("../../plan-store.js").PlanFrontMatter["
 async function ownerIsAlive(checkpoint: ValidationCheckpoint): Promise<boolean> {
     if (checkpoint.state !== "running") return false;
     if (!checkpoint.ownerPid || checkpoint.ownerHostname !== getLockHostname()) return false;
-    return await isPidAlive(checkpoint.ownerPid);
+    if (!(await isPidAlive(checkpoint.ownerPid))) return false;
+    // A numeric PID can be recycled after a process exits. A matching saved birth
+    // identity proves this is still the same owner; legacy checkpoints need the
+    // OS to confirm their birth identity before we trust the PID.
+    const currentBirth = await getProcessBirthIdentity(checkpoint.ownerPid);
+    if (checkpoint.ownerBirthIdentity) {
+        return sameProcessIdentity(checkpoint.ownerBirthIdentity, currentBirth);
+    }
+    return false;
 }
 
 function validationProjectRoot(args: ContinueWorkflowValidationArgs): string {
@@ -123,6 +132,7 @@ async function claimValidation(args: ContinueWorkflowValidationArgs): Promise<Cl
             state: "running",
             ownerPid: process.pid,
             ownerHostname: getLockHostname(),
+            ownerBirthIdentity: await getProcessBirthIdentity(process.pid),
             repairGeneration: compatible ? prior.repairGeneration : undefined,
             repairKind: compatible ? prior.repairKind : undefined,
             repairCompletedOperationId: compatible ? prior.repairCompletedOperationId : undefined,
