@@ -31,6 +31,7 @@ export type ValidationCheckpoint = {
     state: ValidationCheckpointState;
     ownerPid?: number;
     ownerHostname?: string;
+    ownerBirthIdentity?: import("../process-identity.ts").ProcessBirthIdentity;
     repairKind?: string;
     repairGeneration?: string;
     repairCompletedOperationId?: string;
@@ -109,6 +110,7 @@ export function makeValidationCheckpoint(args: {
     state: ValidationCheckpointState;
     ownerPid?: number;
     ownerHostname?: string;
+    ownerBirthIdentity?: import("../process-identity.ts").ProcessBirthIdentity;
     repairKind?: string;
     repairGeneration?: string;
     repairCompletedOperationId?: string;
@@ -124,6 +126,7 @@ export function makeValidationCheckpoint(args: {
         state: args.state,
         ...(args.ownerPid !== undefined ? { ownerPid: args.ownerPid } : {}),
         ...(args.ownerHostname !== undefined ? { ownerHostname: args.ownerHostname } : {}),
+        ...(args.ownerBirthIdentity !== undefined ? { ownerBirthIdentity: args.ownerBirthIdentity } : {}),
         ...(args.repairKind !== undefined ? { repairKind: args.repairKind } : {}),
         ...(args.repairGeneration !== undefined ? { repairGeneration: args.repairGeneration } : {}),
         ...(args.repairCompletedOperationId !== undefined
